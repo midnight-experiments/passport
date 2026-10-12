@@ -2039,7 +2039,7 @@ This section compares each exposed signature scheme and curve, including key gen
 The table identifies dedicated signature interfaces in each reviewed snapshot. It distinguishes complete scheme entry points from the generic arithmetic used to implement a scheme.
 
 | Scheme / curve | Compact contract circuits | Ledger 8.1.2 | Ledger 9 rc.5 | Pinned Ledger main | ZKIR / Midnight ZK role |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | Poseidon-challenge Schnorr / Jubjub | `jubjubSchnorrVerify` | No native module | Native `sign/vk/verify` | No native module | Generic Jubjub, hash, scalar and equality operations |
 | BIP340 Schnorr / secp256k1 | No dedicated verifier in the listed standard libraries | `base-crypto::signatures` | `base-crypto::schnorr` | `base-crypto::signatures` | Point library support is not an exposed BIP340 opcode |
 | ECDSA / secp256k1 | v3 `secp256k1EcdsaVerify`; runtime recovery | No dedicated base ECDSA module | `base-crypto::ecdsa` | No dedicated base ECDSA module | v3 secp arithmetic |
@@ -2635,7 +2635,7 @@ This comparison follows ECDSA on secp256k1 through Compact verification and reco
 | Secret key generation/import/export | No dedicated signer in this verifier API | `SigningKey::sample/from_bytes/deserialize/serialize` | Key parsing delegated to k256; checked key policy differs from generic scalar import |
 | Public key generation/import/export | Generic secp generator multiplication; point/type adapters | `verifying_key`; 33-byte compressed SEC1 serialization/deserialization | Compact rejects identity during verify; Ledger delegates to a key parser at import |
 | Nonce generation/import/export | No dedicated signing nonce API | Deterministic `Signer::sign` (RFC6979 per wrapper comment) | Ledger wrapper exposes no raw nonce import/export |
-| Signature declaration/import/export | Struct of `r,s:Secp256k1Scalar`; no built-in DER parser in this function | Fixed 64-byte `r||s` encoding via `Signature::serialize/deserialize` | Compact typed scalar encoding versus delegated native signature parser |
+| Signature declaration/import/export | Struct of `r,s:Secp256k1Scalar`; no built-in DER parser in this function | Fixed 64-byte `r\|\|s` encoding via `Signature::serialize/deserialize` | Compact typed scalar encoding versus delegated native signature parser |
 | Verification | Prehashed 32-byte input; identity assertion; `inv(s)`; no low-s assertion | Byte-message verification delegated to k256 | k256 rejects high-s during verification; Compact does not impose that normalization |
 | Public-key recovery / address binding | Runtime `secp256k1EcdsaRecover`; address derivation | Not a public method of this Ledger key wrapper | Recovery does not authenticate a supplied identity/address; caller must bind recovered key |
 
