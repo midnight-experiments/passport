@@ -304,6 +304,10 @@ const G5 = '5 guards';
       remove(s5, true, { tag: '' }, 0n, 0n, eK, a, solTargetPoint(S3.key)));
   }
   ok(G5, 'after every refusal both devices are still there', ledgerOf(s5.state).device_count === 3n && live(s5, eK));
+  // the client: an unregistered scheme is refused before any message is built
+  // (the base's checkDescriptor returns nothing for one; found on node at S7S)
+  await refused(G5, 'an unregistered scheme: the facade refuses the descriptor (no message, no call)', 'client', /not a registered descriptor scheme \(zz\)/, () => solTargetOf({ scheme: 'zz' } as any));
+  await refused(G5, 'a descriptor without a scheme: the facade refuses it', 'client', /not a registered descriptor scheme \(undefined\)/, () => solTargetOf({} as any));
 }
 
 const failed = cases.filter((c) => c.verdict !== 'PASS');

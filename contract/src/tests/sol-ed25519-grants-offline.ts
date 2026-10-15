@@ -427,6 +427,9 @@ const G8 = '8 grantee blind';
   ok(G8, 'and are re-derivable (deterministic)', again === gBlinds[0]);
   ok(G8, 'another network gives another grantee blind', hex(await deriveSolGranteeBlind(w, { network: 'preview', issuingAccount: accounts[0] })) !== gBlinds[0]);
 }
+// the client: an unregistered grantee scheme is refused before any message
+await refused(G1, 'an unregistered grantee scheme: the facade refuses the descriptor (no message, no call)', 'client', /not a registered descriptor scheme \(zz\)/,
+  () => solGranteeOf({ scheme: 'zz' } as any, { label: 'Example dApp' }, 0n));
 
 const failed = cases.filter((c) => c.verdict !== 'PASS');
 for (const gname of [...new Set(cases.map((c) => c.group))]) {

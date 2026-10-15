@@ -553,7 +553,20 @@ const txIdOf = (r: any): string => {
  *  SolTarget): the target scheme's registered device tag and its key fields,
  *  coordinates little-endian as the recipes bind them (the message shows
  *  secp256k1 and P-256 big-endian, Q29). A passkey target needs its policy. */
+/** The five registered descriptor schemes; anything else is refused before
+ *  any message is built (the base's checkDescriptor returns nothing for an
+ *  unknown scheme, so the facade must not rely on it to throw). */
+const SOL_REGISTERED_SCHEMES: readonly string[] = ['jubjub', 'k256', 'p256', 'evm_eip712', 'sol_ed25519'];
+function requireRegisteredScheme<T>(d: T): T {
+  const scheme = (d as any)?.scheme;
+  if (typeof scheme !== 'string' || !SOL_REGISTERED_SCHEMES.includes(scheme)) {
+    throw new Error(`sol_ed25519: not a registered descriptor scheme (${String(scheme)})`);
+  }
+  return d;
+}
+
 export function solTargetOf(d: Descriptor): SolTargetFields {
+  requireRegisteredScheme(d);
   const tag = DESCRIPTOR_TAGS.device[d.scheme];
   switch (d.scheme) {
     case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y) };
@@ -564,6 +577,7 @@ export function solTargetOf(d: Descriptor): SolTargetFields {
     }
     case 'evm_eip712': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind) };
     case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind) };
+    default: throw new Error(`sol_ed25519: not a registered descriptor scheme (${String((d as any).scheme)})`);
   }
 }
 
@@ -571,7 +585,7 @@ export function solTargetOf(d: Descriptor): SolTargetFields {
  *  control of this account" and the target's descriptor), signed, then the
  *  call; the circuit enrols the target at the current epoch and counter 0. */
 export async function addDeviceWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, target: Descriptor) {
-  const t = solTargetOf(checkDescriptor(target));
+  const t = solTargetOf(checkDescriptor(requireRegisteredScheme(target)));
   const auth = await authoriseSolDeviceOn(account, device, site, { op: 'add_device', target: t });
   const r = await account.callTx.add_device_with_sol_ed25519(solTargetArg(t), solTargetPointArg(t), ...solEd25519AuthArgs(auth));
   return { auth, target: t, txId: txIdOf(r) };
@@ -583,7 +597,7 @@ export async function addDeviceWithSolEd25519(account: SolEd25519LifecycleSurfac
 export async function removeDeviceWithSolEd25519(
   account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, target: Descriptor, epoch: bigint, counter: bigint,
 ) {
-  const t = solTargetOf(checkDescriptor(target));
+  const t = solTargetOf(checkDescriptor(requireRegisteredScheme(target)));
   const auth = await authoriseSolDeviceOn(account, device, site, { op: 'remove_device', literal: false, target: t, counter, epoch });
   const r = await account.callTx.remove_device_with_sol_ed25519(false, solTargetArg(t), solTargetPointArg(t), counter, epoch, new Uint8Array(32), ...solEd25519AuthArgs(auth));
   return { auth, target: t, txId: txIdOf(r) };
@@ -611,6 +625,7 @@ export type SolGranteeSite = { label: string } | { origin: Uint8Array } | { orig
 
 /** The message-level grantee of a readable descriptor at a site and slot. */
 export function solGranteeOf(d: Descriptor, site: SolGranteeSite, slot: bigint): SolGranteeFields {
+  requireRegisteredScheme(d);
   const tag = DESCRIPTOR_TAGS['grant-id'][d.scheme];
   const need = <K extends string>(k: K): any => {
     if (!(k in site)) throw new Error(`sol_ed25519: a ${d.scheme} grantee is identified by its ${k}`);
@@ -622,6 +637,7 @@ export function solGranteeOf(d: Descriptor, site: SolGranteeSite, slot: bigint):
     case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y), originHash: new Uint8Array(need('originHash')), slot };
     case 'k256': return { tag, a: le32(d.x), b: le32(d.y), envelope: BigInt(d.envelope), originHash: new Uint8Array(need('originHash')), slot };
     case 'p256': return { tag, a: le32(d.x), b: le32(d.y), origin: new Uint8Array(need('origin')), slot };
+    default: throw new Error(`sol_ed25519: not a registered descriptor scheme (${String((d as any).scheme)})`);
   }
 }
 
