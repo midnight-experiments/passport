@@ -9,6 +9,7 @@
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
     "test:p256-offline": "tsx src/tests/p256-offline.ts",
+    "test:evm_eip712-offline": "tsx src/tests/evm-eip712-offline.ts",
     "test:p256": "tsx src/tests/p256-conformance.ts",
     "test:p256-browser": "tsx src/tests/p256-browser.ts",
     "verify:p256-browser": "tsx src/tests/p256-browser-evidence.ts",
