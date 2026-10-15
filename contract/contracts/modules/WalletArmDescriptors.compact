@@ -1,0 +1,352 @@
+// ---------------------------------------------------------------------------
+// Readable device descriptors — the shared derivation module of the readable
+// authorisation arms (`evm_eip712`, `sol_ed25519`).
+//
+// A readable arm never signs an opaque entry or grant id. When it enrols,
+// removes, or grants to ANOTHER key, the signed bytes show that key as a
+// readable DESCRIPTOR: the target recipe's tag text, followed by the key
+// payload in the target scheme's own form. The circuit derives the entry,
+// the boot commitment, or the grant id from exactly those bytes, with the
+// target scheme's own recipe. This module holds those recipes, one circuit per
+// payload WIDTH, so that one derivation shape serves every scheme whose
+// payload has that width.
+//
+// Every recipe is SHA-256 (persistentHash over byte atoms) of the plain
+// concatenation of fixed-width elements: pad(32, tag), the 32-byte account
+// address, the payload, and little-endian Uint<32> epoch and Uint<64> use
+// counter. The legacy recipes below reproduce, byte for byte, upstream's
+// `derive_device_entry_with_{jubjub,k256,p256}`,
+// `derive_boot_commitment_with_{jubjub,k256,p256}` and
+// `derive_grant_id_with_{jubjub,k256,p256}` (account.compact,
+// account-p256.compact). The point and policy encodings they depend on were
+// measured against the compiled circuits before this module was written:
+//   JubjubPoint            x_le(32) || y_le(32)
+//   Secp256k1Point,
+//   Secp256r1Point         pointX(pk) as Bytes<32> || pointY(pk) as Bytes<32>,
+//                          i.e. the little-endian 32-byte coordinates
+//   WebAuthnPolicy         rp_id_hash(32) || origin(21)
+//
+// Payload widths (bytes) and the recipes that use them:
+//
+//   width   device entry / boot             grant id
+//   52      evm_eip712: address || blind    evm_eip712: address || blind
+//   64      jubjub: x_le || y_le            jubjub: x_le || y_le
+//           sol_ed25519: key || blind       p256: x_le || y_le
+//                                           sol_ed25519: key || blind
+//   65      k256: x_le || y_le || envelope  k256: x_le || y_le || envelope
+//   117     p256: x_le || y_le ||           —
+//           rp_id_hash || origin(21)
+//
+// TAGS ARE NOT FREE-FORM. Each derivation takes the tag as the padded
+// 32-byte text the signed bytes show, and accepts it only if it equals one of
+// the tags this module registers for that recipe AND that width. Any other
+// tag is refused, and so is a known tag paired with the wrong width, so every
+// tag is hashed with exactly one preimage shape. This is stricter than an
+// unusable "dead" entry: an unknown scheme cannot be enrolled at all.
+//
+// Key admissibility (on the curve, not of small order, not the point at
+// infinity, and, for k256, a known envelope) is NOT checked here: as with upstream's
+// opaque `add_device(entry)`, an entry derived from an inadmissible key is
+// dead weight, because the target arm's own seam refuses that key at use.
+//
+// The new arms' recipes (project 00067, spec FR-013, FR-014):
+//   entry    = H(pad32(device tag) || account || payload || epoch || counter)
+//   boot     = H(pad32(boot tag) || salt || payload)
+//   grant id = H(pad32(grant-id tag) || account || payload || origin_hash
+//                || slot)
+//   blind    = H(pad32(blind tag) || canonical signature (64 bytes))
+// where payload = identity || blind: the 20-byte Ethereum address, or the
+// 32-byte RFC 8032 Ed25519 public-key encoding, followed by the account's
+// 32-byte blind. The blind keeps a public wallet identity out of the clear:
+// without it, anyone could test a known address against every account's
+// entries. The canonical signature is low-S r || s (big-endian, 32 bytes
+// each) for EVM, and the raw 64-byte R || S for Ed25519, over the client's
+// readable blind-request message; no circuit accepts that message as an
+// authorisation.
+//
+// A readable grantee's origin label is a fixed 32-byte, zero-padded ASCII
+// string, shown as text and hashed with upstream's origin_hash recipe
+// (scoped-grants MIP section 4.4); a passkey grantee's origin_hash is the
+// same recipe over its 21-byte origin, as in authenticate_grant_with_p256.
+//
+// The circuits are pure: they read no ledger state. A caller that enrols a
+// device MUST pass the account's current device_epoch and counter 0.
+// ---------------------------------------------------------------------------
+
+module WalletArmDescriptors {
+  import CompactStandardLibrary;
+
+  // ── Registered tags ───────────────────────────────────────────────────────
+  //
+  // Each fits its 32-byte pad (pad() refuses a longer literal at compile
+  // time, and the offline suite checks every width). The legacy tags are
+  // upstream's; the `evm` tags start at v2 because the experimental fork
+  // used v1 with other preimages; `sol` is new and starts at v1.
+
+  export pure circuit device_tag_jubjub(): Bytes<32> {
+    return pad(32, "midnight:account:device:v1");
+  }
+  export pure circuit device_tag_k256(): Bytes<32> {
+    return pad(32, "midnight:account:device:k1:v2");
+  }
+  export pure circuit device_tag_p256(): Bytes<32> {
+    return pad(32, "midnight:account:device:r1:v2");
+  }
+  export pure circuit device_tag_evm_eip712(): Bytes<32> {
+    return pad(32, "midnight:account:device:evm:v2");
+  }
+  export pure circuit device_tag_sol_ed25519(): Bytes<32> {
+    return pad(32, "midnight:account:device:sol:v1");
+  }
+
+  export pure circuit boot_tag_jubjub(): Bytes<32> {
+    return pad(32, "midnight:account:boot:v1");
+  }
+  export pure circuit boot_tag_k256(): Bytes<32> {
+    return pad(32, "midnight:account:boot:k1:v2");
+  }
+  export pure circuit boot_tag_p256(): Bytes<32> {
+    return pad(32, "midnight:account:boot:r1:v2");
+  }
+  export pure circuit boot_tag_evm_eip712(): Bytes<32> {
+    return pad(32, "midnight:account:boot:evm:v2");
+  }
+  export pure circuit boot_tag_sol_ed25519(): Bytes<32> {
+    return pad(32, "midnight:account:boot:sol:v1");
+  }
+
+  export pure circuit grant_id_tag_jubjub(): Bytes<32> {
+    return pad(32, "midnight:account:grant:id:v1");
+  }
+  export pure circuit grant_id_tag_k256(): Bytes<32> {
+    return pad(32, "midnight:account:grant:id:k1:v1");
+  }
+  export pure circuit grant_id_tag_p256(): Bytes<32> {
+    return pad(32, "midnight:account:grant:id:r1:v1");
+  }
+  export pure circuit grant_id_tag_evm_eip712(): Bytes<32> {
+    return pad(32, "midnight:account:grant:id:evm:v2");
+  }
+  export pure circuit grant_id_tag_sol_ed25519(): Bytes<32> {
+    return pad(32, "midnight:account:grant:id:sol:v1");
+  }
+
+  export pure circuit blind_tag_evm_eip712(): Bytes<32> {
+    return pad(32, "midnight:account:blind:evm:v2");
+  }
+  export pure circuit blind_tag_sol_ed25519(): Bytes<32> {
+    return pad(32, "midnight:account:blind:sol:v1");
+  }
+
+  // Upstream's grant origin tag (scoped-grants MIP section 4.4).
+  export pure circuit grant_origin_tag(): Bytes<32> {
+    return pad(32, "midnight:account:grant:origin:v1");
+  }
+
+  // ── Device entries, by payload width ──────────────────────────────────────
+
+  // Width 52: an `evm_eip712` device, by its 20-byte Ethereum address and
+  // the account's blind.
+  export pure circuit derive_descriptor_entry_w52(
+    tag:       Bytes<32>,
+    self_addr: ContractAddress,
+    address:   Bytes<20>,
+    blind:     Bytes<32>,
+    epoch:     Uint<32>,
+    counter:   Uint<64>,
+  ): Bytes<32> {
+    assert(tag == device_tag_evm_eip712(), "descriptor: not a 52-byte device tag");
+    return persistentHash<[Bytes<32>, ContractAddress, Bytes<20>, Bytes<32>, Uint<32>, Uint<64>]>(
+      [tag, self_addr, address, blind, epoch, counter]
+    );
+  }
+
+  // Width 64: a `jubjub` device (first = x_le, second = y_le of its
+  // JubjubPoint) or a `sol_ed25519` device (first = its 32-byte RFC 8032
+  // public-key encoding, second = the account's blind).
+  export pure circuit derive_descriptor_entry_w64(
+    tag:       Bytes<32>,
+    self_addr: ContractAddress,
+    first:     Bytes<32>,
+    second:    Bytes<32>,
+    epoch:     Uint<32>,
+    counter:   Uint<64>,
+  ): Bytes<32> {
+    assert(tag == device_tag_jubjub() || tag == device_tag_sol_ed25519(),
+           "descriptor: not a 64-byte device tag");
+    return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
+      [tag, self_addr, first, second, epoch, counter]
+    );
+  }
+
+  // Width 65: a `k256` device, by its little-endian affine coordinates and its
+  // envelope id.
+  export pure circuit derive_descriptor_entry_w65(
+    tag:       Bytes<32>,
+    self_addr: ContractAddress,
+    x:         Bytes<32>,
+    y:         Bytes<32>,
+    envelope:  Uint<8>,
+    epoch:     Uint<32>,
+    counter:   Uint<64>,
+  ): Bytes<32> {
+    assert(tag == device_tag_k256(), "descriptor: not a 65-byte device tag");
+    return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<8>, Uint<32>, Uint<64>]>(
+      [tag, self_addr, x, y, envelope, epoch, counter]
+    );
+  }
+
+  // Width 117: a `p256` passkey, by its little-endian affine coordinates and
+  // its WebAuthn policy: rp_id_hash (a labelled value: the RP ID may be a
+  // registrable parent of the origin's host, so it cannot be derived from the
+  // origin) and the exact 21-byte origin.
+  export pure circuit derive_descriptor_entry_w117(
+    tag:        Bytes<32>,
+    self_addr:  ContractAddress,
+    x:          Bytes<32>,
+    y:          Bytes<32>,
+    rp_id_hash: Bytes<32>,
+    origin:     Bytes<21>,
+    epoch:      Uint<32>,
+    counter:    Uint<64>,
+  ): Bytes<32> {
+    assert(tag == device_tag_p256(), "descriptor: not a 117-byte device tag");
+    return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<21>, Uint<32>, Uint<64>]>(
+      [tag, self_addr, x, y, rp_id_hash, origin, epoch, counter]
+    );
+  }
+
+  // ── Boot commitments, by payload width ────────────────────────────────────
+  //
+  // The boot commitment exists before the account does, so it binds a salt
+  // instead of the account address.
+
+  export pure circuit derive_descriptor_boot_w52(
+    tag:     Bytes<32>,
+    salt:    Bytes<32>,
+    address: Bytes<20>,
+    blind:   Bytes<32>,
+  ): Bytes<32> {
+    assert(tag == boot_tag_evm_eip712(), "descriptor: not a 52-byte boot tag");
+    return persistentHash<[Bytes<32>, Bytes<32>, Bytes<20>, Bytes<32>]>(
+      [tag, salt, address, blind]
+    );
+  }
+
+  export pure circuit derive_descriptor_boot_w64(
+    tag:    Bytes<32>,
+    salt:   Bytes<32>,
+    first:  Bytes<32>,
+    second: Bytes<32>,
+  ): Bytes<32> {
+    assert(tag == boot_tag_jubjub() || tag == boot_tag_sol_ed25519(),
+           "descriptor: not a 64-byte boot tag");
+    return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>(
+      [tag, salt, first, second]
+    );
+  }
+
+  export pure circuit derive_descriptor_boot_w65(
+    tag:      Bytes<32>,
+    salt:     Bytes<32>,
+    x:        Bytes<32>,
+    y:        Bytes<32>,
+    envelope: Uint<8>,
+  ): Bytes<32> {
+    assert(tag == boot_tag_k256(), "descriptor: not a 65-byte boot tag");
+    return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>]>(
+      [tag, salt, x, y, envelope]
+    );
+  }
+
+  export pure circuit derive_descriptor_boot_w117(
+    tag:        Bytes<32>,
+    salt:       Bytes<32>,
+    x:          Bytes<32>,
+    y:          Bytes<32>,
+    rp_id_hash: Bytes<32>,
+    origin:     Bytes<21>,
+  ): Bytes<32> {
+    assert(tag == boot_tag_p256(), "descriptor: not a 117-byte boot tag");
+    return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<21>]>(
+      [tag, salt, x, y, rp_id_hash, origin]
+    );
+  }
+
+  // ── Grant ids, by payload width ───────────────────────────────────────────
+  //
+  // A grantee's grant id uses the grant-id recipe of the grantee's scheme
+  // (key, origin_hash, slot), not the device recipe. A `p256` grant id binds
+  // the key only (its RP is a separately committed scope field, checked
+  // through derive_grant_rp_commit), so it shares width 64 with `jubjub` and
+  // `sol_ed25519`.
+
+  export pure circuit derive_descriptor_grant_id_w52(
+    tag:         Bytes<32>,
+    self_addr:   ContractAddress,
+    address:     Bytes<20>,
+    blind:       Bytes<32>,
+    origin_hash: Bytes<32>,
+    slot:        Uint<8>,
+  ): Bytes<32> {
+    assert(tag == grant_id_tag_evm_eip712(), "descriptor: not a 52-byte grant-id tag");
+    return persistentHash<[Bytes<32>, ContractAddress, Bytes<20>, Bytes<32>, Bytes<32>, Uint<8>]>(
+      [tag, self_addr, address, blind, origin_hash, slot]
+    );
+  }
+
+  export pure circuit derive_descriptor_grant_id_w64(
+    tag:         Bytes<32>,
+    self_addr:   ContractAddress,
+    first:       Bytes<32>,
+    second:      Bytes<32>,
+    origin_hash: Bytes<32>,
+    slot:        Uint<8>,
+  ): Bytes<32> {
+    assert(tag == grant_id_tag_jubjub() || tag == grant_id_tag_p256() || tag == grant_id_tag_sol_ed25519(),
+           "descriptor: not a 64-byte grant-id tag");
+    return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>]>(
+      [tag, self_addr, first, second, origin_hash, slot]
+    );
+  }
+
+  export pure circuit derive_descriptor_grant_id_w65(
+    tag:         Bytes<32>,
+    self_addr:   ContractAddress,
+    x:           Bytes<32>,
+    y:           Bytes<32>,
+    envelope:    Uint<8>,
+    origin_hash: Bytes<32>,
+    slot:        Uint<8>,
+  ): Bytes<32> {
+    assert(tag == grant_id_tag_k256(), "descriptor: not a 65-byte grant-id tag");
+    return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<8>, Bytes<32>, Uint<8>]>(
+      [tag, self_addr, x, y, envelope, origin_hash, slot]
+    );
+  }
+
+  // ── Grant origin_hash ─────────────────────────────────────────────────────
+
+  // A readable (`evm_eip712` / `sol_ed25519`) grantee's origin label: 32
+  // bytes of zero-padded ASCII, shown as text.
+  export pure circuit derive_grant_origin_hash_label(label: Bytes<32>): Bytes<32> {
+    return persistentHash<[Bytes<32>, Bytes<32>]>([grant_origin_tag(), label]);
+  }
+
+  // A passkey grantee's exact 21-byte origin (the wa-json134 profile), as
+  // authenticate_grant_with_p256 recomputes it.
+  export pure circuit derive_grant_origin_hash_origin(origin: Bytes<21>): Bytes<32> {
+    return persistentHash<[Bytes<32>, Bytes<21>]>([grant_origin_tag(), origin]);
+  }
+
+  // ── The blind ─────────────────────────────────────────────────────────────
+
+  // blind = H(pad32(blind tag) || canonical signature). Computed by the
+  // client when it enrols a device or restores an account; exported so that
+  // every implementation reproduces it through the contract's own toolchain.
+  export pure circuit derive_blind(tag: Bytes<32>, signature: Bytes<64>): Bytes<32> {
+    assert(tag == blind_tag_evm_eip712() || tag == blind_tag_sol_ed25519(),
+           "descriptor: not a blind tag");
+    return persistentHash<[Bytes<32>, Bytes<64>]>([tag, signature]);
+  }
+}
