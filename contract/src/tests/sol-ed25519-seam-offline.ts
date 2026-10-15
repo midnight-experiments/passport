@@ -24,12 +24,14 @@ import { createCircuitContext, createConstructorContext, sampleContractAddress }
 
 import { Contract, ledger, pureCircuits } from '../wallet/contract.js';
 import { makeWitnesses, emptyCoinStore } from '../wallet/witnesses.js';
-import { JubjubDevice, authArgs } from '../wallet/signer.js';
+import { JubjubDevice, K256Device, authArgs, k256Challenges, p256Challenges } from '../wallet/signer.js';
+import { softwarePasskey } from './p256-fixtures.js';
 import {
   ED25519_L, SolEd25519Device, authoriseSolDevice, decodeSolSignature, deriveSolBlind, solSoftwareSigner,
   solDeviceMessageCircuit, solEd25519AuthArgs, type SolEd25519Authorisation,
 } from '../wallet/signer-sol-ed25519.js';
 import { nibblesOf, solShow } from '../wallet/sol-ed25519-message.js';
+import { solBlindMessage } from '../wallet/signer-sol-ed25519.js';
 
 interface Case { group: string; name: string; verdict: 'PASS' | 'FAIL'; layer?: string; detail?: string }
 const cases: Case[] = [];
@@ -131,6 +133,34 @@ const a2b = await authoriseSolDevice(devA, ctxOf(sim2), SITE, { op: 'rotate_enc_
 await refused(G3, "another account's signature (same device, same blind, nonce 0)", 'runtime', /invalid signature/, () => exec(sim2, k1, withSig(a2b, a1.sig)));
 await rotate(sim2, k2, a2b);
 ok(G3, 'the same device rotates the second account with its own approval (positive control)', hex(ledgerOf(sim2.state).enc_key) === hex(k2));
+
+// ── 3b. Cross-arm replay (AA 00067 audit G1(S), G1S-3) ───────────────────────
+// What another arm's device signs for the same call (its 32-byte challenge for
+// rotate_enc_key on this account, nonce and key), or the arm's own blind
+// request, signed raw by this Solana key (a wallet that signs whatever bytes
+// it is given), presented to this arm's seam with consistent display inputs:
+// refused by the signature, because the seam verifies over the sol v1 bytes
+// it renders. The reverse direction has no vector on this branch: no other
+// arm verifies Ed25519 (jubjub verifies Schnorr over JubJub, k256 and p256
+// ECDSA), so a sol_ed25519 signature cannot even be passed to them.
+const G3b = '3b cross-arm replay';
+{
+  const k = K256Device.generate();
+  const pass = softwarePasskey();
+  const ctxNow = ctxOf(sim); // auth_nonce 1, counter 1 (a2 is still unused)
+  const kCh: Uint8Array = k256Challenges.rotateEncKey(ctxNow, k.pk, k2);
+  const pCh: Uint8Array = p256Challenges.rotateEncKey(ctxNow, pass.pk, k2);
+  const blindReq = solBlindMessage(devA.key, { network: 'undeployed', accountIndex: 0 }).bytes;
+  for (const [name, bytes] of [
+    ['the k256 arm\'s rotate_enc_key challenge (same account, nonce, key), signed by the Solana key', kCh],
+    ['the p256 arm\'s rotate_enc_key challenge (same account, nonce, key), signed by the Solana key', pCh],
+    ['the arm\'s own blind request (non-authorising), signed by the same key', blindReq],
+  ] as [string, Uint8Array][]) {
+    const { sig } = await devA.signBytes(bytes);
+    await refused(G3b, name, 'runtime', /invalid signature/, () => exec(sim, k2, withSig(a2, sig)));
+  }
+  ok(G3b, 'positive control: the same key\'s sol v1 approval for that call is a different message', !Buffer.from(a2.message).equals(Buffer.from(kCh)) && a2.message.length === 511);
+}
 
 // ── 4. Degenerate signatures ────────────────────────────────────────────────
 const G4 = '4 degenerate signatures';
