@@ -261,6 +261,25 @@ export circuit append_inbox_with_sol_ed25519(
   do_append_inbox(entry);
 }
 
+// Unshielded (MIP-0012 §5): the approval shows the token colour, the amount
+// in base units with the site's label for it (marked as the site's claim),
+// and the recipient's 32-byte user address; the mirror check and the send
+// are the shared chip's.
+export circuit withdraw_unshielded_with_sol_ed25519(
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  recipient: UserAddress,
+  a:         SolAmountShow,
+  show:      SolShow,
+  frame:     Vector<128, Uint<0..16>>,
+  hex:       Vector<128, Uint<0..16>>,
+  auth:      SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<38, 292, 620>(sol_title_withdraw_unshielded(),
+    sol_body_withdraw_unshielded(color, amount, recipient, a, hex), show, frame, auth);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
 // ── Signed messages, format sol v1 (spec FR-S02, FR-S03, FR-004, FR-023) ────
 //
 // A Solana wallet's `signMessage` signs the raw bytes it is given, so the
