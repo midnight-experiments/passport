@@ -52,6 +52,30 @@
 //               binding, the stale grant nonce, the grant seam's forged
 //               address (G1E-1), a wrong blind, and the shielded twins'
 //               witness substitution (colour, value);
+//   grant-matrix (G2E-B1) the three grantee twins at the constraint level,
+//               each with a proved positive control through the same copy:
+//               valid-signature scope violations (over the per-call cap,
+//               over the cumulative cap, a coin above the max coin value,
+//               a recipient other than the pin, a caller-pinned grant with
+//               no contract caller and with another contract as caller —
+//               the caller injected into the local call context, since a
+//               root call has none and the ledger authenticates the real
+//               caller at admission); the record's liveness (revoked,
+//               expired, a stale device epoch after a recovery
+//               finalisation, a stale generation built by copying a ledger
+//               cell, since revoke_all clears the map); and for the shielded
+//               twins every signed field substituted (coin nonce, Merkle
+//               index, change ciphertext, encryption key, amount; colour and
+//               value for the direct-transfer twin) plus a stale encryption
+//               key under a valid approval;
+//   frame-lifecycle (G2E-B2) the forged-address mutant on add_device,
+//               remove_device (both forms), issue_grant, revoke_grant,
+//               revoke_all_grants and the two shielded grantee twins (with
+//               `frame`, `grants` and `recovery`: every gated export);
+//   qa-s3       (G1S-6) the Field-to-Bytes<32> rendering of the recovery
+//               lines is canonical: an approval over the non-canonical
+//               rendering (value + r) of each phi and key coordinate is
+//               refused at the proof server;
 //   recovery    (S9E) publish_recovery_session_with_evm_eip712 and
 //               recover_cancel_with_evm_eip712: positives (a session, a cancel
 //               of a pending recovery, a fresh device's session after a
@@ -102,10 +126,11 @@ import { expectRefusal, expectSuccess, type NegativeResult, type PositiveResult 
 import {
   Original, loadPatched, dormant, execute, prove, ledgerOf, proofLog, forgery, withLocalCoins, coinStoreAnswering,
   localCoinPublicKeyBytes, transportRetries, FORGE_ADDRESS_OVERRIDES, POINT_AT_INFINITY_OVERRIDES, NON_CANONICAL_COORDINATE_OVERRIDES, type LocalAccount, type LocalCoin,
+  CALLER_OVERRIDES, callerInjection, withLedgerCell,
 } from './evm-eip712-negative.js';
 import type { BypassedContractModule } from './constraint-negative.js';
 
-const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness', 'devices', 'grants', 'recovery'];
+const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness', 'devices', 'grants', 'grant-matrix', 'frame-lifecycle', 'qa-s3', 'recovery'];
 const SEED = 'aa00067/e/s5/evm-eip712-prover/v1';
 let ctr = 0;
 const rnd = (n: number) => {
@@ -132,7 +157,24 @@ const K256_INVALID = 'invalid signature';
 type RefusalKind = 'constraint' | 'decoding';
 interface Result { section: string; circuit: string; case: string; kind: 'positive' | 'negative'; expect?: string; bypassed?: string[];
   overrides?: string; positive?: PositiveResult; simulator?: NegativeResult; prover?: NegativeResult;
-  refusal?: { circuit?: string; kind: RefusalKind | 'none'; rule?: string; expectedKind: RefusalKind }; mutant?: string }
+  refusal?: { circuit?: string; kind: RefusalKind | 'none'; rule?: string; expectedKind: RefusalKind }; mutant?: string;
+  /** (G2E-4) how the refused predicate is enforced against a MALICIOUS
+   *  prover: `constraint` (the relation over the call's own inputs), or
+   *  `constraint on a declared read` (the predicate tests a value the circuit
+   *  reads from the ledger or the call context; the read enters the proof as
+   *  a declared public transcript value, so against a malicious prover it is
+   *  the node's transcript replay against the real state that refuses, the
+   *  constraint holding for the declared value) */
+  enforcement?: 'constraint' | 'constraint on a declared read (+ node transcript replay)' }
+// (G2E-4) asserts whose predicate tests a ledger or call-context read
+const READ_ASSERTS = new Set(['unknown device entry', 'unknown grant', 'grant revoked', 'grant epoch stale', 'grant generation stale', 'grant expired',
+  'stale encryption key', 'amount above per-call cap', 'cumulative cap exceeded', 'recipient not admitted by pin', 'coin above max_coin_value',
+  'grant requires a contract caller', 'grant caller mismatch', 'scope object mismatch', 'spent opening mismatch', 'operation not in scope',
+  'insufficient balance', 'already activated', 'boot commitment mismatch', 'cannot remove last device', 'recovery pending; cancel first',
+  'no recovery pending', 'session nonce reused', 'recovery commitment reused', 'grant already active']);
+const enforcementOf = (expect: string, name: string): Result['enforcement'] =>
+  READ_ASSERTS.has(expect) || ((expect === 'invalid signature' || expect === 'invalid grant signature') && /authNonce|nonce advanced|replay\/nonce|record nonce|after its|stale|grant nonce/i.test(name))
+    ? 'constraint on a declared read (+ node transcript replay)' : 'constraint';
 const results: Result[] = [];
 let failures = 0, errors = 0;
 const tally = (...r: (PositiveResult | NegativeResult | undefined)[]) => {
@@ -182,10 +224,17 @@ async function runtimeOnly(section: string, name: string, a: LocalAccount, circu
 async function negative(section: string, name: string, a: LocalAccount, circuit: string, args: unknown[],
   expect: string, bypass: string[], overrides = '',
   opts: { module?: BypassedContractModule; mutant?: string; kind?: RefusalKind; check?: () => string | undefined;
-          control?: { a: LocalAccount; args: unknown[] } } = {}) {
+          control?: { a: LocalAccount; args: unknown[] };
+          /** (G2E-B1) the module the simulator runs (default: the original),
+           *  for a case whose call context is injected (CALLER_OVERRIDES) */
+          simulatorModule?: BypassedContractModule;
+          /** (G2E-B1) run before the simulator, the positive control and the
+           *  attempt respectively (e.g. the caller each one presents) */
+          hooks?: { simulator?: () => void; control?: () => void; attempt?: () => void } } = {}) {
   const r: Result = { section, circuit, case: name, kind: 'negative', expect, bypassed: bypass, overrides: overrides ? 'runtime validators relaxed' : undefined, mutant: opts.mutant };
+  if ((opts.kind ?? 'constraint') === 'constraint') r.enforcement = opts.mutant?.startsWith('forged-address') ? 'constraint' : enforcementOf(expect, name);
   r.simulator = await expectRefusal({ name: `${circuit}: ${name} (generated JavaScript)`, expectedLayer: 'runtime', proofLog,
-    attempt: () => execute(Original.Contract, a, circuit, args) });
+    attempt: () => { opts.hooks?.simulator?.(); return execute((opts.simulatorModule ?? Original).Contract, a, circuit, args); } });
   if (r.simulator.verdict === 'PASS' && !String(r.simulator.detail ?? '').includes(expect)) {
     r.simulator.verdict = 'FAIL'; r.simulator.reason = `refused at runtime, but not by "${expect}"`;
   }
@@ -194,8 +243,8 @@ async function negative(section: string, name: string, a: LocalAccount, circuit:
   const control = opts.control;
   r.prover = await expectRefusal({ name: `${circuit}: ${name} (${opts.mutant ?? 'JavaScript checks bypassed'})`,
     expectedLayer: expectedKind === 'decoding' ? 'decoding' : 'prover', bypassed: patched, proofLog,
-    positiveControl: control ? () => prove(patched.Contract, control.a, circuit, control.args) : undefined,
-    attempt: () => prove(patched.Contract, a, circuit, args) });
+    positiveControl: control ? () => { opts.hooks?.control?.(); return prove(patched.Contract, control.a, circuit, control.args); } : undefined,
+    attempt: () => { opts.hooks?.attempt?.(); return prove(patched.Contract, a, circuit, args); } });
   const rej = r.prover.rejection;
   r.refusal = { circuit: rej?.keyLocation, kind: rej ? rej.kind : 'none', rule: rej?.rule, expectedKind };
   if (r.prover.verdict === 'PASS') {
@@ -799,6 +848,350 @@ if (SECTIONS.includes('grants')) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// G2E-B1: the grant matrix at the constraint level, all three grantee twins
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Every case is a VALID grantee approval (or a valid approval over values the
+// call then changes), executed with the named asserts bypassed and proved; a
+// positive control (the honest call of the same twin on its base account) is
+// proved through the same patched copy first. The twins: U =
+// withdraw_unshielded_with_grant, S = withdraw_shielded_with_grant, C =
+// withdraw_shielded_to_contract_with_grant (the shielded twins on a local
+// Zswap tree, so the Zswap half of every spend is valid).
+if (SECTIONS.includes('grant-matrix')) {
+  const ISSUE = 'issue_grant_with_evm_eip712', REVOKE = 'revoke_grant_with_evm_eip712', REVOKE_ALL = 'revoke_all_grants_with_evm_eip712';
+  const GWU = 'withdraw_unshielded_with_grant_evm_eip712', GWS = 'withdraw_shielded_with_grant_evm_eip712', GWSC = 'withdraw_shielded_to_contract_with_grant_evm_eip712';
+  const GINVALID = 'invalid grant signature', COLOUR_G = 'held coin colour does not match the withdrawn colour';
+  const PER_CALL = 'amount above per-call cap', CUMULATIVE = 'cumulative cap exceeded', PIN = 'recipient not admitted by pin';
+  const NO_CALLER = 'grant requires a contract caller', CALLER_MISMATCH = 'grant caller mismatch';
+  const MAX_COIN = 'coin above max_coin_value', STALE_ENC = 'stale encryption key';
+  const REVOKED = 'grant revoked', EXPIRED = 'grant expired', EPOCH = 'grant epoch stale', GEN = 'grant generation stale';
+  const birthG = 0xb1a7c0den;
+  const now = () => BigInt(Math.floor(Date.now() / 1000));
+  const A0 = (await execute(Original.Contract, await dormant(device.bootCommitment(salt), recoveryKey(birthG).pk, 0n), ACTIVATE, device.activationArgs(salt))).after;
+  const frame = (a: LocalAccount) => ({ account: a.addressBytes, device: device.address, authNonce: ledgerOf(a).auth_nonce as bigint });
+  const counterOf = (a: LocalAccount) => { for (let k = 0n; k < 64n; k++) if (ledgerOf(a).devices.member(device.entryAt(a.addressBytes, ledgerOf(a).device_epoch, k))) return k; throw new Error('device not live'); };
+  const signAs = (t: Eip712TypedData, a: LocalAccount) => { const p = parseEvmSignature(wallet.signDigest(typedDataDigest(t))); return { pk: device.pk, use_counter: counterOf(a), blind: device.blind, sig: { r: p.r, s: p.s } }; };
+  const scopeOf = (o: Partial<IssueScope>): IssueScope => ({ opWithdrawUnshielded: false, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: false,
+    color: new Uint8Array(32), recipientKind: 0n, recipient: new Uint8Array(32), maxCoinValue: 0n, perCallCap: 0n, cap: 0n, expiresAt: 0n,
+    rpIdHash: new Uint8Array(32), readPk: new Uint8Array(32), windowLen: 0n, windowCap: 0n, caller: null, ...o });
+  const sSalt = fill(32, 0x5b);
+  const issue = async (a: LocalAccount, gin: any, sc: IssueScope) =>
+    (await execute(Original.Contract, a, ISSUE, [gin, ...evmEip712IssueArgs(sc, sSalt), signAs(evmEip712Messages.issueGrant(frame(a), gin, sc), a)])).after;
+  const label = grantLabel('bank.example');
+  const gWallet = new SoftwareEvmWallet(0x6a17een);
+  const G = await Promise.all([0n, 1n, 2n, 3n, 4n, 5n].map((slot) => EvmEip712Grantee.enrol(gWallet, 'undeployed', 0, label, slot)));
+  const CALLER_C = fill(32, 0xca), CALLER_W = fill(32, 0xcb);
+  const COLG = fill(32, 0xc7), RCPT = fill(32, 0x7e), RCPT2 = fill(32, 0x7f), KEY2 = fill(32, 0x4b), CONTRACT2 = fill(32, 0x3d);
+  const NONCE_H2 = fill(32, 0x13);
+  const change = fill(192, 0x2c), change2 = fill(192, 0x2d), staleKey = fill(32, 0x5e);
+  const callerCopyPlain = await loadPatched([], CALLER_OVERRIDES);
+  const pinnedCaller = () => callerInjection.set(CALLER_C), wrongCaller = () => callerInjection.set(CALLER_W), noCaller = () => callerInjection.set(undefined);
+
+  type T = 'U' | 'S' | 'C';
+  const CIRCUIT: Record<T, string> = { U: GWU, S: GWS, C: GWSC };
+  const tags: Record<T, string> = { U: 'withdraw_unshielded_with_grant', S: 'withdraw_shielded_with_grant', C: 'withdraw_shielded_to_contract_with_grant' };
+  // per twin: the main scope (slot 0), the caller-pinned (2) and expired (3)
+  // variants, and for the shielded twins a small max coin value (1) and a
+  // grant scoped to colour B (4)
+  const mainScope = (t: T): IssueScope => t === 'U'
+    ? scopeOf({ opWithdrawUnshielded: true, color: COLG, recipientKind: RECIPIENT_USER_ADDRESS, recipient: RCPT, maxCoinValue: 300n, perCallCap: 300n, cap: 450n })
+    : scopeOf({ ...(t === 'S' ? { opWithdrawShielded: true, recipientKind: 2n, recipient: localCoinPublicKeyBytes() } : { opWithdrawShieldedToContract: true, recipientKind: 3n, recipient: RECIPIENT_CONTRACT }),
+        read: true, readPk: fill(32, 0x77), color: COL_A, maxCoinValue: 1000n, perCallCap: 500n, cap: 900n });
+  const scopes = (t: T): IssueScope[] => {
+    const m = mainScope(t);
+    // slot 5 (the user-recipient twin only): pinned to another coin key; the
+    // local builder can only build an output to its own key, so the pin
+    // case executes to that key under a pin naming another
+    return [m, { ...m, maxCoinValue: 600n }, { ...m, caller: CALLER_C }, { ...m, expiresAt: 1n }, { ...m, color: COL_B }, { ...m, recipient: KEY2 }];
+  };
+  const opening = (t: T, slot: bigint, spentPrev = 0n): GrantOpening => {
+    const sc = scopes(t)[Number(slot)];
+    return { originHash: G[0].originHash, slot, scopeSalt: sSalt, recipientKind: sc.recipientKind, pinnedRecipient: sc.recipient, maxCoinValue: sc.maxCoinValue, spentPrev };
+  };
+  const gframe = (a: LocalAccount, g: EvmEip712Grantee) => {
+    const r = ledgerOf(a).grants.lookup(g.grantId(a.addressBytes));
+    return { account: a.addressBytes, grantee: g.address, label, slot: g.slot, issuedAt: r.issued_at as bigint, grantNonce: r.nonce as bigint };
+  };
+  interface P { slot?: bigint; amount: bigint; recipient?: Uint8Array; coin?: LocalCoin; change?: Uint8Array; encPk?: Uint8Array; spentPrev?: bigint;
+    signed?: { amount?: bigint; recipient?: Uint8Array; coin?: { nonce: Uint8Array; value: bigint; mtIndex: bigint }; change?: Uint8Array; encPk?: Uint8Array } }
+  /** The twin's arguments with the grantee's approval over the SIGNED values
+   *  (default: the executed ones). */
+  const call = (t: T, a: LocalAccount, p: P) => {
+    const g = G[Number(p.slot ?? 0n)];
+    const sc = scopes(t)[Number(p.slot ?? 0n)];
+    const rcpt = p.recipient ?? sc.recipient;
+    const s = { amount: p.amount, recipient: rcpt, coin: p.coin && { nonce: p.coin.nonce, value: p.coin.value, mtIndex: p.coin.mtIndex }, change: p.change ?? change, encPk: p.encPk ?? ledgerOf(a).enc_key, ...p.signed };
+    const td = t === 'U'
+      ? evmEip712Messages.withdrawUnshieldedAsGrantee(gframe(a, g), COLG, s.amount, s.recipient)
+      : t === 'S'
+        ? evmEip712Messages.withdrawShieldedAsGrantee(gframe(a, g), COL_A, s.amount, s.recipient, s.change, s.encPk, s.coin!)
+        : evmEip712Messages.withdrawShieldedToContractAsGrantee(gframe(a, g), COL_A, s.amount, s.recipient, s.change, s.encPk, s.coin!);
+    const q = parseEvmSignature(gWallet.signDigest(typedDataDigest(td)));
+    const auth = { arm: 'evm_eip712' as const, pk: g.pk, blind: g.blind, label, sig: { r: q.r, s: q.s } };
+    const o = opening(t, g.slot, p.spentPrev ?? 0n);
+    return t === 'U'
+      ? [COLG, p.amount, { bytes: rcpt }, ...grantAuthArgs(o, auth)]
+      : [{ bytes: rcpt }, COL_A, p.amount, p.change ?? change, p.encPk ?? ledgerOf(a).enc_key, ...grantAuthArgs(o, auth)];
+  };
+  // the recovery gate, then the finalisation: device_epoch + 1, grants kept
+  const finalised = async (a: LocalAccount) => {
+    const l = ledgerOf(a);
+    const Q = JubjubDevice.generate();
+    const nowUpper = now() + 2n;
+    const sub = signRecoverSubmit(recoveryKey(birthG), Q,
+      recoverSubmitChallenge({ contractAddress: a.addressBytes, authNonce: l.auth_nonce }, l.recovery_pk, Q.pk, recoveryKey(0x9a1n).pk as any, l.device_epoch + 1n, nowUpper),
+      { successorRecoveryPk: recoveryKey(0x9a1n).pk as any, expectedEpoch: l.device_epoch, expectedNonce: l.auth_nonce, nowUpper });
+    const p = (await execute(Original.Contract, a, 'recover_submit', recoverSubmitArgs(sub))).after;
+    await new Promise((r) => setTimeout(r, 3500));
+    return (await execute(Original.Contract, p, 'recover_finalise', [])).after;
+  };
+
+  // (EVM_EIP712_GRANT_TWINS=U,S,C: a subset of the twins, for a partial re-run)
+  const twins = (process.env.EVM_EIP712_GRANT_TWINS ?? 'U,S,C').split(',') as T[];
+  for (const t of twins) {
+    const circuit = CIRCUIT[t], tag = tags[t];
+    // the account: every grant of this twin issued, funded
+    let AT = A0;
+    const used: Record<T, number[]> = { U: [0, 2, 3], S: [0, 1, 2, 3, 5], C: [0, 1, 2, 3, 4] };
+    for (const [i, sc] of scopes(t).entries()) if (used[t].includes(i)) AT = await issue(AT, G[i].descriptor(), sc);
+    let H1: LocalCoin | undefined, H2: LocalCoin | undefined;
+    let bare: LocalAccount = AT; // the account before its coins were placed (substitution trees start from it)
+    const answering = (a: LocalAccount, coin: LocalCoin) => ({ ...a, privateState: coinStoreAnswering([{ key: COL_A, coin }]) }) as LocalAccount;
+    if (t === 'U') AT = (await execute(Original.Contract, AT, 'deposit_unshielded', [COLG, 1000n])).after;
+    else {
+      bare = AT;
+      const placed = withLocalCoins(AT, [{ nonce: FILLER(0), color: COL_A, value: 5n }, { nonce: NONCE_H, color: COL_A, value: 1000n }, { nonce: NONCE_H2, color: COL_A, value: 1000n }]);
+      [, H1, H2] = placed.coins;
+      AT = answering(placed.account, H1);
+    }
+    const honest: P = t === 'U' ? { amount: 200n } : { amount: 300n, coin: H1 };
+    const base = { a: AT, args: call(t, AT, honest) };
+    const posPath = await loadPatched([GINVALID]);
+    await positive('grant-matrix', `${tag}: the honest call on the base account (patched path)`, posPath, AT, circuit, base.args);
+    const neg = (name: string, a: LocalAccount, args: unknown[], expect: string, bypass: string[], opts: Parameters<typeof negative>[8] = {}) =>
+      negative('grant-matrix', `${tag}: ${name}`, a, circuit, args, expect, bypass, '', { control: base, ...opts });
+
+    // ── valid-signature scope violations ──
+    await neg('over the per-call cap, honestly signed', AT, call(t, AT, { ...honest, amount: t === 'U' ? 301n : 501n }), PER_CALL, [PER_CALL]);
+    {
+      const first: P = t === 'U' ? { amount: 200n } : { amount: 500n, coin: H1 };
+      const A1 = (await execute(Original.Contract, AT, circuit, call(t, AT, first))).after;
+      const A1n = t === 'U' ? A1 : answering(A1, H2!);
+      const second: P = t === 'U' ? { amount: 260n, spentPrev: 200n } : { amount: 450n, coin: H2, spentPrev: 500n };
+      await neg(`over the cumulative cap (${t === 'U' ? '200 + 260 > 450' : '500 + 450 > 900'}), honestly signed with the live spent opening`, A1n, call(t, A1n, second), CUMULATIVE, [CUMULATIVE]);
+    }
+    if (t !== 'U') {
+      await neg('a coin above the grant\'s max coin value (1000 > 600), honestly signed', AT, call(t, AT, { ...honest, slot: 1n }), MAX_COIN, [MAX_COIN]);
+    } else {
+      const r: Result = { section: 'grant-matrix', circuit, case: `${tag}: max coin value`, kind: 'positive' };
+      (r as any).notApplicable = 'the unshielded twin spends from the mirror, not a coin: max_coin_value enters only the object commitment (a changed opening is "scope object mismatch"); the coin bound (MIP R7) is the shielded twins\' check_shielded_grant_bounds';
+      results.push(r);
+    }
+    await neg('a recipient other than the pinned one, honestly signed', AT,
+      call(t, AT, t === 'S' ? { ...honest, slot: 5n, recipient: localCoinPublicKeyBytes() } : { ...honest, recipient: t === 'U' ? RCPT2 : CONTRACT2 }), PIN, [PIN]);
+    // the caller pin: no caller (a root call), then a wrong contract caller;
+    // the control is the pinned contract presenting itself
+    {
+      const callerCopy = await loadPatched([NO_CALLER, CALLER_MISMATCH], CALLER_OVERRIDES);
+      const pinnedArgs = call(t, AT, { ...honest, slot: 2n });
+      await neg('caller-pinned grant, no contract caller (a root call)', AT, pinnedArgs, NO_CALLER, [NO_CALLER, CALLER_MISMATCH],
+        { module: callerCopy, mutant: 'caller injected into the local call context (CALLER_OVERRIDES): none', control: { a: AT, args: pinnedArgs },
+          hooks: { simulator: noCaller, control: pinnedCaller, attempt: noCaller } });
+      const mismatchCopy = await loadPatched([CALLER_MISMATCH], CALLER_OVERRIDES);
+      await neg('caller-pinned grant, called by another contract', AT, pinnedArgs, CALLER_MISMATCH, [CALLER_MISMATCH],
+        { module: mismatchCopy, simulatorModule: callerCopyPlain, mutant: 'caller injected into the local call context (CALLER_OVERRIDES): another contract', control: { a: AT, args: pinnedArgs },
+          hooks: { simulator: wrongCaller, control: pinnedCaller, attempt: wrongCaller } });
+      noCaller();
+    }
+
+    // ── the record's liveness (the grant seam's four asserts) ──
+    const AR = (await execute(Original.Contract, AT, REVOKE, [G[0].descriptor(), signAs(evmEip712Messages.revokeGrant(frame(AT), G[0].descriptor()), AT)])).after;
+    await neg('a revoked grant (tombstone), valid approval over its record', AR, call(t, AR, honest), REVOKED, [REVOKED]);
+    await neg('an expired grant (expires_at 1), valid approval', AT, call(t, AT, { ...honest, slot: 3n }), EXPIRED, [EXPIRED]);
+    const AE = await finalised(AT);
+    if (ledgerOf(AE).device_epoch !== 1n || !ledgerOf(AE).grants.member(G[0].grantId(AE.addressBytes))) throw new Error('setup: the finalisation did not bump the epoch with the grant kept');
+    await neg('a grant of a stale device epoch (after a recovery finalisation), valid approval', AE, call(t, AE, honest), EPOCH, [EPOCH]);
+    const AX = (await execute(Original.Contract, AT, REVOKE_ALL, [signAs(evmEip712Messages.revokeAllGrants(frame(AT)), AT)])).after;
+    const AGN = withLedgerCell(AT, AX, [1, 3]);
+    if (ledgerOf(AGN).grant_generation !== 1n || !ledgerOf(AGN).grants.member(G[0].grantId(AGN.addressBytes))) throw new Error('setup: the stale-generation state is not as built');
+    // "grant generation stale" is unreachable in this contract: revoke_all_grants
+    // bumps the generation AND clears the map (do_revoke_all_grants), and no
+    // chip writes a record of another generation; the assert is defence in
+    // depth for a ledger that would keep records. The state is built by
+    // copying the generation cell of the post-revoke_all ledger into the
+    // pre-revoke_all one, so the constraint is exercised as on such a ledger.
+    await neg('a grant of a stale generation (UNREACHABLE today: revoke_all clears the map; the state built by copying the generation cell), valid approval', AGN, call(t, AGN, honest), GEN, [GEN]);
+
+    // ── the grant seam's zero-scalar assert ──
+    const ZERO_G = 'evm_eip712: signature scalar is zero';
+    const withSig = (args: unknown[], sig: { r?: bigint; s?: bigint }) => {
+      const a = [...args]; const au: any = a.at(-1); a[a.length - 1] = { ...au, sig: { ...au.sig, ...sig } }; return a;
+    };
+    await neg('signature r = 0 on the grantee path', AT, withSig(base.args, { r: 0n }), ZERO_G, [ZERO_G, GINVALID]);
+    const zeroInv = await loadPatched([ZERO_G, GINVALID], `secp256k1ScalarInv(x) { return x === 0n ? 0n : __compactRuntimeOriginal.secp256k1ScalarInv(x); },
+  secp256k1PointX(p) { return p && p.identity ? 0n : __compactRuntimeOriginal.secp256k1PointX(p); },`);
+    await neg('signature s = 0 on the grantee path (inverse of 0 taken as 0 in the copy)', AT, withSig(base.args, { s: 0n }), ZERO_G, [ZERO_G, GINVALID], { module: zeroInv });
+
+    // ── the shielded twins: every signed field substituted ──
+    if (t !== 'U') {
+      const coinH = H1!;
+      const nonceAcc = answering(withLocalCoins(bare, [{ nonce: FILLER(0), color: COL_A, value: 5n }, { nonce: NONCE_OTHER, color: COL_A, value: 1000n }]).account, { ...coinH, nonce: NONCE_OTHER });
+      await neg('coin nonce: signed N, witness coin N\' (same colour, value, index)', nonceAcc, call(t, nonceAcc, { ...honest, coin: { ...coinH, nonce: NONCE_OTHER }, signed: { coin: { nonce: NONCE_H, value: 1000n, mtIndex: coinH.mtIndex } } }), GINVALID, [GINVALID]);
+      const idxPlaced = withLocalCoins(bare, [{ nonce: FILLER(0), color: COL_A, value: 5n }, { nonce: FILLER(1), color: COL_A, value: 7n }, { nonce: NONCE_H, color: COL_A, value: 1000n }]);
+      const idxAcc = answering(idxPlaced.account, idxPlaced.coins[2]);
+      await neg('Merkle index: signed 1, witness coin at index 2', idxAcc, call(t, idxAcc, { ...honest, coin: idxPlaced.coins[2], signed: { coin: { nonce: NONCE_H, value: 1000n, mtIndex: 1n } } }), GINVALID, [GINVALID]);
+      await neg('change ciphertext: signed C1, executed C2', AT, call(t, AT, { ...honest, change: change2, signed: { change } }), GINVALID, [GINVALID]);
+      await neg('encryption key: signed a stale key, executed with the live key', AT, call(t, AT, { ...honest, signed: { encPk: staleKey } }), GINVALID, [GINVALID]);
+      await neg('a stale encryption key, honestly signed (the change sealed to a key that is no longer live)', AT, call(t, AT, { ...honest, encPk: staleKey }), STALE_ENC, [STALE_ENC]);
+      await neg('amount: signed 300, executed 301', AT, call(t, AT, { ...honest, amount: 301n, signed: { amount: 300n } }), GINVALID, [GINVALID]);
+      if (t === 'C') {
+        // as the S8 section did for the user-recipient twin: the colour assert
+        // isolated with a grant scoped to B (slot 4), the approval naming A
+        const colPlaced = withLocalCoins(bare, [{ nonce: FILLER(0), color: COL_A, value: 5n }, { nonce: NONCE_H, color: COL_B, value: 1000n }]);
+        const colAcc = answering(colPlaced.account, colPlaced.coins[1]);
+        await neg('valid approval for colour A, witness coin of colour B (a grant scoped to B)', colAcc, call(t, colAcc, { ...honest, slot: 4n, coin: colPlaced.coins[1] }), COLOUR_G, [COLOUR_G]);
+        const valPlaced = withLocalCoins(bare, [{ nonce: FILLER(0), color: COL_A, value: 5n }, { nonce: NONCE_H, color: COL_A, value: 999n }]);
+        const valAcc = answering(valPlaced.account, valPlaced.coins[1]);
+        await neg('valid approval for coin value 1000, witness coin of value 999', valAcc, call(t, valAcc, { ...honest, coin: valPlaced.coins[1], signed: { coin: { nonce: NONCE_H, value: 1000n, mtIndex: coinH.mtIndex } } }), GINVALID, [GINVALID]);
+      }
+    }
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// G2E-B2: the forged-address frame mutant on the remaining gated exports
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// As section `frame` (G1E-1): the mutant's generated JavaScript derives the
+// VICTIM's address from the attacker's point, so locally the victim's entry
+// (or grant id) matches and the attacker's signature verifies; only the
+// proof's own derivation can refuse it. Here for add_device, remove_device
+// (both forms), issue_grant, revoke_grant, revoke_all_grants and the two
+// shielded grantee twins; each with the honest call proved through the same
+// forging copy first.
+if (SECTIONS.includes('frame-lifecycle')) {
+  const ADD = 'add_device_with_evm_eip712', REMOVE = 'remove_device_with_evm_eip712';
+  const ISSUE = 'issue_grant_with_evm_eip712', REVOKE = 'revoke_grant_with_evm_eip712', REVOKE_ALL = 'revoke_all_grants_with_evm_eip712';
+  const GWS = 'withdraw_shielded_with_grant_evm_eip712', GWSC = 'withdraw_shielded_to_contract_with_grant_evm_eip712';
+  const UNKNOWN_GRANT = 'unknown grant';
+  const attacker = new SoftwareEvmWallet(0xbad7n);
+  const forging = await loadPatched([], FORGE_ADDRESS_OVERRIDES);
+  const fired = () => (forgery.fired > 0 ? undefined : 'the forgery never fired (the mutant missed its target)');
+  const A0 = (await execute(Original.Contract, await dormant(device.bootCommitment(salt), recoveryPk), ACTIVATE, device.activationArgs(salt))).after;
+  const frame = (a: LocalAccount) => ({ account: a.addressBytes, device: device.address, authNonce: ledgerOf(a).auth_nonce as bigint });
+  const counterOf = (a: LocalAccount) => { for (let k = 0n; k < 64n; k++) if (ledgerOf(a).devices.member(device.entryAt(a.addressBytes, ledgerOf(a).device_epoch, k))) return k; throw new Error('device not live'); };
+  const honestAuth = (t: Eip712TypedData, a: LocalAccount) => { const p = parseEvmSignature(wallet.signDigest(typedDataDigest(t))); return { pk: device.pk, use_counter: counterOf(a), blind: device.blind, sig: { r: p.r, s: p.s } }; };
+  const victimAuth = (t: Eip712TypedData, a: LocalAccount) => { const p = parseEvmSignature(attacker.signDigest(typedDataDigest(t))); return { pk: attacker.pk, use_counter: counterOf(a), blind: device.blind, sig: { r: p.r, s: p.s } }; };
+  const mutantDevice = async (label: string, a: LocalAccount, circuit: string, td: Eip712TypedData, args: (auth: unknown) => unknown[]) => {
+    forgery.set({ pk: attacker.pk, address: device.address });
+    await negative('frame-lifecycle', `${label}: the attacker's key with the victim device's address forged into the derivation`, a, circuit, args(victimAuth(td, a)),
+      UNKNOWN, [], '', { module: forging, mutant: 'forged-address mutant (keccak256 override: the copy derives the victim address from the attacker point)',
+        check: fired, control: { a, args: args(honestAuth(td, a)) } });
+    forgery.set(undefined);
+  };
+  // add_device (a k256 target)
+  const k1 = new K256Device(0x5eed2n);
+  const kIn = evmEip712DescriptorInput({ scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: 0 });
+  await mutantDevice('add_device', A0, ADD, evmEip712Messages.addDevice(frame(A0), kIn), (au) => [kIn, au]);
+  // remove_device, both forms, on an account holding the k256 device
+  const AK = (await execute(Original.Contract, A0, ADD, [kIn, honestAuth(evmEip712Messages.addDevice(frame(A0), kIn), A0)])).after;
+  const kEntry = k1.entryAt(AK.addressBytes, 0n, 0n);
+  const NONE = { is_some: false, value: new Uint8Array(32) };
+  await mutantDevice('remove_device (descriptor form)', AK, REMOVE, evmEip712Messages.removeDevice(frame(AK), kIn, 0n, 0n), (au) => [kIn, 0n, 0n, NONE, au]);
+  await mutantDevice('remove_device (literal form, Q20)', AK, REMOVE, evmEip712Messages.removeUnknownDevice(frame(AK), kEntry),
+    (au) => [EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: kEntry }, au]);
+  // issue_grant / revoke_grant / revoke_all_grants
+  const label = grantLabel('bank.example');
+  const gWallet = new SoftwareEvmWallet(0x6a17een);
+  const eg = await EvmEip712Grantee.enrol(gWallet, 'undeployed', 0, label, 0n);
+  const egIn = eg.descriptor();
+  const sSalt = fill(32, 0x5c);
+  const shScope: IssueScope = { opWithdrawUnshielded: false, opWithdrawShielded: true, opWithdrawShieldedToContract: true, read: true,
+    color: COL_A, recipientKind: 0n, recipient: new Uint8Array(32), maxCoinValue: 1000n, perCallCap: 1000n, cap: 2000n, expiresAt: 0n,
+    rpIdHash: new Uint8Array(32), readPk: fill(32, 0x77), windowLen: 0n, windowCap: 0n, caller: null };
+  await mutantDevice('issue_grant', A0, ISSUE, evmEip712Messages.issueGrant(frame(A0), egIn, shScope), (au) => [egIn, ...evmEip712IssueArgs(shScope, sSalt), au]);
+  const AG = (await execute(Original.Contract, A0, ISSUE, [egIn, ...evmEip712IssueArgs(shScope, sSalt), honestAuth(evmEip712Messages.issueGrant(frame(A0), egIn, shScope), A0)])).after;
+  await mutantDevice('revoke_grant', AG, REVOKE, evmEip712Messages.revokeGrant(frame(AG), egIn), (au) => [egIn, au]);
+  await mutantDevice('revoke_all_grants', AG, REVOKE_ALL, evmEip712Messages.revokeAllGrants(frame(AG)), (au) => [au]);
+  // the two shielded grantee twins: the grant seam derives the grantee's
+  // address from the presented point; the attacker presents its own point
+  // with the grantee's blind and label
+  const placed = withLocalCoins(AG, [{ nonce: FILLER(0), color: COL_A, value: 5n }, { nonce: NONCE_H, color: COL_A, value: 1000n }]);
+  const AS = { ...placed.account, privateState: coinStoreAnswering([{ key: COL_A, coin: placed.coins[1] }]) } as LocalAccount;
+  const coin = { nonce: NONCE_H, value: 1000n, mtIndex: placed.coins[1].mtIndex };
+  const rec = ledgerOf(AS).grants.lookup(eg.grantId(AS.addressBytes));
+  const gf = { account: AS.addressBytes, grantee: eg.address, label, slot: 0n, issuedAt: rec.issued_at as bigint, grantNonce: rec.nonce as bigint };
+  const enc = ledgerOf(AS).enc_key, chg = fill(192, 0x2c);
+  const op: GrantOpening = { originHash: eg.originHash, slot: 0n, scopeSalt: sSalt, recipientKind: 0n, pinnedRecipient: new Uint8Array(32), maxCoinValue: 1000n, spentPrev: 0n };
+  const gAuthOf = (td: Eip712TypedData, w: SoftwareEvmWallet, pk: { x: bigint; y: bigint }) => { const p = parseEvmSignature(w.signDigest(typedDataDigest(td))); return { arm: 'evm_eip712' as const, pk, blind: eg.blind, label, sig: { r: p.r, s: p.s } }; };
+  const gAuth = gAuthOf;
+  // the unshielded twin as well (its mutant ran at S8 in section `grants`;
+  // repeated here so that one run of `frame frame-lifecycle recovery` covers
+  // all 15 gated exports): a grant with the unshielded operation and a mirror
+  const GWU = 'withdraw_unshielded_with_grant_evm_eip712';
+  const uScope: IssueScope = { ...shScope, opWithdrawUnshielded: true, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: false, readPk: new Uint8Array(32), color: fill(32, 0xc7), maxCoinValue: 300n, perCallCap: 300n, cap: 450n };
+  const AU0 = (await execute(Original.Contract, A0, ISSUE, [egIn, ...evmEip712IssueArgs(uScope, sSalt), honestAuth(evmEip712Messages.issueGrant(frame(A0), egIn, uScope), A0)])).after;
+  const AU = (await execute(Original.Contract, AU0, 'deposit_unshielded', [fill(32, 0xc7), 1000n])).after;
+  const recU = ledgerOf(AU).grants.lookup(eg.grantId(AU.addressBytes));
+  const gfU = { account: AU.addressBytes, grantee: eg.address, label, slot: 0n, issuedAt: recU.issued_at as bigint, grantNonce: recU.nonce as bigint };
+  const opU: GrantOpening = { originHash: eg.originHash, slot: 0n, scopeSalt: sSalt, recipientKind: 0n, pinnedRecipient: new Uint8Array(32), maxCoinValue: 300n, spentPrev: 0n };
+  const RU = fill(32, 0x7e);
+  const tdU = evmEip712Messages.withdrawUnshieldedAsGrantee(gfU, fill(32, 0xc7), 200n, RU);
+  const argsU = (au: any) => [fill(32, 0xc7), 200n, { bytes: RU }, ...grantAuthArgs(opU, au)];
+  forgery.set({ pk: attacker.pk, address: eg.address });
+  await negative('frame-lifecycle', `${GWU.replace('_evm_eip712', '')}: grant seam, the attacker's key with the grantee's address forged into the derivation`, AU, GWU,
+    argsU(gAuthOf(tdU, attacker, attacker.pk)), UNKNOWN_GRANT, [], '',
+    { module: forging, mutant: 'forged-address mutant (keccak256 override) on the grant seam', check: fired, control: { a: AU, args: argsU(gAuthOf(tdU, gWallet, eg.pk)) } });
+  forgery.set(undefined);
+  for (const [circuit, td, args] of [
+    [GWS, evmEip712Messages.withdrawShieldedAsGrantee(gf, COL_A, 300n, localCoinPublicKeyBytes(), chg, enc, coin), (au: any) => [{ bytes: localCoinPublicKeyBytes() }, COL_A, 300n, chg, enc, ...grantAuthArgs(op, au)]],
+    [GWSC, evmEip712Messages.withdrawShieldedToContractAsGrantee(gf, COL_A, 300n, RECIPIENT_CONTRACT, chg, enc, coin), (au: any) => [{ bytes: RECIPIENT_CONTRACT }, COL_A, 300n, chg, enc, ...grantAuthArgs(op, au)]],
+  ] as [string, Eip712TypedData, (au: any) => unknown[]][]) {
+    forgery.set({ pk: attacker.pk, address: eg.address });
+    await negative('frame-lifecycle', `${circuit.replace('_evm_eip712', '')}: grant seam, the attacker's key with the grantee's address forged into the derivation`, AS, circuit,
+      args(gAuth(td, attacker, attacker.pk)), UNKNOWN_GRANT, [], '',
+      { module: forging, mutant: 'forged-address mutant (keccak256 override) on the grant seam', check: fired, control: { a: AS, args: args(gAuth(td, gWallet, eg.pk)) } });
+    forgery.set(undefined);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// G1S-6 / QA-S3: the Field-to-Bytes<32> rendering in the signed bytes
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// PublishRecoverySession shows the JubJub recovery key's coordinates and the
+// phi values as 32-byte little-endian words: the circuit casts each Field to
+// Bytes<32> (ZKIR `div_mod_power_of_two(val, 248)`). If that decomposition
+// were not forced below the scalar-field modulus r, a value f would have a
+// second rendering f + r (f + r < 2^256 for every f < r), and an approval
+// could show a non-canonical word for the value that executes. ZKIR 3.1
+// lowers the instruction to `assigned_to_le_bits(val, None, enforce_canonical
+// = true)` over all 255 bits (midnight-circuits 7.2.4 native_gadget.rs: the
+// low bit is tied to sgn0(val), which leaves one bit vector), so the
+// rendering is canonical. Probed here as QA-1 was: an approval signed over
+// the non-canonical rendering of the executed value must be refused by the
+// proof server.
+if (SECTIONS.includes('qa-s3')) {
+  const PUBLISH = 'publish_recovery_session_with_evm_eip712';
+  const R = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001n; // the BLS12-381 scalar field modulus
+  const A0 = (await execute(Original.Contract, await dormant(device.bootCommitment(salt), recoveryPk), ACTIVATE, device.activationArgs(salt))).after;
+  const sess = { recoveryPk: recoveryKey(0x5e57n).pk, sessionNonce: rnd(32), phi: [7n, 0x1234n, 0n, 0n] as [bigint, bigint, bigint, bigint], phiLen: 2n, wrap: rnd(64) };
+  const sargs = (auth: unknown) => [sess.recoveryPk, sess.sessionNonce, ...sess.phi, sess.phiLen, sess.wrap, auth];
+  const td = evmEip712Messages.publishRecoverySession(frameOf(A0), sess);
+  const le = (v: bigint) => { const o = new Uint8Array(32); let x = v; for (let i = 0; i < 32; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } if (x) throw new Error('above 2^256'); return '0x' + Buffer.from(o).toString('hex'); };
+  const control = { a: A0, args: sargs(authFor(td)) };
+  await positive('qa-s3', 'publish_recovery_session: the canonical renderings (patched path)', await loadPatched([INVALID]), A0, PUBLISH, control.args);
+  for (const [member, value] of [['phi1', sess.phi[0]], ['phi2', sess.phi[1]], ['recoveryKeyX', sess.recoveryPk.x], ['recoveryKeyY', sess.recoveryPk.y]] as const) {
+    const t = JSON.parse(JSON.stringify(td));
+    t.message[member] = le(value + R);
+    if (t.message[member] === td.message[member]) throw new Error('setup: the renderings coincide');
+    await negative('qa-s3', `${member} shown as the non-canonical rendering of the executed value (value + r, little-endian)`, A0, PUBLISH, sargs(authFor(t)),
+      INVALID, [INVALID], '', { control });
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // S9E: recovery — the session and the cancel through the arm
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -1002,8 +1395,17 @@ if (process.env.EVIDENCE_DIR) {
   const suffix = process.argv.slice(2).length ? `-${process.argv.slice(2).join('-')}` : '';
   const file = path.join(process.env.EVIDENCE_DIR, `evm-eip712-prover${suffix}.json`);
   fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });
+  // (G2E-4) totals by refusing layer
+  const totals: Record<string, number> = {};
+  const bump = (k: string) => { totals[k] = (totals[k] ?? 0) + 1; };
+  for (const r of results) {
+    if (r.kind === 'positive') bump((r as any).notApplicable ? 'not applicable (reason recorded)' : r.positive?.proofServer?.length ? 'positive: proved at the proof server' : 'positive: state-only (simulator state check, no proof)');
+    else if ((r as any).proverLevel) bump('negative: runtime-only (generated JavaScript; prover level unreachable, reason recorded)');
+    else bump(`negative: refused at the proof server, layer ${r.refusal?.kind}${r.refusal?.kind === 'constraint' ? ` (${r.enforcement})` : ''}${r.prover?.verdict !== 'PASS' ? ` [verdict ${r.prover?.verdict}]` : ''}`);
+    if (r.prover?.positiveControl) bump('positive controls proved through a negative\'s own patched copy');
+  }
   fs.writeFileSync(file, JSON.stringify({ suite: 'evm-eip712-prover', sections: SECTIONS, ranAt: new Date().toISOString(), proofServer: CONFIG.proofServer,
-    device: { address: device.checksumAddress }, cases: results, requests: proofLog.length, transportRetries, verdict,
+    device: { address: device.checksumAddress }, totalsByLayer: totals, cases: results, requests: proofLog.length, transportRetries, verdict,
   }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v instanceof Uint8Array ? Buffer.from(v).toString('hex') : v), 2) + '\n');
   console.log(`\n■ evidence → ${file}`);
 }

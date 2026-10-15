@@ -18,6 +18,10 @@
 //     JavaScript derives from the device's point (audit G1E-1), as a runtime
 //     override of `keccak256`: the victim's entry matches while the attacker's
 //     key signs, and only the proof's own derivation can refuse it.
+//   - (G2E-B1) the calling contract `kernel.caller()` presents, injected into
+//     the local call context (a root call has none; the ledger authenticates
+//     the real caller at admission), and a ledger-cell copy that builds a
+//     state no shared chip produces (a grant record of an older generation).
 
 import * as path from 'node:path';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -31,7 +35,7 @@ import {
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { LedgerParameters, ZswapChainState, ZswapOffer, ZswapOutput, ZswapSecretKeys, sampleSigningKey } from '@midnightntwrk/ledger-v9';
 // midnight-js keeps contract state in the on-chain runtime's classes (via compact-runtime).
-import { ChargedState, ContractState } from '@midnight-ntwrk/compact-runtime';
+import { ChargedState, ContractState, StateValue } from '@midnight-ntwrk/compact-runtime';
 import { CONFIG, zkConfigPath } from '../node/wallet.js';
 import { emptyCoinStore, makeWitnesses, type CoinStorePrivateState } from '../wallet/witnesses.js';
 import { loadBypassedContract, recordingProofProvider, type BypassedContractModule, type ProofServerRequest } from './constraint-negative.js';
@@ -126,6 +130,57 @@ export const forgery = {
   },
   fired: 0,
 };
+
+/** (G2E-B1) Sets the CALLER the call context presents to `kernel.caller()`:
+ *  before each ledger query of the copy, the current query context's block
+ *  carries `callerInjection`'s caller (`{ tag: 'contract', address }`). A
+ *  root call built by midnight-js has no caller, and a caller can only come
+ *  from a call tree, which this local harness cannot build; the caller is a
+ *  context value that the ledger authenticates at admission, so this
+ *  injection exercises exactly what the circuit does with it (the caller pin
+ *  of upstream's shared check_spend_scope) and nothing the prover could
+ *  choose on chain. Honest calls through the copy behave as through the
+ *  original when no caller is set (its positive control proves one with the
+ *  pinned caller). */
+export const CALLER_OVERRIDES = `
+  queryLedgerState(context, partialProofData, program) {
+    const c = globalThis[Symbol.for('aa00067.e.injectCaller')];
+    const q = c && context && context.callContext && context.callContext.currentQueryContext;
+    if (q) q.block = { ...q.block, caller: c };
+    return __compactRuntimeOriginal.queryLedgerState(context, partialProofData, program);
+  },`;
+
+const CALLER = Symbol.for('aa00067.e.injectCaller');
+export const callerInjection = {
+  /** The contract the next calls through a CALLER_OVERRIDES copy present as
+   *  their caller (undefined: none, as for a root call). */
+  set(contract: Uint8Array | undefined) {
+    (globalThis as any)[CALLER] = contract && { tag: 'contract', address: Buffer.from(contract).toString('hex') };
+  },
+};
+
+/** (G2E-B1) A copy of account `a` whose ledger cell at the two-level `path`
+ *  (top-level index, then index inside it) is the one `from` holds there.
+ *  Used to build a state no shared chip produces today (a grant record of an
+ *  older grant generation: revoke_all_grants clears the map, as the MIP
+ *  permits, so the "grant generation stale" assert is defence in depth and
+ *  is otherwise unreachable); the proof server only sees the transcript of
+ *  the reads, so the constraint is exercised as it would be on such a
+ *  ledger. */
+export function withLedgerCell(a: LocalAccount, from: LocalAccount, path2: [number, number]): LocalAccount {
+  const top = a.state.data.state.asArray();
+  const src = from.state.data.state.asArray();
+  if (!top || !src) throw new Error('withLedgerCell: the ledger root is not an array');
+  const sub = top[path2[0]].asArray(), srcSub = src[path2[0]].asArray();
+  if (!sub || !srcSub) throw new Error('withLedgerCell: the path does not name an array');
+  let newSub = StateValue.newArray();
+  sub.forEach((v: any, i: number) => { newSub = newSub.arrayPush(i === path2[1] ? srcSub[i] : v); });
+  let newTop = StateValue.newArray();
+  top.forEach((v: any, i: number) => { newTop = newTop.arrayPush(i === path2[0] ? newSub : v); });
+  const next = ContractState.deserialize(a.state.serialize());
+  next.data = new ChargedState(newTop);
+  return { ...a, state: next };
+}
 
 /** A patched copy of the account module (constraint-negative.ts). */
 export const loadPatched = (bypass: readonly string[], overrides = ''): Promise<BypassedContractModule> =>
