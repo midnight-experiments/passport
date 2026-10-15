@@ -176,6 +176,56 @@ export circuit activate_initial_device_with_sol_ed25519(
   ));
 }
 
+// ── The device seam (spec FR-007, FR-012, FR-S01) ───────────────────────────
+//
+// The authorising material of a device-gated call. Internal (as upstream's
+// P256Auth): the generated JavaScript takes it as one object argument.
+struct SolEd25519Auth {
+  pk:          Curve25519Point;
+  blind:       Bytes<32>;
+  use_counter: Uint<64>;
+  sig:         Ed25519Signature;
+}
+
+// In upstream p256's order: membership of the device's current single-use
+// entry, verification, the entry rolled to its successor, auth_nonce
+// advanced, round bumped. `key` is the 32-byte encoding of auth.pk, computed
+// by the gated circuit (encode_public_key_with_sol_ed25519) before it
+// renders `msg`; the entries bind those bytes and the account's blind.
+// Verification: R != O (refused here; the standard library accepts it), then
+// ed25519Verify<n> (cofactorless [s]B == R + [k]A with k = SHA-512(R || A ||
+// msg) mod L; it refuses A = O). s < L and the prime-order subgroup for A and
+// R hold by type. The atomic abort of a failed assert reverts everything.
+circuit require_authorised_with_sol_ed25519<#n>(auth: SolEd25519Auth, key: Bytes<32>, msg: Bytes<n>): [] {
+  const entry = disclose(derive_descriptor_entry_w64(device_tag_sol_ed25519(), kernel.self(), key, auth.blind,
+    device_epoch, auth.use_counter));
+  assert(devices.member(entry), "unknown device entry");
+  assert((curve25519PointX(auth.sig.r) as Bytes<32>) != pad(32, ""), "R is the identity");
+  assert(ed25519Verify<n>(msg, auth.sig, auth.pk), "invalid signature");
+  devices.remove(entry);
+  devices.insert(disclose(derive_descriptor_entry_w64(device_tag_sol_ed25519(), kernel.self(), key, auth.blind,
+    device_epoch, (auth.use_counter + 1) as Uint<64>)));
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+  bump_round();
+}
+
+// ── Gated circuits ──────────────────────────────────────────────────────────
+//
+// Arguments: the operation's operands, then the message's display inputs
+// (in the message circuit's order, `hex` last), then the authorisation.
+
+export circuit rotate_enc_key_with_sol_ed25519(
+  new_key: Bytes<32>,
+  show:    SolShow,
+  hex:     Vector<192, Uint<0..16>>,
+  auth:    SolEd25519Auth,
+): [] {
+  const key = encode_public_key_with_sol_ed25519(auth.pk);
+  const msg = sol_message_rotate_enc_key(kernel.self(), key, auth_nonce, new_key, show, hex);
+  require_authorised_with_sol_ed25519<511>(auth, key, msg);
+  do_rotate_enc_key(new_key);
+}
+
 // ── Signed messages, format sol v1 (spec FR-S02, FR-S03, FR-004, FR-023) ────
 //
 // A Solana wallet's `signMessage` signs the raw bytes it is given, so the
