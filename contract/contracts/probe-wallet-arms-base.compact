@@ -1,0 +1,149 @@
+pragma language_version >= 0.17.0;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// PROBE (not part of the standard, never deployed by the account): compiles
+// and exports the shared modules of the readable authorisation arms, so that
+// the modules are built and tested on their own, before any arm includes
+// them (upstream's probe-*.compact pattern).
+//
+//   modules/WalletArmDescriptors  readable-descriptor derivations (device
+//                                 entries, boot commitments, grant ids,
+//                                 origin_hash, and the blind), one per payload
+//                                 width, with the registered tags
+//   modules/WalletArmRendering    decimal, hex, and label text for readable
+//                                 signed bytes
+//
+// Every module circuit is re-exported as a pure circuit, which the offline
+// suites compare against upstream's own derivation circuits and against an
+// independent SHA-256 and renderer. The impure `probe_*` circuits wrap one
+// derivation or rendering each and write its result to a ledger cell: the
+// public output stops the compiler from treating them as pure helpers, so
+// they have proving keys. They exist to measure rows and to show, with the
+// generated JavaScript checks bypassed, that the modules' asserts are
+// enforced by the proof itself (constraint-level negatives).
+// ---------------------------------------------------------------------------
+
+import "modules/WalletArmDescriptors";
+import "modules/WalletArmRendering";
+
+export {
+  device_tag_jubjub, device_tag_k256, device_tag_p256,
+  device_tag_evm_eip712, device_tag_sol_ed25519,
+  boot_tag_jubjub, boot_tag_k256, boot_tag_p256,
+  boot_tag_evm_eip712, boot_tag_sol_ed25519,
+  grant_id_tag_jubjub, grant_id_tag_k256, grant_id_tag_p256,
+  grant_id_tag_evm_eip712, grant_id_tag_sol_ed25519,
+  blind_tag_evm_eip712, blind_tag_sol_ed25519, grant_origin_tag,
+  derive_descriptor_entry_w52, derive_descriptor_entry_w64,
+  derive_descriptor_entry_w65, derive_descriptor_entry_w117,
+  derive_descriptor_boot_w52, derive_descriptor_boot_w64,
+  derive_descriptor_boot_w65, derive_descriptor_boot_w117,
+  derive_descriptor_grant_id_w52, derive_descriptor_grant_id_w64,
+  derive_descriptor_grant_id_w65,
+  derive_grant_origin_hash_label, derive_grant_origin_hash_origin,
+  derive_blind,
+  uint8_text, uint32_text, uint64_text, uint128_text,
+  hex_text_20, hex_text_32, hex_text_64, hex_text_192, reverse_32,
+  label_text_32, visible_text_21,
+};
+
+export ledger derived: Bytes<32>;
+export ledger text_21: Bytes<21>;
+export ledger text_32: Bytes<32>;
+export ledger text_39: Bytes<39>;
+export ledger text_384: Bytes<384>;
+
+// ── Derivations ─────────────────────────────────────────────────────────────
+
+export circuit probe_entry_w52(
+  tag: Bytes<32>, self_addr: ContractAddress, address: Bytes<20>, blind: Bytes<32>,
+  epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w52(tag, self_addr, address, blind, epoch, counter));
+}
+
+export circuit probe_entry_w64(
+  tag: Bytes<32>, self_addr: ContractAddress, first: Bytes<32>, second: Bytes<32>,
+  epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w64(tag, self_addr, first, second, epoch, counter));
+}
+
+export circuit probe_entry_w65(
+  tag: Bytes<32>, self_addr: ContractAddress, x: Bytes<32>, y: Bytes<32>, envelope: Uint<8>,
+  epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w65(tag, self_addr, x, y, envelope, epoch, counter));
+}
+
+export circuit probe_entry_w117(
+  tag: Bytes<32>, self_addr: ContractAddress, x: Bytes<32>, y: Bytes<32>,
+  rp_id_hash: Bytes<32>, origin: Bytes<21>, epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_w117(tag, self_addr, x, y, rp_id_hash, origin, epoch, counter));
+}
+
+export circuit probe_boot_w52(tag: Bytes<32>, salt: Bytes<32>, address: Bytes<20>, blind: Bytes<32>): [] {
+  derived = disclose(derive_descriptor_boot_w52(tag, salt, address, blind));
+}
+
+export circuit probe_boot_w64(tag: Bytes<32>, salt: Bytes<32>, first: Bytes<32>, second: Bytes<32>): [] {
+  derived = disclose(derive_descriptor_boot_w64(tag, salt, first, second));
+}
+
+export circuit probe_boot_w65(
+  tag: Bytes<32>, salt: Bytes<32>, x: Bytes<32>, y: Bytes<32>, envelope: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_boot_w65(tag, salt, x, y, envelope));
+}
+
+export circuit probe_boot_w117(
+  tag: Bytes<32>, salt: Bytes<32>, x: Bytes<32>, y: Bytes<32>, rp_id_hash: Bytes<32>, origin: Bytes<21>
+): [] {
+  derived = disclose(derive_descriptor_boot_w117(tag, salt, x, y, rp_id_hash, origin));
+}
+
+export circuit probe_grant_id_w52(
+  tag: Bytes<32>, self_addr: ContractAddress, address: Bytes<20>, blind: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_w52(tag, self_addr, address, blind, origin_hash, slot));
+}
+
+export circuit probe_grant_id_w64(
+  tag: Bytes<32>, self_addr: ContractAddress, first: Bytes<32>, second: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_w64(tag, self_addr, first, second, origin_hash, slot));
+}
+
+export circuit probe_grant_id_w65(
+  tag: Bytes<32>, self_addr: ContractAddress, x: Bytes<32>, y: Bytes<32>, envelope: Uint<8>,
+  origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_w65(tag, self_addr, x, y, envelope, origin_hash, slot));
+}
+
+export circuit probe_blind(tag: Bytes<32>, signature: Bytes<64>): [] {
+  derived = disclose(derive_blind(tag, signature));
+}
+
+// ── Rendering ───────────────────────────────────────────────────────────────
+
+export circuit probe_uint128_text(value: Uint<128>, text: Vector<39, Uint<8>>): [] {
+  text_39 = disclose(uint128_text(value, text) as Bytes<39>);
+}
+
+export circuit probe_hex_text_192(b: Bytes<192>): [] {
+  text_384 = disclose(hex_text_192(b) as Bytes<384>);
+}
+
+export circuit probe_label_text_32(label: Bytes<32>): [] {
+  text_32 = disclose(label_text_32(label) as Bytes<32>);
+}
+
+export circuit probe_visible_text_21(b: Bytes<21>): [] {
+  text_21 = disclose(visible_text_21(b) as Bytes<21>);
+}
