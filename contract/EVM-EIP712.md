@@ -44,7 +44,7 @@ The procedure:
 
 - The client asks for the signature **twice** and refuses the wallet if the two canonical forms differ. Such a wallet is non-deterministic (MPC, hedged nonces), so its blind could never be derived again.
 - The client recovers the device's public point from the same signature and checks that it hashes to the wallet's address.
-- The `personal_sign` digest starts `0x19 0x45`, and every authorisation digest starts `0x19 0x01`. So a blind signature is never an authorisation, and an authorisation is never a blind signature.
+- The `personal_sign` hash preimage begins `0x19 0x45` (`0x19` and `'E'` of `"Ethereum Signed Message:\n"`), and every authorisation's hash preimage begins `0x19 0x01`. The preimages are disjoint, so the two digests coincide only on a keccak256 collision: a blind signature is never an authorisation, and an authorisation is never a blind signature. No circuit consumes a `personal_sign` digest.
 - A restored client derives `blind_0 … blind_k` and finds its accounts by testing entries (`restoreEvmDevices`).
 
 ## 3. Domain
@@ -200,15 +200,18 @@ That script also checks that `signTypedData` is byte-identical to ethers'.
 
 ## 9. The seam and the acceptance policy
 
-`require_authorised_with_evm_eip712(auth, address, struct_hash)` follows upstream `p256`'s order (FR-007):
+`require_authorised_with_evm_eip712<T>(auth, type_hash, tail)` follows upstream `p256`'s order (FR-007):
 
-1. membership of the single-use entry at the active epoch;
-2. `r ≠ 0` and `s ≠ 0`;
-3. ECDSA verification of `digest(account, struct_hash)`;
-4. the entry rolled to its successor;
-5. `auth_nonce` advanced and `round` bumped.
+1. the device's address derived from the presented point, `evm_eip712_address(auth.pk)` (the point at infinity refused in both encodings);
+2. membership of the single-use entry at the active epoch;
+3. `r ≠ 0` and `s ≠ 0`;
+4. ECDSA verification of `digest(account, struct_hash)`, where the seam builds `struct_hash` itself from the frame and the export's tail;
+5. the entry rolled to its successor;
+6. `auth_nonce` advanced and `round` bumped.
 
-Any failure aborts the whole call. The trailing argument `EvmEip712Auth { pk, use_counter, blind, sig }` is internal. The export derives `address` from `pk` with `evm_eip712_address` and uses it both in the message (`device`) and in the entry.
+Any failure aborts the whole call. The trailing argument `EvmEip712Auth { pk, use_counter, blind, sig }` is internal.
+
+**The seam owns the frame** (audit G1E-1, G0 C9). An export passes only its operation's type hash and tail, from the module's `evm_eip712_parts_<operation>` circuit. The seam supplies every frame value itself: `account` is `kernel.self()`, `device` is the address of the presented point, and `authNonce` is the ledger's (read before this call advances it). No export can name an account, a device or a nonce, so an entry is matched and a signature verified only for the address of the key that signed. The exported struct-hash oracles `evm_eip712_struct_<operation>` are built from the same frame builders (`evm_eip712_device_struct<T>`, `evm_eip712_grantee_struct<T>`) and the same parts, so an oracle and its export cannot diverge. `keccak256` over a tuple whose last member is a generic tuple hashes that member flat (QA-A1; all 53 frozen vectors still agree with ethers), and the refactor cost no rows. A malicious-prover mutant that forges the derived address in the generated JavaScript (so that the victim's entry matches while the attacker's key signs) is refused at the proof server (`evm-eip712-prover.ts`, section `frame`).
 
 The table below gives the acceptance policy. Each rule's refusing layer was measured with the JavaScript checks bypassed, after a proved positive control (`evm-eip712-prover.ts`, 37 cases, 2026/10/15).
 
@@ -219,9 +222,11 @@ The table below gives the acceptance policy. Each rule's refusing layer was meas
 | `r ≠ 0`, `s ≠ 0`, and `(r, s) = (0, 0)` | the arm's zero-scalar assert (and ZKIR's inverse) | the arm's assert / `/check` 400. `(0, 0)` verifies in the generated JavaScript once inverses of 0 are taken as 0, so only the arm's assert fires there, and the proof still fails |
 | Both S forms accepted | `secp256k1EcdsaVerify` (FIPS 186-5) | the high-S twin proves and lands. The low-S original is then refused: "unknown device entry" (simulator), `/check` 400 (prover), and node `1010: Invalid Transaction: Custom error 104` for its proof made before the twin landed (three submissions; a fresh call from the same wallet landed in between) |
 | The point at infinity (flagged) | ZKIR coordinate extraction; the arm's coordinate guard and the stdlib's struct guard (defence in depth) | "cannot extract the x-coordinate" / "Cannot extract coordinates of the Secp256k1 identity" |
-| The unflagged `(0, 0)` | the runtime validator; the proof server's on-curve decoding | type error / "Failed to decode" |
-| A coordinate not reduced below `p` (QA-1) | the runtime's foreign-field encoder; the proof server's input decoding | type error / "The encoded value of type Secp256k1Point is not in canonical form" |
+| The unflagged `(0, 0)` | the runtime validator; the honest proof server's input decoding; in-circuit, the `Secp256k1Point` on-curve assignment (`(0, 0)` is not on the curve) | type error / proof-server input decoding "Failed to decode" (a decoding refusal of an honest prover, not a constraint failure; see the note below) |
+| A coordinate not reduced below `p` (QA-1) | the runtime's foreign-field encoder; the honest proof server's input decoding; for soundness, the size argument below | type error / proof-server input decoding "The encoded value of type Secp256k1Point is not in canonical form" (not a constraint failure) |
 | Replay across accounts, arms (`k256` ↔ `evm_eip712` with the same key), operations (`CancelRecovery`, `RevokeAllGrants`), roles (a grantee type) and nonces | the domain and type hash in the digest; the arm-specific digest rule | "invalid signature" (or "unknown device entry" for a consumed entry) / `/check` 400 |
+
+**Decoding refusals are not constraint refusals** (audit G1E-4). The last two rows above are refused by the honest toolchain: the runtime's encoder and the proof server's input decoder. A malicious prover builds its own witness and never runs that decoder, so these rows do not show that a constraint refuses the value. The closure for this arm is a size argument. A secp256k1 coordinate `c` has a second 32-byte representation `c + p` only when `c < 2^256 − p ≈ 2^32`. For any real key the cast to `Bytes<32>` therefore has no alternative output, and forging an address through it would also need a keccak256 preimage. The same bound applies to the `secp256k1PointX` inside `secp256k1EcdsaVerify`. The `(0, 0)` point is refused in-circuit by the on-curve assignment. Constraint-level canonicity of the foreign-field-to-bytes cast itself remains an upstream residual (#182).
 
 ## 10. Network (Q4, FR-015)
 
