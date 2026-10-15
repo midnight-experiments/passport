@@ -310,6 +310,29 @@ export circuit withdraw_shielded_with_sol_ed25519(
   return do_withdraw_shielded(recipient, amount, coin);
 }
 
+// The contract-recipient spend: the direct-transfer mode of MIP-0012 §6.6
+// (the output MUST be claimed by the receiving contract's deposit path in the
+// same client-composed transaction; both addresses are public by design).
+// The message shows the recipient contract's 32-byte address; the coin, the
+// colour assert and the change are as above. Returns [sent, change].
+export circuit withdraw_shielded_to_contract_with_sol_ed25519(
+  recipient: ContractAddress,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  a:         SolAmountShow,
+  c:         SolCoinShow,
+  show:      SolShow,
+  frame:     Vector<128, Uint<0..16>>,
+  hex:       Vector<192, Uint<0..16>>,
+  auth:      SolEd25519Auth,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  require_authorised_with_sol_ed25519<50, 531, 871>(sol_title_withdraw_shielded_to_contract(),
+    sol_body_withdraw_shielded_to_contract(recipient, color, amount, coin, a, c, hex), show, frame, auth);
+  return do_withdraw_shielded_to_contract(recipient, amount, coin);
+}
+
 // ── Signed messages, format sol v1 (spec FR-S02, FR-S03, FR-004, FR-023) ────
 //
 // A Solana wallet's `signMessage` signs the raw bytes it is given, so the
