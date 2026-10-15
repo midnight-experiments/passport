@@ -501,17 +501,21 @@ circuit sol_label_chars(v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
 // space-padded in 49 bytes. <number> is the value's digits with the site's
 // decimal point: none, or 1..18 digits after it, at least one before it, no
 // leading zero (except a lone "0" before the point); <symbol> is 1..8
-// visible characters. The digits read back to the value, so the site
-// chooses only the point's position and the symbol (project 00047, F3 v3).
+// visible characters, the first a letter (so the symbol can never read as
+// more digits of the number, as in "1 000"; AA 00067 G1(S) F-A4). The digits
+// read back to the value, so the site chooses only the point's position and
+// the symbol (project 00047, F3 v3).
 circuit sol_claim_text(value: Field, t: Vector<49, Uint<8>>): Vector<49, Uint<8>> {
   // [value so far, phase (0 integer part, 1 fraction, 2 symbol, 3 padding),
-  //  digits before the point, digits after it, symbol length, every byte fits]
-  const r = fold((s: [Field, Uint<8>, Uint<8>, Uint<8>, Uint<8>, Boolean], c: Uint<8>):
-                 [Field, Uint<8>, Uint<8>, Uint<8>, Uint<8>, Boolean] => {
+  //  digits before the point, digits after it, symbol length, every byte fits,
+  //  the symbol starts with a letter]
+  const r = fold((s: [Field, Uint<8>, Uint<8>, Uint<8>, Uint<8>, Boolean, Boolean], c: Uint<8>):
+                 [Field, Uint<8>, Uint<8>, Uint<8>, Uint<8>, Boolean, Boolean] => {
     const space = c == 32;
     const dot = c == 46;
     const digit = c >= 48 && c <= 57;
     const shown = c >= 33 && c <= 126;
+    const letter = (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
     const p = s[1];
     const whole = p == 0;
     const frac = p == 1;
@@ -530,9 +534,11 @@ circuit sol_claim_text(value: Field, t: Vector<49, Uint<8>>): Vector<49, Uint<8>
             (whole && digit ? s[2] + 1 : s[2]) as Uint<8>,
             (frac && digit ? s[3] + 1 : s[3]) as Uint<8>,
             (sym && shown ? s[4] + 1 : s[4]) as Uint<8>,
-            s[5] && ok];
-  }, [0 as Field, 0 as Uint<8>, 0 as Uint<8>, 0 as Uint<8>, 0 as Uint<8>, true], t);
+            s[5] && ok,
+            s[6] && (!(sym && s[4] == 0) || letter)];
+  }, [0 as Field, 0 as Uint<8>, 0 as Uint<8>, 0 as Uint<8>, 0 as Uint<8>, true, true], t);
   assert(r[5] && (r[1] == 3 || (r[1] == 2 && r[4] != 0)), "display: not a site amount label");
+  assert(r[6], "display: the symbol does not start with a letter");
   assert(r[3] <= 18, "display: more than 18 decimals");
   assert(r[4] <= 8, "display: symbol longer than 8");
   assert(t[0] != 48 || t[1] == 46 || t[1] == 32, "display: leading zero");

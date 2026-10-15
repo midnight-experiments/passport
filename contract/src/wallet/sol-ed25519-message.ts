@@ -78,10 +78,10 @@ export function labelText(b: Uint8Array): string {
 
 /** The site's label for an amount, 49 bytes: the digits of `value` with the
  *  site's decimal point (0..18 decimals) and its symbol (1..8 visible
- *  characters). */
+ *  characters, the first a letter). */
 export function claimText(value: bigint, decimals: number, symbol: string): string {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) throw new Error('sol message: 0 to 18 decimals');
-  if (!/^[\x21-\x7e]{1,8}$/.test(symbol)) throw new Error('sol message: a symbol is 1 to 8 visible characters');
+  if (!/^[A-Za-z][\x21-\x7e]{0,7}$/.test(symbol)) throw new Error('sol message: a symbol is 1 to 8 visible characters, the first a letter');
   if (value < 0n || value > MAX[39]) throw new Error('sol message: amount out of range');
   let d = value.toString(10);
   let number: string;

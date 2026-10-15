@@ -21,7 +21,7 @@ import { pureCircuits } from '../wallet/contract.js';
 import { COORDINATE_DISPLAY_ORDER, coordinateHex } from '../wallet/descriptors.js';
 import { solDeviceMessageCircuit, solGranteeMessageCircuit } from '../wallet/signer-sol-ed25519.js';
 import {
-  SOL_PARSE_BOUND, assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solAmountShow, solCoinShow, solDeviceMessageText,
+  SOL_PARSE_BOUND, assertSafeSolMessage, claimText, digitsOf, labelBytes, nibblesOf, solAmountShow, solCoinShow, solDeviceMessageText,
   solGranteeArg, solGranteeMessageText, solGranteeShow, solGrantShow, solMessageBytes, solScopeShow, solShow,
   solTargetArg, solTargetShow, type SolAmount, type SolCoin, type SolDeviceContext, type SolDeviceOperation,
   type SolGranteeContext, type SolGranteeFields, type SolGranteeOperation, type SolTargetFields,
@@ -59,7 +59,7 @@ const AMOUNTS: SolAmount[] = [
   { color: det('c1', 32), amount: 1_000_000n, decimals: 6, symbol: 'tUSDC' },
   { color: new Uint8Array(32), amount: 0n, decimals: 0, symbol: 'NIGHT' },
   { color: det('c3', 32), amount: MAX128, decimals: 18, symbol: 'ABCDEFGH' },
-  { color: det('c4', 32), amount: 5n, decimals: 18, symbol: '?' },
+  { color: det('c4', 32), amount: 5n, decimals: 18, symbol: 'x?' },
 ];
 const coinFor = (a: SolAmount, extra: bigint, idx: bigint): SolCoin => ({ nonce: det(`n${extra}`, 32), color: a.color, value: a.amount + extra > MAX128 ? MAX128 : a.amount + extra, mt_index: idx });
 
@@ -313,6 +313,9 @@ function parsesAsTransaction(b: Uint8Array): boolean {
     ['claim digits of another value', base, { ...good, claim: asc('1.000001 tUSDC', 49) }, undefined, /digits do not match/],
     ['claim with 19 decimals', base, { ...good, claim: asc('0.0000000000001000000 tUSDC', 49) }, undefined, /more than 18 decimals/],
     ['claim symbol of 9 characters', base, { ...good, claim: asc('1.000000 ABCDEFGHI', 49) }, undefined, /symbol longer than 8/],
+    ['claim symbol starting with a digit (a number-like word: "1 000")', base, { ...good, claim: asc('1 000000', 49) }, undefined, /does not start with a letter|digits do not match/],
+    ['claim symbol starting with a digit after the real number', base, { ...good, claim: asc('1.000000 000', 49) }, undefined, /does not start with a letter/],
+    ['claim symbol starting with a point', base, { ...good, claim: asc('1.000000 .5', 49) }, undefined, /does not start with a letter/],
     ['claim with a line break', base, { ...good, claim: asc('1.000000 tUS\nDC', 49) }, undefined, /not a site amount label/],
     ['nonce digits of another value', { ...base, nonce: asc('2', 20) }, good, undefined, /digits do not match/],
     ['site label with a leading space', { ...base, site: site(' Example') }, good, undefined, /not a zero-padded label/],
@@ -328,6 +331,7 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   ];
   for (const [name, show, amountShow, hex, re, frame] of bad) refused(G, `${name}: circuit`, 'runtime', re, () => run(show, amountShow, hex, frame));
   refused(G, 'site label with a line break: renderer', 'client', /label/, () => labelBytes('Example\nDevice'));
+  refused(G, 'claim symbol starting with a digit: renderer', 'client', /first a letter/, () => claimText(1n, 0, '000'));
   refused(G, 'site label longer than 32 bytes: renderer', 'client', /at most 32/, () => labelBytes('x'.repeat(33)));
   const ig = devOps.find(([n]) => n.startsWith('issue_grant'))![1] as any;
   refused(G, 'unknown recipient kind: circuit', 'runtime', /unknown recipient kind/, () => deviceCall(devCtx(0), { ...ig, recipientKind: 4n }));
@@ -375,7 +379,11 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   } else {
     const f = JSON.parse(fs.readFileSync(FROZEN, 'utf8'));
     const same = JSON.stringify(f) === JSON.stringify(frozen);
-    ok(G, `corpus equals the frozen file (${frozen.calls.length} calls)`, same, same ? undefined : 'differs: the grammar changed, which needs a new format version');
+    // Q38 (AA 00067): `sol v1` is pre-release until the G3 audit gate. A byte
+    // change before G3 is recorded in SOL-ED25519.md's change log and the
+    // file rewritten (SOL_MESSAGES_WRITE=1); from G3 on, any byte change needs
+    // a new format version on the first line.
+    ok(G, `corpus equals the frozen file (${frozen.calls.length} calls)`, same, same ? undefined : 'differs: the bytes changed (before G3: record it in the change log of SOL-ED25519.md; from G3 on: a new format version)');
   }
 }
 

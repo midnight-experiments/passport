@@ -113,22 +113,22 @@
       "name": "withdraw_unshielded 3",
       "op": "withdraw_unshielded",
       "bytes": 620,
-      "sha256": "4ec84fc0414a9829bb47f02351a8735320337b0d5737496120d497317f8a3ca2",
-      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens\nSite: a                               \nRole: device of this account\nAccount: 4433bc66ae08f6d5476eee19a8c9dfd3e11f50c8ffe92631df8ff5422f2c459f\nSigning key: 485246e6c73d3289378a31c7e47401cdead98b5a7c64a5a48e1b60a4f9f3d45f\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo unshielded address: 939d818e80a241665d9546309f94e55f3c747a2edb639ceaf67cc894b37e0972\nDevice nonce: 1                   "
+      "sha256": "2f92b7c75d64cf8e9187d0ddd12dd8c5f6b9f54a63489262f806f323e5ac11ee",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens\nSite: a                               \nRole: device of this account\nAccount: 4433bc66ae08f6d5476eee19a8c9dfd3e11f50c8ffe92631df8ff5422f2c459f\nSigning key: 485246e6c73d3289378a31c7e47401cdead98b5a7c64a5a48e1b60a4f9f3d45f\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 x?                          \nTo unshielded address: 939d818e80a241665d9546309f94e55f3c747a2edb639ceaf67cc894b37e0972\nDevice nonce: 1                   "
     },
     {
       "name": "withdraw_shielded 3",
       "op": "withdraw_shielded",
       "bytes": 861,
-      "sha256": "dd335792b30abd2bf6747cf19a21cd068688a85bdc2378b26b8b174544f175fa",
-      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens\nSite: Site: Add a device              \nRole: device of this account\nAccount: a8a8b8074a6f43916156b16ed322a98430f3ca2d71f2c071aa8bfce0626b6f60\nSigning key: 1e0c92fd487aae4027971e42724db2c2967775fa0d987582ddee7d4d57550ad6\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo shielded key: b266db9649984b4dd680ab7dd39fb64f2ce4ec3f154bfb588bc44eacb84e39a0\nSpent coin value: 26                                     \nSpent coin nonce: 917d2955d0e251727fd075b38168f3769650a87a01703f73e3849332417306fe\nSpent coin index: 3000                \nChange back to this account: 21                                     \nDevice nonce: 17                  "
+      "sha256": "6a09bf7d4e2d20abd14f7bb4101ce6e05a982afa8b033a37b219bd479346a890",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens\nSite: Site: Add a device              \nRole: device of this account\nAccount: a8a8b8074a6f43916156b16ed322a98430f3ca2d71f2c071aa8bfce0626b6f60\nSigning key: 1e0c92fd487aae4027971e42724db2c2967775fa0d987582ddee7d4d57550ad6\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 x?                          \nTo shielded key: b266db9649984b4dd680ab7dd39fb64f2ce4ec3f154bfb588bc44eacb84e39a0\nSpent coin value: 26                                     \nSpent coin nonce: 917d2955d0e251727fd075b38168f3769650a87a01703f73e3849332417306fe\nSpent coin index: 3000                \nChange back to this account: 21                                     \nDevice nonce: 17                  "
     },
     {
       "name": "withdraw_shielded_to_contract 3",
       "op": "withdraw_shielded_to_contract",
       "bytes": 871,
-      "sha256": "e15f4dbf516cdcc6137367bd10b5eb7d449286917f65e7f2e673cbbfc7af5ac3",
-      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract\nSite: Consequence: none               \nRole: device of this account\nAccount: 788a4a82dfdb02a84d6fbf59655be3293fdd798937639691d99c296c7856f025\nSigning key: 6b4e7621b69f1b9e9a0579f021f78c34006ff840a27f7026e1b698a9d3eac1a1\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo contract: b8dc11337a1a3e19cc371b51a6ecc09665eb12ced69bb7ea46c8d60a50a68a6b\nSpent coin value: 5                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nDevice nonce: 18446744073709551615"
+      "sha256": "856a8813adf81eef3fc5654d3bf55eb5d5f36b6876034fff8142e30ea4e75de5",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract\nSite: Consequence: none               \nRole: device of this account\nAccount: 788a4a82dfdb02a84d6fbf59655be3293fdd798937639691d99c296c7856f025\nSigning key: 6b4e7621b69f1b9e9a0579f021f78c34006ff840a27f7026e1b698a9d3eac1a1\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 x?                          \nTo contract: b8dc11337a1a3e19cc371b51a6ecc09665eb12ced69bb7ea46c8d60a50a68a6b\nSpent coin value: 5                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nDevice nonce: 18446744073709551615"
     },
     {
       "name": "add_device midnight:account:device:evm:v2",
@@ -379,22 +379,22 @@
       "name": "withdraw_unshielded_with_grant 3",
       "op": "withdraw_unshielded_with_grant",
       "bytes": 746,
-      "sha256": "3d9b3e7b4254f7e43548a7e78adfb40d20bb8f37bbfa4e8ff4bcb05c51095848",
-      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens under a grant\nSite: Consequence: none               \nRole: grantee of a scoped grant\nAccount: 19a32960cbb327471fab9d2d1592a99d6164248209d223a803a26c933c46b5cc\nSigning key: dd9d6e0266d0a3f9adf3748ba973419b373d33434f649276549a1963164e7e49\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo unshielded address: b99e8ba4f8116ab6ecb574202dbadd9d5dd3d51182dc160f36ddf4fe4c351c33\nGrant label: Example dApp                    \nGrant slot: 0  \nGrant issued at nonce: 0                   \nGrant use nonce: 1                   "
+      "sha256": "9e91e33c36f5138b6fe34e369ee4131322e8709a4753b7cfb68d81ad73cfb3bb",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens under a grant\nSite: Consequence: none               \nRole: grantee of a scoped grant\nAccount: 19a32960cbb327471fab9d2d1592a99d6164248209d223a803a26c933c46b5cc\nSigning key: dd9d6e0266d0a3f9adf3748ba973419b373d33434f649276549a1963164e7e49\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 x?                          \nTo unshielded address: b99e8ba4f8116ab6ecb574202dbadd9d5dd3d51182dc160f36ddf4fe4c351c33\nGrant label: Example dApp                    \nGrant slot: 0  \nGrant issued at nonce: 0                   \nGrant use nonce: 1                   "
     },
     {
       "name": "withdraw_shielded_with_grant 3",
       "op": "withdraw_shielded_with_grant",
       "bytes": 1586,
-      "sha256": "102508ae7a96b75924f346a07d2389b31665de4a005d52e1561d7c4e2192701a",
-      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens under a grant\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: grantee of a scoped grant\nAccount: caca68d28f94797a4e22118af27f5158e3f4e75f46a031a09fe64beb44ac057a\nSigning key: 148bc7fa770e6e057657d90f45b92553689e211e96863a401ec8fb455f3091b1\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo shielded key: 73e2fb101feb194a8d159e9b926288e5170a20aebb73b81da4af64eff09e0632\nChange entry 1 of 6: 220a3380f2b1878a2535c3993c44dc6dd6e88fd103adff43faf98d2fd225dbdb\nChange entry 2 of 6: 64163dc38d49f4d505375f966d6bbb9d658e186d34a22dff3c32ce435e42be6d\nChange entry 3 of 6: 07bdc3995fe5af00c288af21dc9cfb19a65eef5ffefb62b88cbb0602cfb0315c\nChange entry 4 of 6: e7e386a1a70dd75865436f5f1a591916e685e919c802ad3ee42e123d35be245e\nChange entry 5 of 6: 37865c20a3ae64ce348933680379b0a2b4c9ce63283ab656ce532a8cd2ea48f3\nChange entry 6 of 6: 212bb1010e7030dc43b45efcdb0d630844f6fb2193685feb66da5d6ef52c6df4\nChange entry key: f88fb2e0a370e737e5c4e0c36ea8badcde2e8ec947ba1325f417e07f229bb21a\nSpent coin value: 14                                     \nSpent coin nonce: 9d109e0c6a5ccedf2cd060f1437027e97d406cc9efb840b4a672deae19bade79\nSpent coin index: 3                   \nChange back to this account: 9                                      \nGrant label: z                               \nGrant slot: 3  \nGrant issued at nonce: 5                   \nGrant use nonce: 17                  "
+      "sha256": "91c97d844bc45e5f148a3c969d8d51143918975439a8cbc94cfa5fa8ac0919d9",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens under a grant\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: grantee of a scoped grant\nAccount: caca68d28f94797a4e22118af27f5158e3f4e75f46a031a09fe64beb44ac057a\nSigning key: 148bc7fa770e6e057657d90f45b92553689e211e96863a401ec8fb455f3091b1\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 x?                          \nTo shielded key: 73e2fb101feb194a8d159e9b926288e5170a20aebb73b81da4af64eff09e0632\nChange entry 1 of 6: 220a3380f2b1878a2535c3993c44dc6dd6e88fd103adff43faf98d2fd225dbdb\nChange entry 2 of 6: 64163dc38d49f4d505375f966d6bbb9d658e186d34a22dff3c32ce435e42be6d\nChange entry 3 of 6: 07bdc3995fe5af00c288af21dc9cfb19a65eef5ffefb62b88cbb0602cfb0315c\nChange entry 4 of 6: e7e386a1a70dd75865436f5f1a591916e685e919c802ad3ee42e123d35be245e\nChange entry 5 of 6: 37865c20a3ae64ce348933680379b0a2b4c9ce63283ab656ce532a8cd2ea48f3\nChange entry 6 of 6: 212bb1010e7030dc43b45efcdb0d630844f6fb2193685feb66da5d6ef52c6df4\nChange entry key: f88fb2e0a370e737e5c4e0c36ea8badcde2e8ec947ba1325f417e07f229bb21a\nSpent coin value: 14                                     \nSpent coin nonce: 9d109e0c6a5ccedf2cd060f1437027e97d406cc9efb840b4a672deae19bade79\nSpent coin index: 3                   \nChange back to this account: 9                                      \nGrant label: z                               \nGrant slot: 3  \nGrant issued at nonce: 5                   \nGrant use nonce: 17                  "
     },
     {
       "name": "withdraw_shielded_to_contract_with_grant 3",
       "op": "withdraw_shielded_to_contract_with_grant",
       "bytes": 1596,
-      "sha256": "b71d7dd63e0ef7610b36f116f14cd640b1a0e559e3d06bdc894d63e9bd37cda6",
-      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract under a grant\nSite: Account 00 nonce 1              \nRole: grantee of a scoped grant\nAccount: 183c9ae2002fa1db46d329a6e80ee082ef207649ce338cf524eda7e44d52bbd3\nSigning key: e964e91cb42e10c4f7e0ecd1a344d4fa24306de8ae45fb20bcd0f482f732cbff\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo contract: 1a6ce3996f186fbeab46371aa04cf7e7fd4e2dcdee57eac8434e2a022002698a\nChange entry 1 of 6: c8acd2a6649cc5cd9fd65593019f4a1a5dd29ec97a9d9ccd688c3369960b129e\nChange entry 2 of 6: b78d0c9784d5659a2e3d6b68e45838c0f8bf0e95aa656fb6066e9fa856d6a20a\nChange entry 3 of 6: ab9fbc9678b05cf998663c9fb1a1a5faa744bd205ad754fb6e6b97020ead0543\nChange entry 4 of 6: db563fbee4be7c293a55def4cc2b1f08158edc511134a4d0a0a2b02d3f0872c7\nChange entry 5 of 6: 503fc80d5e98ff2f673dc6b036db48f419c0f8fd93e31020f8bfe8686f826a8a\nChange entry 6 of 6: dd58ac9e7685342826ecdd5d1181fffa773d50a824b6d2fdb272f37cdc0d0e35\nChange entry key: a8ced05e38a19aabe7e8d62009ef748db792edf8be4e27d7cb6e8919d7278cc9\nSpent coin value: 5                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nGrant label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nGrant slot: 255\nGrant issued at nonce: 18446744073709551615\nGrant use nonce: 18446744073709551615"
+      "sha256": "1c664423e3fec24aa97767765f1d07e048f2a4c796881c94e3bbd975a1d07689",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract under a grant\nSite: Account 00 nonce 1              \nRole: grantee of a scoped grant\nAccount: 183c9ae2002fa1db46d329a6e80ee082ef207649ce338cf524eda7e44d52bbd3\nSigning key: e964e91cb42e10c4f7e0ecd1a344d4fa24306de8ae45fb20bcd0f482f732cbff\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 x?                          \nTo contract: 1a6ce3996f186fbeab46371aa04cf7e7fd4e2dcdee57eac8434e2a022002698a\nChange entry 1 of 6: c8acd2a6649cc5cd9fd65593019f4a1a5dd29ec97a9d9ccd688c3369960b129e\nChange entry 2 of 6: b78d0c9784d5659a2e3d6b68e45838c0f8bf0e95aa656fb6066e9fa856d6a20a\nChange entry 3 of 6: ab9fbc9678b05cf998663c9fb1a1a5faa744bd205ad754fb6e6b97020ead0543\nChange entry 4 of 6: db563fbee4be7c293a55def4cc2b1f08158edc511134a4d0a0a2b02d3f0872c7\nChange entry 5 of 6: 503fc80d5e98ff2f673dc6b036db48f419c0f8fd93e31020f8bfe8686f826a8a\nChange entry 6 of 6: dd58ac9e7685342826ecdd5d1181fffa773d50a824b6d2fdb272f37cdc0d0e35\nChange entry key: a8ced05e38a19aabe7e8d62009ef748db792edf8be4e27d7cb6e8919d7278cc9\nSpent coin value: 5                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nGrant label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nGrant slot: 255\nGrant issued at nonce: 18446744073709551615\nGrant use nonce: 18446744073709551615"
     }
   ],
   "negatives": [
@@ -427,6 +427,21 @@
       "name": "claim symbol of 9 characters: circuit",
       "layer": "runtime",
       "refusal": "failed assert: display: symbol longer than 8"
+    },
+    {
+      "name": "claim symbol starting with a digit (a number-like word: \"1 000\"): circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: the symbol does not start with a letter"
+    },
+    {
+      "name": "claim symbol starting with a digit after the real number: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: the symbol does not start with a letter"
+    },
+    {
+      "name": "claim symbol starting with a point: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: the symbol does not start with a letter"
     },
     {
       "name": "claim with a line break: circuit",
@@ -492,6 +507,11 @@
       "name": "site label with a line break: renderer",
       "layer": "client",
       "refusal": "sol message: a label is visible words separated by single spaces"
+    },
+    {
+      "name": "claim symbol starting with a digit: renderer",
+      "layer": "client",
+      "refusal": "sol message: a symbol is 1 to 8 visible characters, the first a letter"
     },
     {
       "name": "site label longer than 32 bytes: renderer",
