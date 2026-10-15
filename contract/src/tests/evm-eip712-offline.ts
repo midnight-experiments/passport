@@ -39,6 +39,8 @@ import * as path from 'node:path';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { pureCircuits } from '../wallet/contract.js';
+import { pureCircuits as baseProbe } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
+import { RECIPIENT_KIND_LABELS, K256_ENVELOPE_LABELS, recipientKindLabel, k256EnvelopeLabel } from '../wallet/labels.js';
 import { padTag, evmAddressOf, evmChecksumAddress } from '../wallet/descriptors.js';
 import { blindMessageBytes } from '../wallet/blind.js';
 import {
@@ -399,6 +401,51 @@ const CLASS: Record<string, string> = {
   ok('no-blob review');
 }
 console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (contract == client == viem-frozen), ${tally['type strings'].pass} type strings == viem; ${tally['codec negatives'].refused} negatives refused by every named layer; descriptor derivations == the width-class circuits (${tally['descriptor derivations'].pass}); no-blob: only the four labelled values`);
+
+// ── Q35 / Q42: the enumerated-member labels ─────────────────────────────────
+// The arm selects keccak256 of each label among circuit constants (Q42). The
+// texts are the base's: for every value, the base circuit's own selection
+// (WalletArmRendering `recipient_kind_text` / `k256_envelope_text`, through
+// the base probe contract), trimmed, equals the client's label
+// (src/wallet/labels.ts) and the text the codec signs; and the contract's
+// digest equals the codec's for EVERY value, not only those the frozen
+// vectors happen to use. A drift of any of the three copies fails here.
+{
+  const strip = (v: any) => { const { typedData, encodeType, domainSeparator, structHash, digest, ...input } = v; return JSON.parse(JSON.stringify(input)) as any; };
+  const baseText = (v: bigint[]) => Buffer.from(v.map(Number)).toString('latin1').trimEnd();
+  const shown = (m: any, key: string): string[] => Object.entries(m ?? {}).flatMap(([k, x]) => (k === key ? [String(x)] : x && typeof x === 'object' ? shown(x, key) : []));
+  const agree = (name: string, input: any) => {
+    const td = typedDataOf(input);
+    const acct = Buffer.from(input.frame.account, 'hex');
+    assert.equal(toHex(typedDataDigest(td)), toHex(pc.evm_eip712_digest(acct, contractStructHash(pc, input))), `${name}: contract digest == codec digest`);
+    return td;
+  };
+  for (let k = 0; k < RECIPIENT_KIND_LABELS.length; k++) {
+    const text = baseText(baseProbe.recipient_kind_text(BigInt(k)) as bigint[]);
+    assert.equal(text, RECIPIENT_KIND_LABELS[k], `recipient kind ${k}: the base circuit's text == labels.ts`);
+    assert.equal(recipientKindLabel(k), text);
+    for (const v of FROZEN.vectors.filter((x: any) => x.typedData.primaryType === 'IssueGrant')) {
+      const input = strip(v);
+      input.args.scope.recipientKind = String(k);
+      const td = agree(`${v.name} recipientKind ${k}`, input);
+      assert.equal((td.message as any).recipientKind, text, `${v.name}: the codec signs the base's text for recipient kind ${k}`);
+      ok('labels');
+    }
+  }
+  for (let e = 0; e < K256_ENVELOPE_LABELS.length; e++) {
+    const text = baseText(baseProbe.k256_envelope_text(BigInt(e)) as bigint[]);
+    assert.equal(text, K256_ENVELOPE_LABELS[e], `envelope ${e}: the base circuit's text == labels.ts`);
+    assert.equal(k256EnvelopeLabel(e), text);
+    for (const v of FROZEN.vectors.filter((x: any) => x.args?.descriptor?.scheme === 'k256' || x.args?.grantee?.scheme === 'k256')) {
+      const input = strip(v);
+      (input.args.descriptor ?? input.args.grantee).envelope = String(e);
+      const td = agree(`${v.name} envelope ${e}`, input);
+      assert.deepEqual(shown(td.message, 'envelope'), [text], `${v.name}: the codec signs the base's text for envelope ${e}`);
+      ok('labels');
+    }
+  }
+  console.log(`  ✓ labels: the base circuits' texts == labels.ts == the signed text for every recipient kind (4) and k256 envelope (2); contract digest == codec digest for every value on every IssueGrant and k256-descriptor vector (${tally.labels.pass} checks)`);
+}
 
 // ── G2E-2: the seam's call sites (a static check of the arm's source) ─────
 //
