@@ -45,28 +45,28 @@ export const DESCRIPTOR_TAGS: Readonly<Record<DescriptorRecipe, Readonly<Record<
     jubjub: 'midnight:account:device:v1',
     k256: 'midnight:account:device:k1:v2',
     p256: 'midnight:account:device:r1:v2',
-    evm_eip712: 'midnight:account:device:evm:v2',
+    evm_eip712: 'midnight:account:device:evm:v1',
     sol_ed25519: 'midnight:account:device:sol:v1',
   },
   boot: {
     jubjub: 'midnight:account:boot:v1',
     k256: 'midnight:account:boot:k1:v2',
     p256: 'midnight:account:boot:r1:v2',
-    evm_eip712: 'midnight:account:boot:evm:v2',
+    evm_eip712: 'midnight:account:boot:evm:v1',
     sol_ed25519: 'midnight:account:boot:sol:v1',
   },
   'grant-id': {
     jubjub: 'midnight:account:grant:id:v1',
     k256: 'midnight:account:grant:id:k1:v1',
     p256: 'midnight:account:grant:id:r1:v1',
-    evm_eip712: 'midnight:account:grant:id:evm:v2',
+    evm_eip712: 'midnight:account:grant:id:evm:v1',
     sol_ed25519: 'midnight:account:grant:id:sol:v1',
   },
 };
 
 /** The blind's tag per readable scheme. */
 export const BLIND_TAGS: Readonly<Record<'evm_eip712' | 'sol_ed25519', string>> = {
-  evm_eip712: 'midnight:account:blind:evm:v2',
+  evm_eip712: 'midnight:account:blind:evm:v1',
   sol_ed25519: 'midnight:account:blind:sol:v1',
 };
 

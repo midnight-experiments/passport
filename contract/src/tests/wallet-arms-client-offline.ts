@@ -94,7 +94,7 @@ assert.ok(eq(padTag(BLIND_TAGS.sol_ed25519), probe.blind_tag_sol_ed25519()));
 assert.ok(eq(padTag(GRANT_ORIGIN_TAG), probe.grant_origin_tag()));
 refused('tags', () => tagOf(padTag('midnight:account:device:ed:v1')), /unregistered tag/, 'an unregistered tag');
 refused('tags', () => tagOf(new Uint8Array(32).fill(0x20).map((c, i) => 'midnight:account:device:v1'.charCodeAt(i) || c)), /unregistered tag/, 'a space-padded tag');
-refused('tags', () => padTag('midnight:account:grant:id:evm:v22'), /exceeds 32 bytes/, 'a 33-byte tag');
+refused('tags', () => padTag('midnight:account:grant:id:evm:v10'), /exceeds 32 bytes/, 'a 33-byte tag');
 console.log(`  ✓ tags: client tables equal the module's constants (${tally.tags.pass}); ${tally.tags.refused} malformed tags refused`);
 
 // ── Parsers ──────────────────────────────────────────────────────────────────
@@ -328,8 +328,8 @@ const ctrBeforeDisplayOrder = ctr; // restored below: later sections keep S1's s
       }
     }
   }
-  // The frozen evm_eip712 approvals (lane E, src/tests/vectors/evm-eip712-v2.json
-  // at 5b6af98): the descriptor arguments the circuit takes (key = x_le,
+  // The frozen evm_eip712 approvals (lane E's frozen vector file at
+  // 5b6af98): the descriptor arguments the circuit takes (key = x_le,
   // key2 = y_le, as stored) and the nested member values the wallet shows.
   // The keys are random bytes, not points: only the rendering is compared.
   const FROZEN: { name: string; recipe: DescriptorRecipe; d: Descriptor; shown: Record<string, string> }[] = [];
@@ -524,7 +524,7 @@ const personalSign = (sk: Uint8Array, msg: Uint8Array, hedged = false): Uint8Arr
   const blind = deriveBlind('evm_eip712', c);
   assert.ok(eq(blind, probe.derive_blind(padTag(BLIND_TAGS.evm_eip712), c)), 'derive_blind (circuit) == deriveBlind (client)');
   assert.ok(eq(blind, derive(probe, blindCall('evm_eip712', c))));
-  assert.ok(eq(blind, sha(padTag('midnight:account:blind:evm:v2'), c)));
+  assert.ok(eq(blind, sha(padTag('midnight:account:blind:evm:v1'), c)));
   console.log(`  ✓ EVM canonical form: low-S r || s; high-S twin and 64/65-byte forms agree; hedged signer refused by the sign-twice check; ${tally['evm canonical'].refused} malformed signatures refused`);
 }
 {

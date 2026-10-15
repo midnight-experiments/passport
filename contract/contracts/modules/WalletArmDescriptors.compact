@@ -80,8 +80,7 @@ module WalletArmDescriptors {
   //
   // Each fits its 32-byte pad (pad() refuses a longer literal at compile
   // time, and the offline suite checks every width). The legacy tags are
-  // upstream's; the `evm` tags start at v2 because the experimental fork
-  // used v1 with other preimages; `sol` is new and starts at v1.
+  // upstream's; the new arms' tags (`evm`, `sol`) are at v1.
 
   export pure circuit device_tag_jubjub(): Bytes<32> {
     return pad(32, "midnight:account:device:v1");
@@ -93,7 +92,7 @@ module WalletArmDescriptors {
     return pad(32, "midnight:account:device:r1:v2");
   }
   export pure circuit device_tag_evm_eip712(): Bytes<32> {
-    return pad(32, "midnight:account:device:evm:v2");
+    return pad(32, "midnight:account:device:evm:v1");
   }
   export pure circuit device_tag_sol_ed25519(): Bytes<32> {
     return pad(32, "midnight:account:device:sol:v1");
@@ -109,7 +108,7 @@ module WalletArmDescriptors {
     return pad(32, "midnight:account:boot:r1:v2");
   }
   export pure circuit boot_tag_evm_eip712(): Bytes<32> {
-    return pad(32, "midnight:account:boot:evm:v2");
+    return pad(32, "midnight:account:boot:evm:v1");
   }
   export pure circuit boot_tag_sol_ed25519(): Bytes<32> {
     return pad(32, "midnight:account:boot:sol:v1");
@@ -125,14 +124,14 @@ module WalletArmDescriptors {
     return pad(32, "midnight:account:grant:id:r1:v1");
   }
   export pure circuit grant_id_tag_evm_eip712(): Bytes<32> {
-    return pad(32, "midnight:account:grant:id:evm:v2");
+    return pad(32, "midnight:account:grant:id:evm:v1");
   }
   export pure circuit grant_id_tag_sol_ed25519(): Bytes<32> {
     return pad(32, "midnight:account:grant:id:sol:v1");
   }
 
   export pure circuit blind_tag_evm_eip712(): Bytes<32> {
-    return pad(32, "midnight:account:blind:evm:v2");
+    return pad(32, "midnight:account:blind:evm:v1");
   }
   export pure circuit blind_tag_sol_ed25519(): Bytes<32> {
     return pad(32, "midnight:account:blind:sol:v1");

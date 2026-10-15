@@ -137,7 +137,7 @@ console.log('  ✓ reverse_32: byte order reversed');
 
 console.log('\n── labels');
 const GOOD = [
-  'midnight:account:device:v1', 'midnight:account:grant:id:evm:v2', 'Midnight Night Market',
+  'midnight:account:device:v1', 'midnight:account:grant:id:evm:v1', 'Midnight Night Market',
   'wallet.example', 'a', 'A b C d', 'x'.repeat(32), '~!#$%&()*+,-./:;<=>?@[]^_`{|}', 'MN Bank - grants v1',
 ];
 const shown = new Map<string, string>();

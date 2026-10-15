@@ -140,19 +140,19 @@ const TAGS: [string, () => Uint8Array, string][] = [
   ['device', probe.device_tag_jubjub, 'midnight:account:device:v1'],
   ['device', probe.device_tag_k256, 'midnight:account:device:k1:v2'],
   ['device', probe.device_tag_p256, 'midnight:account:device:r1:v2'],
-  ['device', probe.device_tag_evm_eip712, 'midnight:account:device:evm:v2'],
+  ['device', probe.device_tag_evm_eip712, 'midnight:account:device:evm:v1'],
   ['device', probe.device_tag_sol_ed25519, 'midnight:account:device:sol:v1'],
   ['boot', probe.boot_tag_jubjub, 'midnight:account:boot:v1'],
   ['boot', probe.boot_tag_k256, 'midnight:account:boot:k1:v2'],
   ['boot', probe.boot_tag_p256, 'midnight:account:boot:r1:v2'],
-  ['boot', probe.boot_tag_evm_eip712, 'midnight:account:boot:evm:v2'],
+  ['boot', probe.boot_tag_evm_eip712, 'midnight:account:boot:evm:v1'],
   ['boot', probe.boot_tag_sol_ed25519, 'midnight:account:boot:sol:v1'],
   ['grant-id', probe.grant_id_tag_jubjub, 'midnight:account:grant:id:v1'],
   ['grant-id', probe.grant_id_tag_k256, 'midnight:account:grant:id:k1:v1'],
   ['grant-id', probe.grant_id_tag_p256, 'midnight:account:grant:id:r1:v1'],
-  ['grant-id', probe.grant_id_tag_evm_eip712, 'midnight:account:grant:id:evm:v2'],
+  ['grant-id', probe.grant_id_tag_evm_eip712, 'midnight:account:grant:id:evm:v1'],
   ['grant-id', probe.grant_id_tag_sol_ed25519, 'midnight:account:grant:id:sol:v1'],
-  ['blind', probe.blind_tag_evm_eip712, 'midnight:account:blind:evm:v2'],
+  ['blind', probe.blind_tag_evm_eip712, 'midnight:account:blind:evm:v1'],
   ['blind', probe.blind_tag_sol_ed25519, 'midnight:account:blind:sol:v1'],
   ['grant-origin', probe.grant_origin_tag, 'midnight:account:grant:origin:v1'],
 ];
@@ -167,10 +167,10 @@ for (const [kind, f, text] of TAGS) {
   seen.add(text);
   report.tags.push({ kind, text, bytes: text.length, pad: 32, margin: 32 - text.length });
 }
-// The new arms' tags: markers `evm` (from v2) and `sol` (from v1).
+// The new arms' tags: markers `evm` and `sol`, both at v1.
 for (const text of seen) {
-  if (/:evm:/.test(text)) assert.ok(text.endsWith(':v2'), `${text}: evm tags start at v2`);
-  if (/:sol:/.test(text)) assert.ok(text.endsWith(':v1'), `${text}: sol tags start at v1`);
+  if (/:evm:/.test(text)) assert.ok(text.endsWith(':v1'), `${text}: evm tags are at v1`);
+  if (/:sol:/.test(text)) assert.ok(text.endsWith(':v1'), `${text}: sol tags are at v1`);
 }
 console.log(`  ✓ ${TAGS.length} tags fit 32 bytes, distinct, ASCII (widest: ${Math.max(...[...seen].map((s) => s.length))} bytes)`);
 
@@ -302,8 +302,8 @@ recipe(report.fresh, 'device entry evm_eip712 (w52)', (i) => {
   const a = addr(), address = rnd(20), blind = rnd(32), ep = pick(U32_EDGES, i, 4), ct = pick(U64_EDGES, i, 8);
   return {
     values: [
-      probe.derive_descriptor_entry_w52(T('midnight:account:device:evm:v2'), contractAddress(a), address, blind, ep, ct),
-      sha(T('midnight:account:device:evm:v2'), a, address, blind, le(ep, 4), le(ct, 8)),
+      probe.derive_descriptor_entry_w52(T('midnight:account:device:evm:v1'), contractAddress(a), address, blind, ep, ct),
+      sha(T('midnight:account:device:evm:v1'), a, address, blind, le(ep, 4), le(ct, 8)),
     ],
     vector: { self: hex(a), address: hex(address), blind: hex(blind), epoch: ep, counter: ct },
   };
@@ -322,8 +322,8 @@ recipe(report.fresh, 'boot evm_eip712 (w52)', () => {
   const s = rnd(32), address = rnd(20), blind = rnd(32);
   return {
     values: [
-      probe.derive_descriptor_boot_w52(T('midnight:account:boot:evm:v2'), s, address, blind),
-      sha(T('midnight:account:boot:evm:v2'), s, address, blind),
+      probe.derive_descriptor_boot_w52(T('midnight:account:boot:evm:v1'), s, address, blind),
+      sha(T('midnight:account:boot:evm:v1'), s, address, blind),
     ],
     vector: { salt: hex(s), address: hex(address), blind: hex(blind) },
   };
@@ -342,8 +342,8 @@ recipe(report.fresh, 'grant id evm_eip712 (w52)', (i) => {
   const a = addr(), address = rnd(20), blind = rnd(32), oh = rnd(32), slot = pick(SLOT_EDGES, i, 1);
   return {
     values: [
-      probe.derive_descriptor_grant_id_w52(T('midnight:account:grant:id:evm:v2'), contractAddress(a), address, blind, oh, slot),
-      sha(T('midnight:account:grant:id:evm:v2'), a, address, blind, oh, le(slot, 1)),
+      probe.derive_descriptor_grant_id_w52(T('midnight:account:grant:id:evm:v1'), contractAddress(a), address, blind, oh, slot),
+      sha(T('midnight:account:grant:id:evm:v1'), a, address, blind, oh, le(slot, 1)),
     ],
     vector: { self: hex(a), address: hex(address), blind: hex(blind), origin_hash: hex(oh), slot },
   };
@@ -368,7 +368,7 @@ recipe(report.fresh, 'grant origin_hash of a 32-byte label', (i) => {
 });
 recipe(report.fresh, 'blind evm_eip712', () => {
   const sig = rnd(64);
-  return { values: [probe.derive_blind(T('midnight:account:blind:evm:v2'), sig), sha(T('midnight:account:blind:evm:v2'), sig)], vector: { signature: hex(sig) } };
+  return { values: [probe.derive_blind(T('midnight:account:blind:evm:v1'), sig), sha(T('midnight:account:blind:evm:v1'), sig)], vector: { signature: hex(sig) } };
 });
 recipe(report.fresh, 'blind sol_ed25519', () => {
   const sig = rnd(64);
@@ -380,18 +380,18 @@ recipe(report.fresh, 'blind sol_ed25519', () => {
 console.log('\n── refusals (tags are not free-form)');
 const A = contractAddress(rnd(32)), B32 = rnd(32), B20 = rnd(20), B21 = rnd(21);
 const derivations: Record<string, { allowed: string[]; run: (tag: Uint8Array) => unknown }> = {
-  entry_w52: { allowed: ['midnight:account:device:evm:v2'], run: (t) => probe.derive_descriptor_entry_w52(t, A, B20, B32, 0n, 0n) },
+  entry_w52: { allowed: ['midnight:account:device:evm:v1'], run: (t) => probe.derive_descriptor_entry_w52(t, A, B20, B32, 0n, 0n) },
   entry_w64: { allowed: ['midnight:account:device:v1', 'midnight:account:device:sol:v1'], run: (t) => probe.derive_descriptor_entry_w64(t, A, B32, B32, 0n, 0n) },
   entry_w65: { allowed: ['midnight:account:device:k1:v2'], run: (t) => probe.derive_descriptor_entry_w65(t, A, B32, B32, 0n, 0n, 0n) },
   entry_w117: { allowed: ['midnight:account:device:r1:v2'], run: (t) => probe.derive_descriptor_entry_w117(t, A, B32, B32, B32, B21, 0n, 0n) },
-  boot_w52: { allowed: ['midnight:account:boot:evm:v2'], run: (t) => probe.derive_descriptor_boot_w52(t, B32, B20, B32) },
+  boot_w52: { allowed: ['midnight:account:boot:evm:v1'], run: (t) => probe.derive_descriptor_boot_w52(t, B32, B20, B32) },
   boot_w64: { allowed: ['midnight:account:boot:v1', 'midnight:account:boot:sol:v1'], run: (t) => probe.derive_descriptor_boot_w64(t, B32, B32, B32) },
   boot_w65: { allowed: ['midnight:account:boot:k1:v2'], run: (t) => probe.derive_descriptor_boot_w65(t, B32, B32, B32, 0n) },
   boot_w117: { allowed: ['midnight:account:boot:r1:v2'], run: (t) => probe.derive_descriptor_boot_w117(t, B32, B32, B32, B32, B21) },
-  grant_id_w52: { allowed: ['midnight:account:grant:id:evm:v2'], run: (t) => probe.derive_descriptor_grant_id_w52(t, A, B20, B32, B32, 0n) },
+  grant_id_w52: { allowed: ['midnight:account:grant:id:evm:v1'], run: (t) => probe.derive_descriptor_grant_id_w52(t, A, B20, B32, B32, 0n) },
   grant_id_w64: { allowed: ['midnight:account:grant:id:v1', 'midnight:account:grant:id:r1:v1', 'midnight:account:grant:id:sol:v1'], run: (t) => probe.derive_descriptor_grant_id_w64(t, A, B32, B32, B32, 0n) },
   grant_id_w65: { allowed: ['midnight:account:grant:id:k1:v1'], run: (t) => probe.derive_descriptor_grant_id_w65(t, A, B32, B32, 0n, B32, 0n) },
-  blind: { allowed: ['midnight:account:blind:evm:v2', 'midnight:account:blind:sol:v1'], run: (t) => probe.derive_blind(t, rnd(64)) },
+  blind: { allowed: ['midnight:account:blind:evm:v1', 'midnight:account:blind:sol:v1'], run: (t) => probe.derive_blind(t, rnd(64)) },
 };
 // Candidate tags: every registered tag, plus unknown, unregistered-version,
 // space-padded, upper-case and all-zero tags.
@@ -399,7 +399,7 @@ const spacePadded = (s: string) => { const o = new Uint8Array(32).fill(0x20); o.
 const candidates: [string, Uint8Array][] = [
   ...[...seen].map((s) => [s, pad(32, s)] as [string, Uint8Array]),
   ['(unknown) midnight:account:device:ed:v1', pad(32, 'midnight:account:device:ed:v1')],
-  ['(unknown) midnight:account:device:evm:v1', pad(32, 'midnight:account:device:evm:v1')],
+  ['(unknown, the retired evm:v2) midnight:account:device:evm:v2', pad(32, 'midnight:account:device:evm:v2')],
   ['(unknown) midnight:account:device:sol:v2', pad(32, 'midnight:account:device:sol:v2')],
   ['(unknown) MIDNIGHT:ACCOUNT:DEVICE:V1', pad(32, 'MIDNIGHT:ACCOUNT:DEVICE:V1')],
   ['(non-canonical padding) midnight:account:device:v1 + spaces', spacePadded('midnight:account:device:v1')],

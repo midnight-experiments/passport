@@ -72,18 +72,18 @@ const digits = (s: string) => [...Buffer.from(s.padEnd(39, ' '), 'ascii')].map(B
 
 // [circuit, honest arguments, bad arguments, the assert the bad call fails]
 const CASES: [string, unknown[], unknown[], string][] = [
-  ['probe_entry_w52', [pad('midnight:account:device:evm:v2'), A, B20, B32, 0n, 0n], [pad('midnight:account:device:sol:v1'), A, B20, B32, 0n, 0n], 'descriptor: not a 52-byte device tag'],
+  ['probe_entry_w52', [pad('midnight:account:device:evm:v1'), A, B20, B32, 0n, 0n], [pad('midnight:account:device:sol:v1'), A, B20, B32, 0n, 0n], 'descriptor: not a 52-byte device tag'],
   ['probe_entry_w64', [pad('midnight:account:device:sol:v1'), A, B32, B32, 0n, 0n], [pad('midnight:account:device:k1:v2'), A, B32, B32, 0n, 0n], 'descriptor: not a 64-byte device tag'],
   ['probe_entry_w65', [pad('midnight:account:device:k1:v2'), A, B32, B32, 1n, 0n, 0n], [pad('midnight:account:device:ed:v1'), A, B32, B32, 1n, 0n, 0n], 'descriptor: not a 65-byte device tag'],
   ['probe_entry_w117', [pad('midnight:account:device:r1:v2'), A, B32, B32, B32, B21, 0n, 0n], [pad('midnight:account:grant:id:r1:v1'), A, B32, B32, B32, B21, 0n, 0n], 'descriptor: not a 117-byte device tag'],
-  ['probe_boot_w52', [pad('midnight:account:boot:evm:v2'), B32, B20, B32], [pad('midnight:account:device:evm:v2'), B32, B20, B32], 'descriptor: not a 52-byte boot tag'],
+  ['probe_boot_w52', [pad('midnight:account:boot:evm:v1'), B32, B20, B32], [pad('midnight:account:device:evm:v1'), B32, B20, B32], 'descriptor: not a 52-byte boot tag'],
   ['probe_boot_w64', [pad('midnight:account:boot:sol:v1'), B32, B32, B32], [pad('midnight:account:boot:k1:v2'), B32, B32, B32], 'descriptor: not a 64-byte boot tag'],
   ['probe_boot_w65', [pad('midnight:account:boot:k1:v2'), B32, B32, B32, 0n], [fill(32, 0x5a), B32, B32, B32, 0n], 'descriptor: not a 65-byte boot tag'],
   ['probe_boot_w117', [pad('midnight:account:boot:r1:v2'), B32, B32, B32, B32, B21], [pad('midnight:account:boot:v1'), B32, B32, B32, B32, B21], 'descriptor: not a 117-byte boot tag'],
-  ['probe_grant_id_w52', [pad('midnight:account:grant:id:evm:v2'), A, B20, B32, B32, 0n], [pad('midnight:account:grant:id:sol:v1'), A, B20, B32, B32, 0n], 'descriptor: not a 52-byte grant-id tag'],
+  ['probe_grant_id_w52', [pad('midnight:account:grant:id:evm:v1'), A, B20, B32, B32, 0n], [pad('midnight:account:grant:id:sol:v1'), A, B20, B32, B32, 0n], 'descriptor: not a 52-byte grant-id tag'],
   ['probe_grant_id_w64', [pad('midnight:account:grant:id:r1:v1'), A, B32, B32, B32, 3n], [pad('midnight:account:grant:id:k1:v1'), A, B32, B32, B32, 3n], 'descriptor: not a 64-byte grant-id tag'],
   ['probe_grant_id_w65', [pad('midnight:account:grant:id:k1:v1'), A, B32, B32, 0n, B32, 3n], [pad('midnight:account:device:k1:v2'), A, B32, B32, 0n, B32, 3n], 'descriptor: not a 65-byte grant-id tag'],
-  ['probe_blind', [pad('midnight:account:blind:sol:v1'), fill(64, 0x44)], [spaced('midnight:account:blind:evm:v2'), fill(64, 0x44)], 'descriptor: not a blind tag'],
+  ['probe_blind', [pad('midnight:account:blind:sol:v1'), fill(64, 0x44)], [spaced('midnight:account:blind:evm:v1'), fill(64, 0x44)], 'descriptor: not a blind tag'],
   ['probe_uint128_text', [1000000n, digits('1000000')], [1000000n, digits('1000001')], 'display: digits do not match the value'],
   ['probe_uint128_text', [7n, digits('7')], [7n, digits('07')], 'display: leading zero'],
   ['probe_label_text_32', [pad('Midnight Night Market')], [pad('Midnight Night Market ')], 'display: not a zero-padded label'],
