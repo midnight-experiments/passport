@@ -272,6 +272,30 @@ export circuit withdraw_shielded_with_evm_eip712(
   return do_withdraw_shielded(recipient, amount, coin);
 }
 
+// The contract-recipient spend: the direct-transfer mode of MIP-0012 §6.6
+// (the output MUST be claimed by the receiving contract's deposit path in the
+// same client-composed transaction; both addresses are public by design).
+// The approval shows the recipient contract's 32-byte address; the coin, the
+// colour assert and the change are as above. Returns [sent, change].
+
+// WithdrawShieldedToContract(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,
+//                            bytes32 recipientContract,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)
+export circuit withdraw_shielded_to_contract_with_evm_eip712(
+  recipient: ContractAddress,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  auth:      EvmEip712Auth,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  assert(amount <= coin.value, "amount above the spent coin's value");
+  const [t, tail] = evm_eip712_parts_withdraw_shielded_to_contract(color, amount, recipient.bytes,
+    coin.nonce, coin.value, coin.mt_index);
+  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>,
+                                      Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(auth, t, tail);
+  return do_withdraw_shielded_to_contract(recipient, amount, coin);
+}
+
 // ── Custody: the inbox ──────────────────────────────────────────────────────
 //
 // The change-coin backfill (MIP-0012 §6.2), gated as on every arm. The
