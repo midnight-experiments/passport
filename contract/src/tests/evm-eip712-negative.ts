@@ -160,6 +160,17 @@ export const loadPatched = (bypass: readonly string[], overrides = ''): Promise<
 // a copy of midnight-js-contracts whose only change is that call (its bare
 // imports resolved to the same module instances); the node still checks the
 // claim on the composed transaction, and proving does not depend on it.
+//
+// The copy also exports two of the module's internal functions, under
+// `aa00067*` names: `createUnprovenLedgerCallTx` (one intent from a list of
+// executed calls, as a cross-contract call tree is assembled) and
+// `createEncryptionPublicKeyResolver`. A direct transfer lands only when the
+// recipient's claim is in the SAME intent as the sender's output: the ledger
+// requires the contract-addressed outputs and the claimed receives to be
+// equal by (segment, commitment, recipient), error 218 otherwise, and a claim
+// grafted as another intent sits in another segment (and brings a second
+// copy of the output). Built together, the two calls give one output (the
+// builder keys outputs by commitment), claimed by the recipient's transcript.
 const MJS_CHECK = '    assertReceivesMatchClaims(calls, segmentedOffers);\n';
 let relaxed: any;
 export async function relaxedContractsModule(): Promise<any> {
@@ -171,6 +182,10 @@ export async function relaxedContractsModule(): Promise<any> {
   body = body.replace(/from '(@[^']+)'/g, (_m, spec) => `from ${JSON.stringify(import.meta.resolve(spec))}`)
              .replace(/from 'effect'/g, `from ${JSON.stringify(import.meta.resolve('effect'))}`)
              .replace(/^\/\/# sourceMappingURL=.*$/m, '');
+  for (const name of ['createUnprovenLedgerCallTx', 'createEncryptionPublicKeyResolver']) {
+    if (!new RegExp(`^const ${name} = `, 'm').test(body)) throw new Error(`evm-eip712-negative: midnight-js internal ${name} not found`);
+  }
+  body += '\nexport { createUnprovenLedgerCallTx as aa00067CreateUnprovenLedgerCallTx, createEncryptionPublicKeyResolver as aa00067CreateEncryptionPublicKeyResolver };\n';
   const dir = await mkdtemp(path.join(tmpdir(), 'evm-eip712-mjs-'));
   const file = path.join(dir, 'index.mjs');
   await writeFile(file, body);
