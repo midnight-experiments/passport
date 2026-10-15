@@ -114,8 +114,11 @@ export const NON_CANONICAL_COORDINATE_OVERRIDES = `
 export const FORGE_ADDRESS_OVERRIDES = `
   keccak256(descriptor, value) {
     const f = globalThis[Symbol.for('aa00067.e.forgeAddress')];
-    if (f && Array.isArray(value) && value.length === 2 && value.every((b) => b instanceof Uint8Array && b.length === 32)) {
-      const r = f(value[0], value[1]);
+    // the stdlib hashes [Vector<32, Uint<8>>, Vector<32, Uint<8>>] (arrays of
+    // bigints); accept Bytes<32> (Uint8Array) as well
+    const bytes = (b) => (b instanceof Uint8Array || Array.isArray(b)) && b.length === 32 ? Uint8Array.from(b, (v) => Number(v)) : null;
+    if (f && Array.isArray(value) && value.length === 2 && bytes(value[0]) && bytes(value[1])) {
+      const r = f(bytes(value[0]), bytes(value[1]));
       if (r) return r;
     }
     return __compactRuntimeOriginal.keccak256(descriptor, value);
