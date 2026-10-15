@@ -885,8 +885,28 @@ if (SECTIONS.includes('recovery')) {
     ['the identity as the new recovery key', { ...S2, recoveryPk: JUBJUB_IDENTITY }, IDENT, [IDENT, SMALL]],
   ];
   for (const [name, x, expect, bypass] of chip) await negative('recovery', `publish under a valid signature: ${name}`, A1, PUBLISH, await pubArgs(A1, x), expect, bypass);
-  await runtimeOnly('recovery', 'publish under a valid signature: a small-order recovery key', A1, PUBLISH, await pubArgs(A1, { ...S2, recoveryPk: JUBJUB_ORDER_TWO }), 'unreachable',
-    'the runtime cannot construct a JubJub point outside the prime-order subgroup (it traps before the circuit body), and the proving toolchain constrains every assigned point into the subgroup (upstream recovery-sim, require_live_jubjub_point)');
+  {
+    // A torsion point traps in the runtime's JubJub code (a WASM
+    // `unreachable`) before the circuit body runs, which the base helper's
+    // classifier does not count as a recognised refusal (attempt 1 ERROR,
+    // e/s9/prover/…-attempt1-ERROR-trap.json); the trap is checked here
+    // directly: the circuit's execution fails with RuntimeError
+    // "unreachable" and nothing else ran. Prover level: unreachable from a
+    // JavaScript-built call.
+    const name = 'publish under a valid signature: a small-order recovery key (runtime trap)';
+    const r: Result = { section: 'recovery', circuit: PUBLISH, case: name, kind: 'negative', expect: 'unreachable' };
+    const t0 = Date.now(); const startedAt = new Date().toISOString();
+    let chain: string[] = [];
+    let refused = false;
+    try { await execute(Original.Contract, A1, PUBLISH, await pubArgs(A1, { ...S2, recoveryPk: JUBJUB_ORDER_TWO })); }
+    catch (e: any) { refused = true; for (let x = e; x; x = x.cause) chain.push(`${x.name}: ${x.message}`); }
+    const trap = refused && chain.some((m) => /^RuntimeError: unreachable$/.test(m)) && chain.some((m) => m.includes(`Error executing circuit '${PUBLISH}'`));
+    r.simulator = { name, expectedLayer: 'runtime', layer: trap ? 'runtime' : 'unknown', verdict: trap ? 'PASS' : refused ? 'ERROR' : 'FAIL',
+      reason: trap ? 'refused by the runtime: a WASM trap in JubJub point handling before the circuit body (RuntimeError "unreachable")' : refused ? 'refused, but not by the trap' : 'not refused',
+      detail: chain.join(' | '), proofServer: [], startedAt, ms: Date.now() - t0 } as any;
+    (r as any).proverLevel = 'not reachable from a JavaScript-built call: the runtime cannot construct a JubJub point outside the prime-order subgroup, and the proving toolchain constrains every assigned point into the subgroup (upstream recovery-sim; require_live_jubjub_point is defence in depth)';
+    tally(r.simulator); results.push(r); line(r);
+  }
 
   // the seam on the new circuits
   const stranger = await EvmEip712Device.enrol(other, 'undeployed', 0);
