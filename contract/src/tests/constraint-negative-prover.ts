@@ -4,7 +4,9 @@
 // the base probe contract's impure probe_* circuits:
 //
 //   positive   the honest call, built with the patched module (the same path
-//              as the negatives), is proved by the proof server;
+//              as the negatives), is proved by the proof server; it is
+//              recorded as that module's positive control, and the prover
+//              negative requires it (audit G1(E) F-A8);
 //   runtime    the bad call, built with the original module, is refused by the
 //              generated JavaScript (the usual first line of defence);
 //   prover     the bad call, built with that one assert bypassed in the
@@ -92,9 +94,9 @@ const results: { circuit: string; assert: string; positive: PositiveResult; runt
 let failures = 0, errors = 0;
 for (const [circuit, good, badArgs, message] of CASES) {
   const bypassed = await loadBypassedContract(PROBE_JS, [message]);
-  const positive = await expectSuccess({ name: `${circuit}: honest call proved`, proofLog: log, attempt: () => prove(bypassed.Contract, circuit, good) });
+  const positive = await expectSuccess({ name: `${circuit}: honest call proved`, proofLog: log, through: bypassed, attempt: () => prove(bypassed.Contract, circuit, good) });
   const runtime = await expectRefusal({ name: `${circuit}: ${message} (generated JavaScript)`, expectedLayer: 'runtime', proofLog: log, attempt: () => prove(Original.Contract, circuit, badArgs) });
-  const prover = await expectRefusal({ name: `${circuit}: ${message} (JavaScript check bypassed)`, expectedLayer: 'prover', bypassed, proofLog: log, attempt: () => prove(bypassed.Contract, circuit, badArgs) });
+  const prover = await expectRefusal({ name: `${circuit}: ${message} (JavaScript check bypassed)`, expectedLayer: 'prover', bypassed, proofLog: log, requirePositiveControl: true, attempt: () => prove(bypassed.Contract, circuit, badArgs) });
   for (const r of [positive, runtime, prover]) { if (r.verdict === 'FAIL') failures++; if (r.verdict === 'ERROR') errors++; }
   results.push({ circuit, assert: message, positive: { ...positive, result: undefined }, runtime, prover });
   console.log(`  ${positive.verdict === 'PASS' && runtime.verdict === 'PASS' && prover.verdict === 'PASS' ? '✓' : '✗'} ${circuit} — "${message}": positive ${positive.verdict}, runtime ${runtime.verdict}, prover ${prover.verdict} (${prover.layer}${prover.proofServer.at(-1)?.status ? `, ${prover.proofServer.at(-1)!.endpoint} ${prover.proofServer.at(-1)!.status}` : ''})`);
