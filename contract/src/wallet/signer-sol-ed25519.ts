@@ -25,6 +25,11 @@ import { curve25519FromProjective, isValidCurve25519Point, type Curve25519Point 
 import { pureCircuits } from './contract.js';
 import { base58Encode, parseSolanaPublicKey, solDescriptor, type SolDescriptor } from './descriptors.js';
 import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind } from './blind.js';
+import {
+  assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
+  solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solTargetArg,
+  solTargetShow, type SolDeviceOperation, type SolGranteeOperation,
+} from './sol-ed25519-message.js';
 import type { GrantOpening } from './signer.js';
 
 export type { Curve25519Point };
@@ -275,9 +280,8 @@ export function parseSolRosterEntry(json: SolRosterEntryJson): SolBlindRecord & 
 
 // ── Authorisations (registered in signer.ts; the seam's arguments) ─────────
 //
-// The gated circuits' trailing arguments are `(show, auth)`: the display
-// inputs the message was rendered from, then the authorising material. The
-// shapes are fixed with the seam (S5) and the message grammar (S4).
+// A gated circuit's trailing arguments are the display inputs of its message
+// (in the circuit's order), then the authorising material as one struct.
 
 /** The authorising material a `sol_ed25519` device-gated circuit consumes. */
 export interface SolEd25519Authorisation {
@@ -287,10 +291,11 @@ export interface SolEd25519Authorisation {
   /** The device's current use counter: the rolling-entry position (AUTH-9). */
   use_counter: bigint;
   sig: SolSignatureArg;
-  /** The display inputs of the operation's message (decimal digits, labels). */
-  show: unknown;
+  /** The message's display inputs, in the circuit's argument order. */
+  showArgs: unknown[];
   /** Exactly what the wallet showed and signed. Not a circuit argument. */
   message: Uint8Array;
+  text: string;
 }
 
 /** The authorising material a `sol_ed25519` grantee twin consumes. */
@@ -300,18 +305,126 @@ export interface SolEd25519GrantAuthorisation {
   blind: Uint8Array;
   label: Uint8Array;
   sig: SolSignatureArg;
-  show: unknown;
+  showArgs: unknown[];
   message: Uint8Array;
+  text: string;
 }
 
 /** The trailing circuit arguments of a device-gated call. */
 export function solEd25519AuthArgs(a: SolEd25519Authorisation): unknown[] {
-  return [a.show, { pk: a.pk, blind: a.blind, use_counter: a.use_counter, sig: a.sig }];
+  return [...a.showArgs, { pk: a.pk, blind: a.blind, use_counter: a.use_counter, sig: a.sig }];
 }
 
-/** The trailing circuit arguments of a grantee twin (the openings first, as
- *  every arm's grant twins take them). */
+/** The trailing circuit arguments of a grantee twin: the grant openings
+ *  (slot, scope salt, recipient kind and pin, max coin value, spent so far),
+ *  the display inputs, then the authorising material. */
 export function solEd25519GrantAuthArgs(o: GrantOpening, a: SolEd25519GrantAuthorisation): unknown[] {
   return [o.slot, o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev,
-    a.show, { pk: a.pk, blind: a.blind, label: a.label, sig: a.sig }];
+    ...a.showArgs, { pk: a.pk, blind: a.blind, label: a.label, sig: a.sig }];
+}
+
+// ── Messages through the contract's own circuits ──────────────────────────
+
+export interface SolCallContext { contractAddress: Uint8Array; authNonce: bigint }
+export interface SolGrantCallContext { contractAddress: Uint8Array; label: string; slot: bigint; issuedAt: bigint; grantNonce: bigint }
+
+/** The message of a device-role operation as the CONTRACT renders it, and the
+ *  display inputs (circuit order) it was rendered from. */
+export function solDeviceMessageCircuit(key: Uint8Array, ctx: SolCallContext, site: string, o: SolDeviceOperation): { bytes: Uint8Array; showArgs: unknown[] } {
+  const pc: any = pureCircuits;
+  const self = { bytes: ctx.contractAddress };
+  const show = solShow(site, ctx.authNonce);
+  const hex = nibblesOf(...solDeviceHexValues({ account: ctx.contractAddress, key }, o));
+  const base = [self, key, ctx.authNonce];
+  let shows: unknown[];
+  let bytes: Uint8Array;
+  switch (o.op) {
+    case 'rotate_enc_key': shows = [show]; bytes = pc.sol_message_rotate_enc_key(...base, o.newKey, show, hex); break;
+    case 'append_inbox': shows = [show]; bytes = pc.sol_message_append_inbox(...base, o.entry, show, hex); break;
+    case 'withdraw_unshielded': {
+      const a = solAmountShow(o.amount); shows = [a, show];
+      bytes = pc.sol_message_withdraw_unshielded(...base, o.amount.color, o.amount.amount, { bytes: o.recipient }, a, show, hex); break;
+    }
+    case 'withdraw_shielded': case 'withdraw_shielded_to_contract': {
+      const a = solAmountShow(o.amount), c = solCoinShow(o.coin, o.amount.amount); shows = [a, c, show];
+      const f = o.op === 'withdraw_shielded' ? pc.sol_message_withdraw_shielded : pc.sol_message_withdraw_shielded_to_contract;
+      bytes = f(...base, { bytes: o.recipient }, o.amount.color, o.amount.amount, o.coin, a, c, show, hex); break;
+    }
+    case 'add_device': {
+      const ts = solTargetShow(o.target); shows = [ts, show];
+      bytes = pc.sol_message_add_device(...base, solTargetArg(o.target), ts, show, hex); break;
+    }
+    case 'remove_device': {
+      if (o.literal) {
+        const ts = solTargetShow({ tag: '' }); shows = [ts, show];
+        bytes = pc.sol_message_remove_device(...base, true, solTargetArg({ tag: '' }), 0n, 0n, (o as Extract<SolDeviceOperation, { literal: true }>).entry, ts, show, hex);
+      } else {
+        const d = o as Extract<SolDeviceOperation, { literal: false }>;
+        const ts = solTargetShow(d.target, d.counter, d.epoch); shows = [ts, show];
+        bytes = pc.sol_message_remove_device(...base, false, solTargetArg(d.target), d.counter, d.epoch, new Uint8Array(32), ts, show, hex);
+      }
+      break;
+    }
+    case 'issue_grant': {
+      const gs = solGranteeShow(o.grantee), ss = solScopeShow(o); shows = [gs, ss, show];
+      bytes = pc.sol_message_issue_grant(...base, solGranteeArg(o.grantee), o.opWithdrawUnshielded, o.opWithdrawShielded,
+        o.opWithdrawShieldedToContract, o.read, o.color, o.recipientKind, o.recipient, o.maxCoinValue, o.perCallCap, o.cap, o.expiresAt,
+        o.rpIdHash, o.readPk, o.windowLen, o.windowCap, { is_some: o.caller !== null, value: { bytes: o.caller ?? new Uint8Array(32) } }, gs, ss, show, hex);
+      break;
+    }
+    case 'revoke_grant': {
+      const gs = solGranteeShow(o.grantee); shows = [gs, show];
+      bytes = pc.sol_message_revoke_grant(...base, solGranteeArg(o.grantee), gs, show, hex); break;
+    }
+    case 'revoke_all_grants': shows = [show]; bytes = pc.sol_message_revoke_all_grants(...base, show, hex); break;
+    case 'publish_recovery_session': {
+      const d = digitsOf(o.phiLen, 3); shows = [d, show];
+      bytes = pc.sol_message_publish_recovery_session(...base, o.recoveryPk, o.sessionNonce, ...o.phi, o.phiLen, o.wrap, d, show, hex); break;
+    }
+    case 'recover_cancel': shows = [show]; bytes = pc.sol_message_recover_cancel(...base, show, hex); break;
+  }
+  return { bytes, showArgs: [...shows, hex] };
+}
+
+/** The message of a grantee-role operation as the CONTRACT renders it. */
+export function solGranteeMessageCircuit(key: Uint8Array, ctx: SolGrantCallContext, site: string, o: SolGranteeOperation): { bytes: Uint8Array; showArgs: unknown[] } {
+  const pc: any = pureCircuits;
+  const show = solShow(site, ctx.grantNonce), g = solGrantShow(ctx.label, ctx.slot, ctx.issuedAt);
+  const hex = nibblesOf(...solGranteeHexValues({ account: ctx.contractAddress, key }, o));
+  const base = [{ bytes: ctx.contractAddress }, key, labelBytes(ctx.label), ctx.slot, ctx.issuedAt, ctx.grantNonce];
+  const a = solAmountShow(o.amount);
+  if (o.op === 'withdraw_unshielded_with_grant') {
+    return { showArgs: [a, show, g, hex], bytes: pc.sol_message_withdraw_unshielded_with_grant(...base, o.amount.color, o.amount.amount, { bytes: o.recipient }, a, show, g, hex) };
+  }
+  const c = solCoinShow(o.coin, o.amount.amount);
+  const f = o.op === 'withdraw_shielded_with_grant' ? pc.sol_message_withdraw_shielded_with_grant : pc.sol_message_withdraw_shielded_to_contract_with_grant;
+  return { showArgs: [a, c, show, g, hex], bytes: f(...base, { bytes: o.recipient }, o.amount.color, o.amount.amount, o.changeEntry, o.encPk, o.coin, a, c, show, g, hex) };
+}
+
+const asText = (b: Uint8Array) => String.fromCharCode(...b);
+
+/**
+ * Authorises one device-gated call: renders the message with the contract's
+ * circuit AND the independent renderer and refuses any difference; refuses a
+ * message that could be read as a Solana transaction or off-chain message;
+ * asks the wallet; runs the pre-check (strict R, s < L, R != O, the signature
+ * verifies over exactly these bytes).
+ */
+export async function authoriseSolDevice(device: SolEd25519Device, ctx: SolCallContext, site: string, o: SolDeviceOperation, useCounter: bigint): Promise<SolEd25519Authorisation> {
+  const { bytes, showArgs } = solDeviceMessageCircuit(device.key, ctx, site, o);
+  const text = solDeviceMessageText({ site, account: ctx.contractAddress, key: device.key, nonce: ctx.authNonce }, o);
+  if (asText(bytes) !== text) throw new Error('sol_ed25519: the contract and the renderer disagree on the message; refused');
+  assertSafeSolMessage(bytes);
+  const { sig } = await device.signBytes(bytes);
+  return { arm: 'sol_ed25519', pk: device.pk, blind: device.blind, use_counter: useCounter, sig, showArgs, message: bytes, text };
+}
+
+/** The same for a grantee twin. */
+export async function authoriseSolGrantee(device: SolEd25519Device, ctx: SolGrantCallContext, site: string, o: SolGranteeOperation): Promise<SolEd25519GrantAuthorisation> {
+  const { bytes, showArgs } = solGranteeMessageCircuit(device.key, ctx, site, o);
+  const text = solGranteeMessageText({ site, account: ctx.contractAddress, key: device.key, label: ctx.label, slot: ctx.slot, issuedAt: ctx.issuedAt, nonce: ctx.grantNonce }, o);
+  if (asText(bytes) !== text) throw new Error('sol_ed25519: the contract and the renderer disagree on the message; refused');
+  assertSafeSolMessage(bytes);
+  const { sig } = await device.signBytes(bytes);
+  return { arm: 'sol_ed25519', pk: device.pk, blind: device.blind, label: labelBytes(ctx.label), sig, showArgs, message: bytes, text };
 }
