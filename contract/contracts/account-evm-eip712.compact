@@ -217,6 +217,25 @@ export circuit rotate_enc_key_with_evm_eip712(new_key: Bytes<32>, auth: EvmEip71
   do_rotate_enc_key(new_key);
 }
 
+// ── Custody: unshielded (MIP-0012 §5) ───────────────────────────────────────
+//
+// Deposits are upstream's permissionless deposit_unshielded. The approval
+// shows the token colour, the amount in base units, and the recipient's
+// 32-byte user address; the mirror check and the send are the shared chip's.
+
+// WithdrawUnshielded(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,bytes32 recipient)
+export circuit withdraw_unshielded_with_evm_eip712(
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  recipient: UserAddress,
+  auth:      EvmEip712Auth,
+): [] {
+  const address = evm_eip712_address(auth.pk);
+  require_authorised_with_evm_eip712(auth, address,
+    evm_eip712_struct_withdraw_unshielded(kernel.self().bytes, address, auth_nonce, color, amount, recipient.bytes));
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
 // ── Custody: the inbox ──────────────────────────────────────────────────────
 //
 // The change-coin backfill (MIP-0012 §6.2), gated as on every arm. The
