@@ -5,14 +5,17 @@
 //   tags         the client's tag tables equal the module's constants
 //   parsers      EIP-55 addresses, base58 Solana keys with RFC 8032 strict
 //                decoding (identity, small-order, mixed-order, non-canonical
-//                and off-curve points refused), SEC1 secp256k1 and P-256 keys,
+//                and off-curve points refused) and their Curve25519Point
+//                (the ed25519 class argument; the same rules from
+//                coordinates), SEC1 secp256k1 and P-256 keys,
 //                passkey policies (parent-domain RP accepted, a mismatched RP
 //                refused), and JubJub points
 //   encoders     every scheme and recipe, run through the probe, equals
 //                upstream's own circuit (legacy schemes) or SHA-256 of the
-//                specified preimage (new schemes); the decoder inverts the
+//                specified preimage (new schemes; a Solana key passed as its
+//                point, hashed as its RFC 8032 bytes); the decoder inverts the
 //                encoder and refuses unknown tags, other recipes' tags, wrong
-//                widths, and inadmissible keys
+//                widths, a Solana key as bytes, and inadmissible keys
 //   display      the shown lines, including the two labelled values; every
 //                scheme's comparison display equals the bytes the circuit
 //                binds in the byte order of Q29 (secp256k1 and P-256
@@ -43,7 +46,8 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { pureCircuits as probe } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
 import { pureCircuits as upstream } from '../wallet/contract.js';
 import {
-  DESCRIPTOR_SCHEMES, DESCRIPTOR_TAGS, BLIND_TAGS, GRANT_ORIGIN_TAG, PAYLOAD_WIDTH,
+  DESCRIPTOR_SCHEMES, DESCRIPTOR_TAGS, BLIND_TAGS, GRANT_ORIGIN_TAG, PAYLOAD_WIDTH, DESCRIPTOR_CLASS,
+  solanaKeyPoint, solanaKeyFromPoint,
   padTag, tagOf, evmChecksumAddress, parseEvmAddress, evmAddressOf, base58Encode, base58Decode,
   parseSolanaPublicKey, parseK256Descriptor, parseP256Descriptor, parseJubjubPoint, evmDescriptor,
   solDescriptor, checkDescriptor, payloadParts, entryCall, bootCall, grantIdCall, derive, decodeDescriptor,
@@ -143,6 +147,25 @@ for (const t of ED25519_TORSION_SUBGROUP) refused('solana key', () => parseSolan
   for (let i = 0; !off; i++) { const c = rnd(32); c[31] &= 0x7f; try { ed25519.Point.fromBytes(c, false); } catch { off = c; } }
   refused('solana key', () => parseSolanaPublicKey(off!), /canonical Ed25519 point/, 'a y with no curve point');
   refused('solana key', () => parseSolanaPublicKey(unhex(RFC8032_PK).subarray(0, 31)), /32 bytes/, '31 bytes');
+  // The point the ed25519 class takes: base58 text -> point, point -> the same 32 bytes.
+  for (let i = 0; i < 8; i++) {
+    const pk = ed25519.getPublicKey(rnd(32));
+    const pt = solanaKeyPoint(base58Encode(pk));
+    const ref = ed25519.Point.fromBytes(pk).toAffine();
+    assert.deepEqual(pt, { x: ref.x, y: ref.y });
+    assert.ok(eq(solanaKeyFromPoint(pt), pk));
+    assert.ok(eq(probe.encode_public_key_with_sol_ed25519(pt), pk), 'the circuit encodes the point to the wallet\'s bytes');
+    ok('solana key point');
+  }
+  refused('solana key point', () => solanaKeyPoint(base58Encode(unhex(ED25519_TORSION_SUBGROUP[0]))), /small order|canonical/, 'the identity in base58');
+  refused('solana key point', () => solanaKeyPoint('1' + base58Encode(ed25519.getPublicKey(rnd(32)))), /bytes, not 32|base58/, 'non-canonical base58');
+  refused('solana key point', () => solanaKeyFromPoint({ x: 0n, y: 1n }), /small order/, 'the identity point');
+  refused('solana key point', () => solanaKeyFromPoint(T.toAffine()), /small order/, 'a small-order point');
+  refused('solana key point', () => solanaKeyFromPoint(P.add(T).toAffine()), /mixed order/, 'a mixed-order point');
+  const B = ed25519.Point.BASE.toAffine();
+  refused('solana key point', () => solanaKeyFromPoint({ x: B.x, y: B.y + 1n }), /not an Ed25519 point/, 'a point off the curve');
+  refused('solana key point', () => solanaKeyFromPoint({ x: B.x, y: B.y + ed25519.Point.Fp.ORDER }), /not below p/, 'y + p');
+  refused('solana key point', () => solanaKeyFromPoint(unhex(RFC8032_PK) as any), /bigint coordinates/, 'the 32 bytes instead of a point');
 }
 
 // secp256k1 keys.
@@ -190,7 +213,7 @@ for (const t of ED25519_TORSION_SUBGROUP) refused('solana key', () => parseSolan
   refused('jubjub key', () => parseJubjubPoint({ x: G.x + q, y: G.y }), /not canonical/, 'x not below q');
   refused('jubjub key', () => parseJubjubPoint({ x: G.x, y: G.y + 1n }), /not a JubJub point/, 'a point off the curve');
 }
-console.log(`  ✓ parsers: ${['evm address', 'base58', 'solana key', 'k256 key', 'p256 key', 'jubjub key'].map((k) => `${k} ${tally[k].pass}/${tally[k].refused}`).join(', ')} (accepted/refused)`);
+console.log(`  ✓ parsers: ${['evm address', 'base58', 'solana key', 'solana key point', 'k256 key', 'p256 key', 'jubjub key'].map((k) => `${k} ${tally[k].pass}/${tally[k].refused}`).join(', ')} (accepted/refused)`);
 
 // ── Encoders and the decoder ─────────────────────────────────────────────────
 
@@ -204,15 +227,27 @@ const sampleDescriptors = (): Descriptor[] => [
   solDescriptor(base58Encode(ed25519.getPublicKey(rnd(32))), rnd(32)),
 ];
 const TAG = (r: DescriptorRecipe, d: Descriptor) => padTag(DESCRIPTOR_TAGS[r][d.scheme]);
-const payloadBytes = (d: Descriptor, r: DescriptorRecipe): Uint8Array =>
-  new Uint8Array(payloadParts(d, r).flatMap((p) => (p instanceof Uint8Array ? [...p] : [...le(p as bigint, 1)])));
+// The preimage's payload bytes, built independently of the circuits: a
+// Solana key hashes as its 32-byte RFC 8032 encoding (from noble's strict
+// parser), although the circuit takes its point.
+const payloadBytes = (d: Descriptor, r: DescriptorRecipe): Uint8Array => d.scheme === 'sol_ed25519'
+  ? new Uint8Array([...d.key, ...d.blind])
+  : new Uint8Array(payloadParts(d, r).flatMap((p) => (p instanceof Uint8Array ? [...p] : [...le(p as bigint, 1)])));
 for (let round = 0; round < 4; round++) {
   for (const d of sampleDescriptors()) {
     const epoch = BigInt(round * 7), counter = BigInt(round * 11), salt = rnd(32), oh = rnd(32), slot = BigInt(round * 60);
     const entry = derive(probe, entryCall(d, account, epoch, counter));
     const boot = derive(probe, bootCall(d, salt));
     const grant = derive(probe, grantIdCall(d, account, oh, slot));
-    for (const r of ['device', 'boot', 'grant-id'] as DescriptorRecipe[]) assert.equal(payloadBytes(d, r).length, PAYLOAD_WIDTH[r][d.scheme], `${d.scheme} ${r} width`);
+    for (const r of ['device', 'boot', 'grant-id'] as DescriptorRecipe[]) {
+      assert.equal(payloadBytes(d, r).length, PAYLOAD_WIDTH[r][d.scheme], `${d.scheme} ${r} width`);
+      assert.equal(DESCRIPTOR_CLASS[r][d.scheme], d.scheme === 'sol_ed25519' ? 'ed25519' : `w${PAYLOAD_WIDTH[r][d.scheme]}`, `${d.scheme} ${r} class`);
+    }
+    if (d.scheme === 'sol_ed25519') {
+      // The circuits take the point, never the bytes.
+      assert.deepEqual(payloadParts(d, 'device')[0], solanaKeyPoint(d.key));
+      assert.ok(eq(probe.encode_public_key_with_sol_ed25519(payloadParts(d, 'device')[0] as any), d.key));
+    }
     // Independent SHA-256 of the preimage, every scheme.
     assert.ok(eq(entry, sha(TAG('device', d), account, payloadBytes(d, 'device'), le(epoch, 4), le(counter, 8))), `${d.scheme} entry`);
     assert.ok(eq(boot, sha(TAG('boot', d), salt, payloadBytes(d, 'boot'))), `${d.scheme} boot`);
@@ -250,7 +285,10 @@ for (let round = 0; round < 4; round++) {
   refused('decoder', () => decodeDescriptor('device', TAG('boot', sol), payloadParts(sol, 'device')), /boot tag, not a device tag/, 'another recipe\'s tag');
   refused('decoder', () => decodeDescriptor('device', TAG('device', k1), payloadParts(jj, 'device')), /takes 3 payload parts/, 'a k256 tag with a 64-byte payload');
   refused('decoder', () => decodeDescriptor('device', TAG('device', evm), payloadParts(sol, 'device')), /20 bytes/, 'an evm tag with a 32-byte identity');
-  refused('decoder', () => decodeDescriptor('device', TAG('device', sol), [unhex(ED25519_TORSION_SUBGROUP[0]), rnd(32)]), /small order|canonical/, 'a Solana identity key');
+  refused('decoder', () => decodeDescriptor('device', TAG('device', sol), [{ x: 0n, y: 1n }, rnd(32)]), /small order/, 'a Solana identity point');
+  refused('decoder', () => decodeDescriptor('device', TAG('device', sol), [(sol as any).key, rnd(32)]), /bigint coordinates/, 'a Solana key as bytes (the retired form)');
+  refused('decoder', () => decodeDescriptor('grant-id', TAG('grant-id', sol), [ed25519.Point.fromHex(ED25519_TORSION_SUBGROUP[1]).toAffine(), rnd(32)]), /small order/, 'a small-order Solana point');
+  refused('decoder', () => decodeDescriptor('boot', TAG('boot', sol), [ed25519.Point.fromBytes((sol as any).key).add(ed25519.Point.fromHex(ED25519_TORSION_SUBGROUP[1])).toAffine(), rnd(32)]), /mixed order/, 'a mixed-order Solana point');
   refused('decoder', () => decodeDescriptor('device', TAG('device', k1), [...payloadParts(k1, 'device').slice(0, 2), 2n]), /unknown k256 envelope/, 'envelope 2');
   refused('decoder', () => decodeDescriptor('device', TAG('device', evm), [new Uint8Array(20), rnd(32)]), /zero address/, 'the zero address');
   refused('decoder', () => decodeDescriptor('device', TAG('device', jj), [le(0n, 32), le(1n, 32)]), /small order/, 'the JubJub identity');
@@ -318,11 +356,14 @@ const ctrBeforeDisplayOrder = ctr; // restored below: later sections keep S1's s
             assert.equal(shown['Ethereum address'].toLowerCase(), h0x(parts[0] as Uint8Array), `evm address ${r}`);
             assert.equal(shown['Device privacy salt'], h0x(parts[1] as Uint8Array), `evm blind ${r}`);
             break;
-          case 'sol_ed25519':
-            assert.ok(eq(base58Decode(shown['Solana public key'], 32), parts[0] as Uint8Array), `sol key ${r}`);
-            assert.equal(shown['Solana public key (hex)'], hex(parts[0] as Uint8Array), `sol key hex ${r}`);
+          case 'sol_ed25519': {
+            // The circuit takes the point and binds its RFC 8032 encoding.
+            const bound = probe.encode_public_key_with_sol_ed25519(parts[0] as any);
+            assert.ok(eq(base58Decode(shown['Solana public key'], 32), bound), `sol key ${r}`);
+            assert.equal(shown['Solana public key (hex)'], hex(bound), `sol key hex ${r}`);
             assert.equal(shown['Device privacy salt'], h0x(parts[1] as Uint8Array), `sol blind ${r}`);
             break;
+          }
         }
         ok('display order');
       }

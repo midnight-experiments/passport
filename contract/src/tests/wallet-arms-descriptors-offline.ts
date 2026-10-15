@@ -12,11 +12,18 @@
 //      parent of the origin host).
 //   3. New recipes (`evm_eip712`, `sol_ed25519`): device entry, boot
 //      commitment, grant id, the grantee origin label, and the blind equal an
-//      independent SHA-256 of their specified preimages.
-//   4. Refusals: an unknown tag, a known tag of another width or another
+//      independent SHA-256 of their specified preimages. A `sol_ed25519` key
+//      is passed as its Curve25519Point (spec FR-005): the derivations equal
+//      the recipe over the key's RFC 8032 encoding as Node's OpenSSL exports
+//      it, and the shared encoding circuit equals RFC 8032 (its section 7.1
+//      vectors, the base point, and seeded keys of both x parities); each
+//      ed25519 derivation returns the key it hashed, and the signer helper
+//      equals two single derivations.
+//   4. Refusals: an unknown tag, a known tag of another class or another
 //      recipe, and a non-canonically padded tag are each refused by every
-//      derivation; a mismatched passkey RP yields an entry the passkey
-//      cannot use.
+//      derivation; the identity point is refused by the ed25519 class
+//      (A != O), and small-order and mixed-order points by the point type;
+//      a mismatched passkey RP yields an entry the passkey cannot use.
 //   5. Comparator controls: the independent implementation detects a
 //      one-byte change, so agreement is not vacuous.
 //
@@ -25,7 +32,8 @@
 // set; never writes into the repository.
 
 import { strict as assert } from 'node:assert';
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
+import { ed25519, ED25519_TORSION_SUBGROUP } from '@noble/curves/ed25519.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pureCircuits as probe } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
@@ -103,6 +111,32 @@ const policyOf = (i: number) => {
 };
 const addr = () => rnd(32);
 const contractAddress = (b: Uint8Array) => ({ bytes: b });
+
+// Ed25519 keys from Node's OpenSSL (independent of the contract and of
+// noble): the 32-byte RFC 8032 public key of a seed. noble only decodes those
+// bytes into the point the circuits take.
+const PKCS8_ED25519 = Buffer.from('302e020100300506032b657004220420', 'hex');
+const opensslPublicKey = (seed: Uint8Array): Uint8Array => {
+  const spki = createPublicKey(createPrivateKey({ key: Buffer.concat([PKCS8_ED25519, seed]), format: 'der', type: 'pkcs8' }))
+    .export({ format: 'der', type: 'spki' });
+  assert.equal(spki.length, 44);
+  return new Uint8Array(spki.subarray(12));
+};
+const pointOf = (key: Uint8Array) => { const { x, y } = ed25519.Point.fromBytes(key, false).toAffine(); return { x, y }; };
+// The ed25519 class returns [key, value]: the key must be the RFC 8032
+// encoding the recipe hashed; the value is compared.
+const keyed = (key: Uint8Array, r: [Uint8Array, Uint8Array]): Uint8Array => {
+  assert.ok(eq(r[0], key), `the ed25519 class returns the key it hashed (${hex(r[0])} != ${hex(key)})`);
+  return r[1];
+};
+// A seeded key whose x is odd (bit 255 of its encoding set) on odd i, even on
+// even i, so every recipe is checked with both values of the sign bit.
+const solKey = (i: number): { seed: Uint8Array; key: Uint8Array; point: { x: bigint; y: bigint } } => {
+  for (;;) {
+    const seed = rnd(32), key = opensslPublicKey(seed);
+    if (((key[31] >> 7) & 1) === i % 2) return { seed, key, point: pointOf(key) };
+  }
+};
 
 // ── Report ──────────────────────────────────────────────────────────────────
 
@@ -308,14 +342,14 @@ recipe(report.fresh, 'device entry evm_eip712 (w52)', (i) => {
     vector: { self: hex(a), address: hex(address), blind: hex(blind), epoch: ep, counter: ct },
   };
 });
-recipe(report.fresh, 'device entry sol_ed25519 (w64)', (i) => {
-  const a = addr(), key = rnd(32), blind = rnd(32), ep = pick(U32_EDGES, i, 4), ct = pick(U64_EDGES, i, 8);
+recipe(report.fresh, 'device entry sol_ed25519 (ed25519, by point)', (i) => {
+  const a = addr(), { key, point } = solKey(i), blind = rnd(32), ep = pick(U32_EDGES, i, 4), ct = pick(U64_EDGES, i, 8);
   return {
     values: [
-      probe.derive_descriptor_entry_w64(T('midnight:account:device:sol:v1'), contractAddress(a), key, blind, ep, ct),
+      keyed(key, probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), contractAddress(a), point, blind, ep, ct)),
       sha(T('midnight:account:device:sol:v1'), a, key, blind, le(ep, 4), le(ct, 8)),
     ],
-    vector: { self: hex(a), key: hex(key), blind: hex(blind), epoch: ep, counter: ct },
+    vector: { self: hex(a), key: hex(key), x: point.x.toString(16), y: point.y.toString(16), blind: hex(blind), epoch: ep, counter: ct },
   };
 });
 recipe(report.fresh, 'boot evm_eip712 (w52)', () => {
@@ -328,11 +362,11 @@ recipe(report.fresh, 'boot evm_eip712 (w52)', () => {
     vector: { salt: hex(s), address: hex(address), blind: hex(blind) },
   };
 });
-recipe(report.fresh, 'boot sol_ed25519 (w64)', () => {
-  const s = rnd(32), key = rnd(32), blind = rnd(32);
+recipe(report.fresh, 'boot sol_ed25519 (ed25519, by point)', (i) => {
+  const s = rnd(32), { key, point } = solKey(i), blind = rnd(32);
   return {
     values: [
-      probe.derive_descriptor_boot_w64(T('midnight:account:boot:sol:v1'), s, key, blind),
+      keyed(key, probe.derive_descriptor_boot_ed25519(T('midnight:account:boot:sol:v1'), s, point, blind)),
       sha(T('midnight:account:boot:sol:v1'), s, key, blind),
     ],
     vector: { salt: hex(s), key: hex(key), blind: hex(blind) },
@@ -348,16 +382,62 @@ recipe(report.fresh, 'grant id evm_eip712 (w52)', (i) => {
     vector: { self: hex(a), address: hex(address), blind: hex(blind), origin_hash: hex(oh), slot },
   };
 });
-recipe(report.fresh, 'grant id sol_ed25519 (w64)', (i) => {
-  const a = addr(), key = rnd(32), blind = rnd(32), oh = rnd(32), slot = pick(SLOT_EDGES, i, 1);
+recipe(report.fresh, 'grant id sol_ed25519 (ed25519, by point)', (i) => {
+  const a = addr(), { key, point } = solKey(i), blind = rnd(32), oh = rnd(32), slot = pick(SLOT_EDGES, i, 1);
   return {
     values: [
-      probe.derive_descriptor_grant_id_w64(T('midnight:account:grant:id:sol:v1'), contractAddress(a), key, blind, oh, slot),
+      keyed(key, probe.derive_descriptor_grant_id_ed25519(T('midnight:account:grant:id:sol:v1'), contractAddress(a), point, blind, oh, slot)),
       sha(T('midnight:account:grant:id:sol:v1'), a, key, blind, oh, le(slot, 1)),
     ],
     vector: { self: hex(a), key: hex(key), blind: hex(blind), origin_hash: hex(oh), slot },
   };
 });
+// The shared encoding (encode_public_key_with_sol_ed25519) == RFC 8032:
+// Node's OpenSSL public keys of seeded secrets (both x parities), checked
+// against the bytes the circuit computes from the decoded point.
+recipe(report.fresh, 'Ed25519 key encoding == OpenSSL RFC 8032 public key', (i) => {
+  const { seed, key, point } = solKey(i);
+  return { values: [probe.encode_public_key_with_sol_ed25519(point), key], vector: { seed: hex(seed), key: hex(key), xOdd: (key[31] >> 7) & 1 } };
+});
+// The seam helper: one encoding, the same recipe as two single derivations.
+recipe(report.fresh, 'signer entries sol_ed25519 == [key, entry(counter), entry(counter + 1)]', (i) => {
+  const a = addr(), { key, point } = solKey(i), blind = rnd(32), ep = pick(U32_EDGES, i, 4);
+  const ct = i === 0 ? 0n : i === 1 ? 0xfffffffffffffffen : bigLE(rnd(8)) % 0xffffffffffffffffn;
+  const [k, e0, e1] = probe.derive_signer_entries_ed25519(contractAddress(a), point, blind, ep, ct);
+  assert.ok(eq(k, key), 'the signer key is the RFC 8032 encoding');
+  assert.ok(eq(e0, probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), contractAddress(a), point, blind, ep, ct)[1]));
+  assert.ok(eq(e1, probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), contractAddress(a), point, blind, ep, ct + 1n)[1]));
+  return {
+    values: [new Uint8Array([...e0, ...e1]),
+      new Uint8Array([...sha(T('midnight:account:device:sol:v1'), a, key, blind, le(ep, 4), le(ct, 8)), ...sha(T('midnight:account:device:sol:v1'), a, key, blind, le(ep, 4), le(ct + 1n, 8))])],
+    vector: { self: hex(a), key: hex(key), epoch: ep, counter: ct },
+  };
+});
+// RFC 8032 section 7.1 (secret key -> public key) and the base point: OpenSSL
+// reproduces each public key, and the circuit encodes its point to it.
+{
+  const RFC8032: [string, string, string][] = [
+    ['TEST 1', '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60', 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a'],
+    ['TEST 2', '4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb', '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c'],
+    ['TEST 3', 'c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7', 'fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025'],
+    ['TEST 1024', 'f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5', '278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e'],
+    ['TEST SHA(abc)', '833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42', 'ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf'],
+  ];
+  const rfc: unknown[] = [];
+  for (const [name, sk, pk] of RFC8032) {
+    const key = Buffer.from(pk, 'hex');
+    assert.ok(eq(opensslPublicKey(Buffer.from(sk, 'hex')), key), `${name}: OpenSSL reproduces the RFC public key`);
+    assert.ok(eq(probe.encode_public_key_with_sol_ed25519(pointOf(key)), key), `${name}: the circuit encodes the point to the RFC public key`);
+    rfc.push({ name, publicKey: pk, xOdd: (key[31] >> 7) & 1 });
+  }
+  const B = ed25519.Point.BASE.toAffine();
+  const encB = probe.encode_public_key_with_sol_ed25519({ x: B.x, y: B.y });
+  assert.equal(hex(encB), '5866666666666666666666666666666666666666666666666666666666666666', 'the base point B (RFC 8032 section 5.1)');
+  rfc.push({ name: 'base point B', publicKey: hex(encB), xOdd: 0 });
+  report.fresh['RFC 8032 section 7.1 public keys and the base point'] = { vectors: rfc.length, agree: rfc.length, first: rfc };
+  assert.ok(rfc.some((v: any) => v.xOdd === 1) && rfc.some((v: any) => v.xOdd === 0), 'both x parities among the RFC vectors');
+  console.log(`  ✓ RFC 8032 section 7.1 public keys and the base point: ${rfc.length}/${rfc.length} (both x parities)`);
+}
 const LABELS = ['Midnight Night Market', 'wallet.example', 'a', 'x'.repeat(32), 'MN Bank - grants v1'];
 recipe(report.fresh, 'grant origin_hash of a 32-byte label', (i) => {
   const label = i < LABELS.length ? pad(32, LABELS[i]) : rnd(32);
@@ -378,18 +458,21 @@ recipe(report.fresh, 'blind sol_ed25519', () => {
 // ── 4. Refusals ─────────────────────────────────────────────────────────────
 
 console.log('\n── refusals (tags are not free-form)');
-const A = contractAddress(rnd(32)), B32 = rnd(32), B20 = rnd(20), B21 = rnd(21);
+const A = contractAddress(rnd(32)), B32 = rnd(32), B20 = rnd(20), B21 = rnd(21), PT = solKey(0).point;
 const derivations: Record<string, { allowed: string[]; run: (tag: Uint8Array) => unknown }> = {
   entry_w52: { allowed: ['midnight:account:device:evm:v1'], run: (t) => probe.derive_descriptor_entry_w52(t, A, B20, B32, 0n, 0n) },
-  entry_w64: { allowed: ['midnight:account:device:v1', 'midnight:account:device:sol:v1'], run: (t) => probe.derive_descriptor_entry_w64(t, A, B32, B32, 0n, 0n) },
+  entry_w64: { allowed: ['midnight:account:device:v1'], run: (t) => probe.derive_descriptor_entry_w64(t, A, B32, B32, 0n, 0n) },
+  entry_ed25519: { allowed: ['midnight:account:device:sol:v1'], run: (t) => probe.derive_descriptor_entry_ed25519(t, A, PT, B32, 0n, 0n) },
   entry_w65: { allowed: ['midnight:account:device:k1:v2'], run: (t) => probe.derive_descriptor_entry_w65(t, A, B32, B32, 0n, 0n, 0n) },
   entry_w117: { allowed: ['midnight:account:device:r1:v2'], run: (t) => probe.derive_descriptor_entry_w117(t, A, B32, B32, B32, B21, 0n, 0n) },
   boot_w52: { allowed: ['midnight:account:boot:evm:v1'], run: (t) => probe.derive_descriptor_boot_w52(t, B32, B20, B32) },
-  boot_w64: { allowed: ['midnight:account:boot:v1', 'midnight:account:boot:sol:v1'], run: (t) => probe.derive_descriptor_boot_w64(t, B32, B32, B32) },
+  boot_w64: { allowed: ['midnight:account:boot:v1'], run: (t) => probe.derive_descriptor_boot_w64(t, B32, B32, B32) },
+  boot_ed25519: { allowed: ['midnight:account:boot:sol:v1'], run: (t) => probe.derive_descriptor_boot_ed25519(t, B32, PT, B32) },
   boot_w65: { allowed: ['midnight:account:boot:k1:v2'], run: (t) => probe.derive_descriptor_boot_w65(t, B32, B32, B32, 0n) },
   boot_w117: { allowed: ['midnight:account:boot:r1:v2'], run: (t) => probe.derive_descriptor_boot_w117(t, B32, B32, B32, B32, B21) },
   grant_id_w52: { allowed: ['midnight:account:grant:id:evm:v1'], run: (t) => probe.derive_descriptor_grant_id_w52(t, A, B20, B32, B32, 0n) },
-  grant_id_w64: { allowed: ['midnight:account:grant:id:v1', 'midnight:account:grant:id:r1:v1', 'midnight:account:grant:id:sol:v1'], run: (t) => probe.derive_descriptor_grant_id_w64(t, A, B32, B32, B32, 0n) },
+  grant_id_w64: { allowed: ['midnight:account:grant:id:v1', 'midnight:account:grant:id:r1:v1'], run: (t) => probe.derive_descriptor_grant_id_w64(t, A, B32, B32, B32, 0n) },
+  grant_id_ed25519: { allowed: ['midnight:account:grant:id:sol:v1'], run: (t) => probe.derive_descriptor_grant_id_ed25519(t, A, PT, B32, B32, 0n) },
   grant_id_w65: { allowed: ['midnight:account:grant:id:k1:v1'], run: (t) => probe.derive_descriptor_grant_id_w65(t, A, B32, B32, 0n, B32, 0n) },
   blind: { allowed: ['midnight:account:blind:evm:v1', 'midnight:account:blind:sol:v1'], run: (t) => probe.derive_blind(t, rnd(64)) },
 };
@@ -444,16 +527,55 @@ console.log(`  ✓ ${refusalsSeen}/${refusalCases} wrong-tag cases refused at th
   console.log('  ✓ parent-domain RP (example.com for https://a.example.com) derives the usable entry; a mismatched RP does not');
 }
 
+// The ed25519 class takes a point: the identity passes the point type (it is
+// in the prime-order subgroup) and is refused by the A != O assert of every
+// derivation; small-order and mixed-order points never pass the type. The
+// constraint-level refusals are in constraint-negative-prover.ts.
+{
+  const O = { x: 0n, y: 1n };
+  let typed = true;
+  try { probe.encode_public_key_with_sol_ed25519(O); } catch { typed = false; }
+  assert.ok(typed, 'the identity passes the Curve25519Point type');
+  assert.equal(hex(probe.encode_public_key_with_sol_ed25519(O)), '01' + '00'.repeat(31), 'the identity encodes as RFC 8032 says (y = 1)');
+  const idRefused: [string, () => unknown][] = [
+    ['entry', () => probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), A, O, B32, 0n, 0n)],
+    ['boot', () => probe.derive_descriptor_boot_ed25519(T('midnight:account:boot:sol:v1'), B32, O, B32)],
+    ['grant id', () => probe.derive_descriptor_grant_id_ed25519(T('midnight:account:grant:id:sol:v1'), A, O, B32, B32, 0n)],
+    ['signer entries', () => probe.derive_signer_entries_ed25519(A, O, B32, 0n, 0n)],
+  ];
+  for (const [name, f] of idRefused) assert.throws(f, /failed assert: descriptor: the Ed25519 key is the identity/, `${name}: the identity is refused`);
+  const degenerate: [string, { x: bigint; y: bigint }][] = [];
+  for (const t of ED25519_TORSION_SUBGROUP.slice(1)) {
+    const p = ed25519.Point.fromBytes(Buffer.from(t, 'hex'), true);
+    if (!p.is0()) degenerate.push([`small order ${t.slice(0, 8)}…`, p.toAffine()]);
+  }
+  const T8 = ed25519.Point.fromBytes(Buffer.from(ED25519_TORSION_SUBGROUP[1], 'hex'), true);
+  for (let i = 0; i < 4; i++) degenerate.push([`mixed order A + T (${i})`, ed25519.Point.fromBytes(solKey(i).key).add(T8).toAffine()]);
+  const P_ED = ed25519.Point.Fp.ORDER;
+  degenerate.push(['coordinate y + p (not canonical)', { x: PT.x, y: PT.y + P_ED }]);
+  for (const [name, pt] of degenerate) {
+    assert.throws(() => probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), A, pt, B32, 0n, 0n), /Curve25519Point/, `${name}: refused by the point type`);
+  }
+  report.refusals.ed25519_identity = { cases: idRefused.length, refused: idRefused.length };
+  report.refusals.ed25519_point_type = { cases: degenerate.length, refused: degenerate.length };
+  console.log(`  ✓ the identity point passes the type and is refused by A != O in ${idRefused.length} derivations; ${degenerate.length} small-order, mixed-order and non-canonical points refused by the point type`);
+}
+
 // ── 5. Comparator controls ──────────────────────────────────────────────────
 
 {
-  const a = addr(), key = rnd(32), blind = rnd(32);
-  const good = probe.derive_descriptor_entry_w64(T('midnight:account:device:sol:v1'), contractAddress(a), key, blind, 3n, 9n);
+  const a = addr(), { key, point } = solKey(1), blind = rnd(32);
+  const good = probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), contractAddress(a), point, blind, 3n, 9n)[1];
   report.controls.splitDifferently = eq(good, sha(T('midnight:account:device:sol:v1'), a, Buffer.concat([key, blind]), le(3n, 4), le(9n, 8)));
   report.controls.counterOffByOne = !eq(good, sha(T('midnight:account:device:sol:v1'), a, key, blind, le(3n, 4), le(10n, 8)));
   report.controls.minimalWidthIntegers = !eq(good, sha(T('midnight:account:device:sol:v1'), a, key, blind, Buffer.from([3]), Buffer.from([9])));
   report.controls.blindOmitted = !eq(good, sha(T('midnight:account:device:sol:v1'), a, key, le(3n, 4), le(9n, 8)));
   report.controls.otherArmTag = !eq(good, sha(T('midnight:account:device:v1'), a, key, blind, le(3n, 4), le(9n, 8)));
+  // The encoding's sign bit is bound: the same y without x's parity, and the
+  // y coordinate big-endian, give other entries.
+  const noSign = Uint8Array.from(key); noSign[31] &= 0x7f;
+  report.controls.signBitBound = (key[31] & 0x80) !== 0 && !eq(good, sha(T('midnight:account:device:sol:v1'), a, noSign, blind, le(3n, 4), le(9n, 8)));
+  report.controls.encodingNotBigEndianY = !eq(good, sha(T('midnight:account:device:sol:v1'), a, le(point.y, 32).reverse(), blind, le(3n, 4), le(9n, 8)));
   for (const [k, v] of Object.entries(report.controls)) assert.ok(v, `comparator control ${k}`);
   console.log(`  ✓ comparator controls: ${Object.keys(report.controls).join(', ')}`);
 }

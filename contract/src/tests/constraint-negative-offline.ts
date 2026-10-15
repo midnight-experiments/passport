@@ -67,7 +67,7 @@ const pad = (s: string) => { const o = new Uint8Array(32); o.set(Buffer.from(s, 
 const eq = (a: Uint8Array, b: Uint8Array) => Buffer.from(a).equals(Buffer.from(b));
 const A = { bytes: new Uint8Array(32).fill(7) };
 const k = new Uint8Array(32).fill(1), b = new Uint8Array(32).fill(2);
-const GOOD_TAG = pad('midnight:account:device:sol:v1'), BAD_TAG = pad('midnight:account:device:k1:v2');
+const GOOD_TAG = pad('midnight:account:device:v1'), BAD_TAG = pad('midnight:account:device:k1:v2');
 
 const patched = await loadBypassedContract(PROBE_JS, [W64]);
 assert.ok(!patched.file.startsWith(path.resolve(here, '..', '..')), 'the copy is written outside the repository');

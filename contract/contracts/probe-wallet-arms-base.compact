@@ -11,7 +11,8 @@ import CompactStandardLibrary;
 //   modules/WalletArmDescriptors  readable-descriptor derivations (device
 //                                 entries, boot commitments, grant ids,
 //                                 origin_hash, and the blind), one per payload
-//                                 width, with the registered tags
+//                                 class, with the registered tags, and the
+//                                 shared RFC 8032 encoding of an Ed25519 key
 //   modules/WalletArmRendering    decimal, hex, and label text for readable
 //                                 signed bytes
 //
@@ -42,6 +43,10 @@ export {
   derive_descriptor_boot_w65, derive_descriptor_boot_w117,
   derive_descriptor_grant_id_w52, derive_descriptor_grant_id_w64,
   derive_descriptor_grant_id_w65,
+  encode_public_key_with_sol_ed25519,
+  derive_descriptor_entry_ed25519, derive_descriptor_boot_ed25519,
+  derive_descriptor_grant_id_ed25519,
+  derive_signer_entries_ed25519,
   derive_grant_origin_hash_label, derive_grant_origin_hash_origin,
   derive_blind,
   uint8_text, uint32_text, uint64_text, uint128_text,
@@ -124,6 +129,31 @@ export circuit probe_grant_id_w65(
   origin_hash: Bytes<32>, slot: Uint<8>
 ): [] {
   derived = disclose(derive_descriptor_grant_id_w65(tag, self_addr, x, y, envelope, origin_hash, slot));
+}
+
+// The ed25519 class: a Solana key by its point (spec FR-005). probe_encode_ed25519
+// measures the encoding alone; the derivations add the A != O assert and
+// return [key, value] (the probes write the value).
+export circuit probe_encode_ed25519(pk: Curve25519Point): [] {
+  derived = disclose(encode_public_key_with_sol_ed25519(pk));
+}
+
+export circuit probe_entry_ed25519(
+  tag: Bytes<32>, self_addr: ContractAddress, pk: Curve25519Point, blind: Bytes<32>,
+  epoch: Uint<32>, counter: Uint<64>
+): [] {
+  derived = disclose(derive_descriptor_entry_ed25519(tag, self_addr, pk, blind, epoch, counter)[1]);
+}
+
+export circuit probe_boot_ed25519(tag: Bytes<32>, salt: Bytes<32>, pk: Curve25519Point, blind: Bytes<32>): [] {
+  derived = disclose(derive_descriptor_boot_ed25519(tag, salt, pk, blind)[1]);
+}
+
+export circuit probe_grant_id_ed25519(
+  tag: Bytes<32>, self_addr: ContractAddress, pk: Curve25519Point, blind: Bytes<32>,
+  origin_hash: Bytes<32>, slot: Uint<8>
+): [] {
+  derived = disclose(derive_descriptor_grant_id_ed25519(tag, self_addr, pk, blind, origin_hash, slot)[1]);
 }
 
 export circuit probe_blind(tag: Bytes<32>, signature: Bytes<64>): [] {

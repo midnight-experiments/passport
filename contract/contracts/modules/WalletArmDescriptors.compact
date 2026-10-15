@@ -8,8 +8,8 @@
 // payload in the target scheme's own form. The circuit derives the entry,
 // the boot commitment, or the grant id from exactly those bytes, with the
 // target scheme's own recipe. This module holds those recipes, one circuit per
-// payload WIDTH, so that one derivation shape serves every scheme whose
-// payload has that width.
+// payload CLASS, so that one derivation shape serves every scheme whose
+// payload has that form.
 //
 // Every recipe is SHA-256 (persistentHash over byte atoms) of the plain
 // concatenation of fixed-width elements: pad(32, tag), the 32-byte account
@@ -26,28 +26,39 @@
 //                          i.e. the little-endian 32-byte coordinates
 //   WebAuthnPolicy         rp_id_hash(32) || origin(21)
 //
-// Payload widths (bytes) and the recipes that use them:
+// Payload classes, the recipes that use them, and the payload bytes each
+// hashes (the width, in bytes, names the class):
 //
-//   width   device entry / boot             grant id
-//   52      evm_eip712: address || blind    evm_eip712: address || blind
-//   64      jubjub: x_le || y_le            jubjub: x_le || y_le
-//           sol_ed25519: key || blind       p256: x_le || y_le
-//                                           sol_ed25519: key || blind
-//   65      k256: x_le || y_le || envelope  k256: x_le || y_le || envelope
-//   117     p256: x_le || y_le ||           —
-//           rp_id_hash || origin(21)
+//   class    device entry / boot             grant id
+//   w52      evm_eip712: address || blind    evm_eip712: address || blind
+//   w64      jubjub: x_le || y_le            jubjub: x_le || y_le
+//                                            p256: x_le || y_le
+//   ed25519  sol_ed25519: key || blind       sol_ed25519: key || blind
+//   w65      k256: x_le || y_le || envelope  k256: x_le || y_le || envelope
+//   w117     p256: x_le || y_le ||           —
+//            rp_id_hash || origin(21)
+//
+// The ed25519 class takes the key as a Curve25519Point, never as bytes: its
+// 32-byte key is derived in-circuit (encode_public_key_with_sol_ed25519
+// below) and the point must not be the identity, so its preimage is 64
+// bytes like w64's, but no caller can hash bytes that are not the encoding
+// of a live key.
 //
 // TAGS ARE NOT FREE-FORM. Each derivation takes the tag as the padded
 // 32-byte text the signed bytes show, and accepts it only if it equals one of
-// the tags this module registers for that recipe AND that width. Any other
-// tag is refused, and so is a known tag paired with the wrong width, so every
+// the tags this module registers for that recipe AND that class. Any other
+// tag is refused, and so is a known tag paired with the wrong class, so every
 // tag is hashed with exactly one preimage shape. This is stricter than an
 // unusable "dead" entry: an unknown scheme cannot be enrolled at all.
 //
 // Key admissibility (on the curve, not of small order, not the point at
-// infinity, and, for k256, a known envelope) is NOT checked here: as with upstream's
-// opaque `add_device(entry)`, an entry derived from an inadmissible key is
-// dead weight, because the target arm's own seam refuses that key at use.
+// infinity, and, for k256, a known envelope) is NOT checked here for the
+// byte classes: as with upstream's opaque `add_device(entry)`, an entry
+// derived from an inadmissible key is dead weight, because the target arm's
+// own seam refuses that key at use. The ed25519 class is the exception
+// (project 00067, spec FR-005): its Curve25519Point type admits only points of the
+// prime-order subgroup, and its derivations assert that the point is not
+// the identity.
 //
 // The new arms' recipes (project 00067, spec FR-013, FR-014):
 //   entry    = H(pad32(device tag) || account || payload || epoch || counter)
@@ -56,8 +67,8 @@
 //                || slot)
 //   blind    = H(pad32(blind tag) || canonical signature (64 bytes))
 // where payload = identity || blind: the 20-byte Ethereum address, or the
-// 32-byte RFC 8032 Ed25519 public-key encoding, followed by the account's
-// 32-byte blind. The blind keeps a public wallet identity out of the clear:
+// 32-byte RFC 8032 Ed25519 public-key encoding of the key's point (derived
+// in-circuit), followed by the account's 32-byte blind. The blind keeps a public wallet identity out of the clear:
 // without it, anyone could test a known address against every account's
 // entries. The canonical signature is low-S r || s (big-endian, 32 bytes
 // each) for EVM, and the raw 64-byte R || S for Ed25519, over the client's
@@ -161,8 +172,7 @@ module WalletArmDescriptors {
   }
 
   // Width 64: a `jubjub` device (first = x_le, second = y_le of its
-  // JubjubPoint) or a `sol_ed25519` device (first = its 32-byte RFC 8032
-  // public-key encoding, second = the account's blind).
+  // JubjubPoint). A `sol_ed25519` device has its own class (by point, below).
   export pure circuit derive_descriptor_entry_w64(
     tag:       Bytes<32>,
     self_addr: ContractAddress,
@@ -171,8 +181,7 @@ module WalletArmDescriptors {
     epoch:     Uint<32>,
     counter:   Uint<64>,
   ): Bytes<32> {
-    assert(tag == device_tag_jubjub() || tag == device_tag_sol_ed25519(),
-           "descriptor: not a 64-byte device tag");
+    assert(tag == device_tag_jubjub(), "descriptor: not a 64-byte device tag");
     return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
       [tag, self_addr, first, second, epoch, counter]
     );
@@ -238,8 +247,7 @@ module WalletArmDescriptors {
     first:  Bytes<32>,
     second: Bytes<32>,
   ): Bytes<32> {
-    assert(tag == boot_tag_jubjub() || tag == boot_tag_sol_ed25519(),
-           "descriptor: not a 64-byte boot tag");
+    assert(tag == boot_tag_jubjub(), "descriptor: not a 64-byte boot tag");
     return persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>(
       [tag, salt, first, second]
     );
@@ -277,8 +285,7 @@ module WalletArmDescriptors {
   // A grantee's grant id uses the grant-id recipe of the grantee's scheme
   // (key, origin_hash, slot), not the device recipe. A `p256` grant id binds
   // the key only (its RP is a separately committed scope field, checked
-  // through derive_grant_rp_commit), so it shares width 64 with `jubjub` and
-  // `sol_ed25519`.
+  // through derive_grant_rp_commit), so it shares width 64 with `jubjub`.
 
   export pure circuit derive_descriptor_grant_id_w52(
     tag:         Bytes<32>,
@@ -302,7 +309,7 @@ module WalletArmDescriptors {
     origin_hash: Bytes<32>,
     slot:        Uint<8>,
   ): Bytes<32> {
-    assert(tag == grant_id_tag_jubjub() || tag == grant_id_tag_p256() || tag == grant_id_tag_sol_ed25519(),
+    assert(tag == grant_id_tag_jubjub() || tag == grant_id_tag_p256(),
            "descriptor: not a 64-byte grant-id tag");
     return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>]>(
       [tag, self_addr, first, second, origin_hash, slot]
@@ -322,6 +329,128 @@ module WalletArmDescriptors {
     return persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<8>, Bytes<32>, Uint<8>]>(
       [tag, self_addr, x, y, envelope, origin_hash, slot]
     );
+  }
+
+  // ── The ed25519 class: a `sol_ed25519` key by its point ───────────────────
+  //
+  // Spec FR-005: a Solana key, as a target and as a signer, is a
+  // Curve25519Point, whose type admits only points of the prime-order
+  // subgroup: the runtime refuses any other point at the type boundary, the
+  // honest proof server refuses to decode it, and the circuit itself assigns
+  // a point input as [8]Q for a witnessed Q on the curve (midnight-circuits
+  // 7.2.4, ForeignEdwardsEccChip::assign, as pinned by proof server
+  // 9.0.0-rc.8), so a malicious prover cannot hold one either. The identity is the one
+  // subgroup point that is not a usable key; the derivations below refuse
+  // it explicitly (A != O).
+  //
+  // The recipes bind the key's 32-byte RFC 8032 encoding, the bytes the
+  // wallet exports and a person compares, computed here from the point. The
+  // solana arm's seam, which verifies signatures under that point, derives
+  // its own entries with these same circuits, so enrolment, removal, grants
+  // and signing cannot use two different encodings of one key.
+  //
+  // One encoding costs about 10k rows, and the compiler does not share it
+  // between calls. So every derivation of this class returns the key it
+  // encoded together with the derived value: a circuit that also SHOWS the
+  // key (an approval message) uses that key and encodes once.
+
+  // Whether a Curve25519 base field element is odd: the low bit of the first
+  // byte of its canonical little-endian encoding (as the standard library's
+  // curve25519BaseIsOdd, which the library does not export).
+  circuit ed25519_base_is_odd(x: Curve25519Base): Boolean {
+    const b = (x as Bytes<32> as Vector<32, Uint<8>>)[0];
+    const b6 = b  >= 128 ? b  - 128 : b;
+    const b5 = b6 >= 64  ? b6 - 64  : b6;
+    const b4 = b5 >= 32  ? b5 - 32  : b5;
+    const b3 = b4 >= 16  ? b4 - 16  : b4;
+    const b2 = b3 >= 8   ? b3 - 8   : b3;
+    const b1 = b2 >= 4   ? b2 - 4   : b2;
+    return (b1 >= 2 ? b1 - 2 : b1) == 1;
+  }
+
+  // The RFC 8032 section 5.1.2 encoding of a point, as the standard library's
+  // ed25519Encode (not exported) computes it: y little-endian (below
+  // p < 2^255, so bit 255 is clear), and x's low bit in bit 255. For a point
+  // of the prime-order subgroup it is the one canonical encoding a strict
+  // decoder accepts, so the map from keys to their 32 bytes is one-to-one.
+  // The one shared encoding: every arm calls it, none keeps a copy.
+  export pure circuit encode_public_key_with_sol_ed25519(pk: Curve25519Point): Bytes<32> {
+    const y = curve25519PointY(pk) as Bytes<32> as Vector<32, Uint<8>>;
+    const sign = ed25519_base_is_odd(curve25519PointX(pk)) ? 128 : 0;
+    return Bytes[y[0],  y[1],  y[2],  y[3],  y[4],  y[5],  y[6],  y[7],
+                 y[8],  y[9],  y[10], y[11], y[12], y[13], y[14], y[15],
+                 y[16], y[17], y[18], y[19], y[20], y[21], y[22], y[23],
+                 y[24], y[25], y[26], y[27], y[28], y[29], y[30],
+                 (y[31] + sign) as Uint<8>];
+  }
+
+  // The key a recipe binds: A != O asserted, then the encoding. In the
+  // prime-order subgroup the identity is the only point whose x-coordinate
+  // is zero (the standard library's ed25519Verify uses the same test).
+  circuit ed25519_descriptor_key(pk: Curve25519Point): Bytes<32> {
+    assert((curve25519PointX(pk) as Bytes<32>) != pad(32, ""), "descriptor: the Ed25519 key is the identity");
+    return encode_public_key_with_sol_ed25519(pk);
+  }
+
+  // [key, entry]
+  export pure circuit derive_descriptor_entry_ed25519(
+    tag:       Bytes<32>,
+    self_addr: ContractAddress,
+    pk:        Curve25519Point,
+    blind:     Bytes<32>,
+    epoch:     Uint<32>,
+    counter:   Uint<64>,
+  ): [Bytes<32>, Bytes<32>] {
+    assert(tag == device_tag_sol_ed25519(), "descriptor: not an Ed25519 device tag");
+    const key = ed25519_descriptor_key(pk);
+    return [key, persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
+      [tag, self_addr, key, blind, epoch, counter])];
+  }
+
+  // [key, boot commitment]
+  export pure circuit derive_descriptor_boot_ed25519(
+    tag:   Bytes<32>,
+    salt:  Bytes<32>,
+    pk:    Curve25519Point,
+    blind: Bytes<32>,
+  ): [Bytes<32>, Bytes<32>] {
+    assert(tag == boot_tag_sol_ed25519(), "descriptor: not an Ed25519 boot tag");
+    const key = ed25519_descriptor_key(pk);
+    return [key, persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([tag, salt, key, blind])];
+  }
+
+  // [key, grant id]: a grantee target, and a signing grantee (the grant seam).
+  export pure circuit derive_descriptor_grant_id_ed25519(
+    tag:         Bytes<32>,
+    self_addr:   ContractAddress,
+    pk:          Curve25519Point,
+    blind:       Bytes<32>,
+    origin_hash: Bytes<32>,
+    slot:        Uint<8>,
+  ): [Bytes<32>, Bytes<32>] {
+    assert(tag == grant_id_tag_sol_ed25519(), "descriptor: not an Ed25519 grant-id tag");
+    const key = ed25519_descriptor_key(pk);
+    return [key, persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>]>(
+      [tag, self_addr, key, blind, origin_hash, slot])];
+  }
+
+  // [key, entry at `counter`, its successor at `counter + 1`]: the device
+  // seam (membership, then the roll) from one encoding, by the same recipe
+  // and with the same A != O assert.
+  export pure circuit derive_signer_entries_ed25519(
+    self_addr: ContractAddress,
+    pk:        Curve25519Point,
+    blind:     Bytes<32>,
+    epoch:     Uint<32>,
+    counter:   Uint<64>,
+  ): [Bytes<32>, Bytes<32>, Bytes<32>] {
+    const key = ed25519_descriptor_key(pk);
+    const tag = device_tag_sol_ed25519();
+    return [key,
+            persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
+              [tag, self_addr, key, blind, epoch, counter]),
+            persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
+              [tag, self_addr, key, blind, epoch, (counter + 1) as Uint<64>])];
   }
 
   // ── Grant origin_hash ─────────────────────────────────────────────────────

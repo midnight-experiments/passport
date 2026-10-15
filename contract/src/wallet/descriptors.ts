@@ -3,14 +3,16 @@
 // A readable arm (`evm_eip712`, `sol_ed25519`) shows another key as a
 // DESCRIPTOR: the target recipe's tag text and the key payload in the target
 // scheme's own form. The contract derives the target's device entry, boot
-// commitment, or grant id from exactly those bytes, one circuit per payload
-// width (contracts/modules/WalletArmDescriptors.compact). This module:
+// commitment, or grant id from exactly those values, one circuit per payload
+// class (contracts/modules/WalletArmDescriptors.compact): the byte classes
+// w52, w64, w65 and w117, and the ed25519 class, which takes a Solana key as
+// its Curve25519Point and derives the key's 32 bytes in-circuit. This module:
 //
 //   - parses the forms a person or a wallet presents (an Ethereum address, a
 //     Solana public key, a SEC1 secp256k1 or P-256 key, a passkey's RP ID and
 //     origin, and a JubJub point) STRICTLY, refusing anything that is not exactly
 //     one canonical, admissible key;
-//   - encodes a descriptor as the arguments of the width-class circuit that
+//   - encodes a descriptor as the arguments of the class circuit that
 //     derives its entry, boot commitment, or grant id (the caller runs them
 //     through any `pureCircuits` object that exports the module, so the
 //     derivation is always the contract's own);
@@ -73,11 +75,23 @@ export const BLIND_TAGS: Readonly<Record<'evm_eip712' | 'sol_ed25519', string>> 
 /** Upstream's grant origin tag (scoped-grants MIP section 4.4). */
 export const GRANT_ORIGIN_TAG = 'midnight:account:grant:origin:v1';
 
-/** The payload width of each recipe and scheme (bytes). */
+/** The width of the payload each recipe and scheme hashes (bytes). */
 export const PAYLOAD_WIDTH: Readonly<Record<DescriptorRecipe, Readonly<Record<DescriptorScheme, 52 | 64 | 65 | 117>>>> = {
   device: { jubjub: 64, k256: 65, p256: 117, evm_eip712: 52, sol_ed25519: 64 },
   boot: { jubjub: 64, k256: 65, p256: 117, evm_eip712: 52, sol_ed25519: 64 },
   'grant-id': { jubjub: 64, k256: 65, p256: 64, evm_eip712: 52, sol_ed25519: 64 },
+};
+
+export type DescriptorClass = 'w52' | 'w64' | 'w65' | 'w117' | 'ed25519';
+
+/** The circuit class of each recipe and scheme: the suffix of the module's
+ *  `derive_descriptor_<recipe>_<class>` circuit. A `sol_ed25519` key has its
+ *  own class (its payload is a Curve25519Point, not bytes), although the
+ *  preimage it hashes is 64 bytes wide. */
+export const DESCRIPTOR_CLASS: Readonly<Record<DescriptorRecipe, Readonly<Record<DescriptorScheme, DescriptorClass>>>> = {
+  device: { jubjub: 'w64', k256: 'w65', p256: 'w117', evm_eip712: 'w52', sol_ed25519: 'ed25519' },
+  boot: { jubjub: 'w64', k256: 'w65', p256: 'w117', evm_eip712: 'w52', sol_ed25519: 'ed25519' },
+  'grant-id': { jubjub: 'w64', k256: 'w65', p256: 'w64', evm_eip712: 'w52', sol_ed25519: 'ed25519' },
 };
 
 const TEXT = new TextEncoder();
@@ -134,7 +148,13 @@ export interface PasskeyPolicy { rpIdHash: Uint8Array; origin: Uint8Array; rpId?
  *  policy. A grant id binds the key only (the RP is a scope field). */
 export interface P256Descriptor { scheme: 'p256'; x: bigint; y: bigint; policy?: PasskeyPolicy }
 export interface EvmDescriptor { scheme: 'evm_eip712'; address: Uint8Array; blind: Uint8Array }
+/** A Solana key: its 32-byte RFC 8032 encoding (what the wallet exports and a
+ *  person compares) and the account's blind. The circuits take the key as
+ *  its point (solanaKeyPoint) and derive these 32 bytes from it. */
 export interface SolDescriptor { scheme: 'sol_ed25519'; key: Uint8Array; blind: Uint8Array }
+/** A Curve25519Point as the generated JavaScript takes it: affine twisted
+ *  Edwards coordinates. */
+export interface Curve25519Affine { x: bigint; y: bigint }
 export type Descriptor = JubjubDescriptor | K256Descriptor | P256Descriptor | EvmDescriptor | SolDescriptor;
 
 // ── Strict parsers: the forms a person or a wallet presents ─────────────────
@@ -212,6 +232,34 @@ export function parseSolanaPublicKey(input: string | Uint8Array): Uint8Array {
   if (point.isSmallOrder()) throw new Error('descriptor: Ed25519 key of small order (identity included)');
   if (!point.isTorsionFree()) throw new Error('descriptor: Ed25519 key of mixed order');
   return bytes;
+}
+
+/** The Curve25519Point of a Solana public key (base58 text or the 32-byte
+ *  encoding), after parseSolanaPublicKey's strict checks: the argument the
+ *  ed25519 class circuits take. */
+export function solanaKeyPoint(input: string | Uint8Array): Curve25519Affine {
+  const { x, y } = ed25519.Point.fromBytes(parseSolanaPublicKey(input), false).toAffine();
+  return { x, y };
+}
+
+/** The 32-byte RFC 8032 encoding of a Curve25519Point given by coordinates,
+ *  with the same strict rules: canonical coordinates (below p), on the
+ *  curve, of prime order, not the identity. Small-order and mixed-order
+ *  points are refused. */
+export function solanaKeyFromPoint(p: Curve25519Affine): Uint8Array {
+  if (typeof p !== 'object' || p === null || typeof p.x !== 'bigint' || typeof p.y !== 'bigint') {
+    throw new Error('descriptor: an Ed25519 key point is { x, y } with bigint coordinates');
+  }
+  const P = ed25519.Point.Fp.ORDER;
+  if (p.x < 0n || p.x >= P || p.y < 0n || p.y >= P) throw new Error('descriptor: Ed25519 coordinate not below p');
+  if (p.x === 0n && p.y === 1n) throw new Error('descriptor: Ed25519 key of small order (the identity)');
+  let point;
+  try { point = ed25519.Point.fromAffine({ x: p.x, y: p.y }); point.assertValidity(); } catch (e: any) {
+    throw new Error(`descriptor: not an Ed25519 point (${e?.message ?? e})`);
+  }
+  if (point.isSmallOrder()) throw new Error('descriptor: Ed25519 key of small order (identity included)');
+  if (!point.isTorsionFree()) throw new Error('descriptor: Ed25519 key of mixed order');
+  return parseSolanaPublicKey(point.toBytes());
 }
 
 type Curve = typeof secp256k1 | typeof p256;
@@ -318,15 +366,20 @@ export function checkDescriptor(d: Descriptor): Descriptor {
   }
 }
 
-// ── Encoders: the width-class circuit and its arguments ─────────────────────
+// ── Encoders: the class circuit and its arguments ───────────────────────────
 
 /** A pure-circuit call: the circuit's name and its arguments, in the
- *  generated JavaScript's representation. */
-export interface DescriptorCall { circuit: string; args: unknown[] }
+ *  generated JavaScript's representation. `pick` is the index of the derived
+ *  value when the circuit returns a tuple: the ed25519 class returns
+ *  [key, value], the key it encoded from the point and the derived value. */
+export interface DescriptorCall { circuit: string; args: unknown[]; pick?: number }
+
+const pickOf = (cls: DescriptorClass): { pick?: number } => (cls === 'ed25519' ? { pick: 1 } : {});
 
 const xyLE = (d: { x: bigint; y: bigint }): [Uint8Array, Uint8Array] => [bytesLE(d.x, 32), bytesLE(d.y, 32)];
 
-/** The payload parts of a descriptor for a recipe, in circuit order. */
+/** The payload parts of a descriptor for a recipe, in circuit order. A
+ *  `sol_ed25519` key is passed as its point, never as bytes. */
 export function payloadParts(d: Descriptor, recipe: DescriptorRecipe): unknown[] {
   switch (d.scheme) {
     case 'jubjub': return xyLE(d);
@@ -337,7 +390,7 @@ export function payloadParts(d: Descriptor, recipe: DescriptorRecipe): unknown[]
       return [...xyLE(d), d.policy.rpIdHash, d.policy.origin];
     }
     case 'evm_eip712': return [d.address, d.blind];
-    case 'sol_ed25519': return [d.key, d.blind];
+    case 'sol_ed25519': return [solanaKeyPoint(d.key), d.blind];
   }
 }
 
@@ -350,8 +403,9 @@ const contractAddress = (a: Uint8Array) => {
  *  enrolment MUST pass the account's current device_epoch and counter 0. */
 export function entryCall(d: Descriptor, account: Uint8Array, epoch: bigint, counter: bigint): DescriptorCall {
   return {
-    circuit: `derive_descriptor_entry_w${PAYLOAD_WIDTH.device[d.scheme]}`,
+    circuit: `derive_descriptor_entry_${DESCRIPTOR_CLASS.device[d.scheme]}`,
     args: [padTag(DESCRIPTOR_TAGS.device[d.scheme]), contractAddress(account), ...payloadParts(d, 'device'), epoch, counter],
+    ...pickOf(DESCRIPTOR_CLASS.device[d.scheme]),
   };
 }
 
@@ -359,8 +413,9 @@ export function entryCall(d: Descriptor, account: Uint8Array, epoch: bigint, cou
 export function bootCall(d: Descriptor, salt: Uint8Array): DescriptorCall {
   if (salt.length !== 32) throw new Error('descriptor: a salt is 32 bytes');
   return {
-    circuit: `derive_descriptor_boot_w${PAYLOAD_WIDTH.boot[d.scheme]}`,
+    circuit: `derive_descriptor_boot_${DESCRIPTOR_CLASS.boot[d.scheme]}`,
     args: [padTag(DESCRIPTOR_TAGS.boot[d.scheme]), salt, ...payloadParts(d, 'boot')],
+    ...pickOf(DESCRIPTOR_CLASS.boot[d.scheme]),
   };
 }
 
@@ -368,8 +423,9 @@ export function bootCall(d: Descriptor, salt: Uint8Array): DescriptorCall {
 export function grantIdCall(d: Descriptor, account: Uint8Array, originHash: Uint8Array, slot: bigint): DescriptorCall {
   if (originHash.length !== 32) throw new Error('descriptor: origin_hash is 32 bytes');
   return {
-    circuit: `derive_descriptor_grant_id_w${PAYLOAD_WIDTH['grant-id'][d.scheme]}`,
+    circuit: `derive_descriptor_grant_id_${DESCRIPTOR_CLASS['grant-id'][d.scheme]}`,
     args: [padTag(DESCRIPTOR_TAGS['grant-id'][d.scheme]), contractAddress(account), ...payloadParts(d, 'grant-id'), originHash, slot],
+    ...pickOf(DESCRIPTOR_CLASS['grant-id'][d.scheme]),
   };
 }
 
@@ -377,15 +433,16 @@ export function grantIdCall(d: Descriptor, account: Uint8Array, originHash: Uint
 export function derive(pureCircuits: Record<string, any>, call: DescriptorCall): Uint8Array {
   const f = pureCircuits[call.circuit];
   if (typeof f !== 'function') throw new Error(`descriptor: ${call.circuit} is not exported by these circuits`);
-  return f(...call.args);
+  const r = f(...call.args);
+  return call.pick === undefined ? r : r[call.pick];
 }
 
 // ── Decoder: circuit arguments back to a checked descriptor ─────────────────
 
-/** Decodes the tag and payload parts of a width-class call (as
- *  payloadParts returns them) into a descriptor, then checks the key
- *  strictly. Refuses an unregistered tag, a tag of another recipe than
- *  `recipe`, and parts of the wrong number or width. */
+/** Decodes the tag and payload parts of a class call (as payloadParts
+ *  returns them) into a descriptor, then checks the key strictly. Refuses an
+ *  unregistered tag, a tag of another recipe than `recipe`, parts of the
+ *  wrong number or width, and a Solana key given as anything but a point. */
 export function decodeDescriptor(recipe: DescriptorRecipe, tag: Uint8Array, parts: unknown[]): Descriptor {
   const t = tagOf(tag);
   if (t.recipe !== recipe) throw new Error(`descriptor: ${t.text} is a ${t.recipe} tag, not a ${recipe} tag`);
@@ -421,7 +478,7 @@ export function decodeDescriptor(recipe: DescriptorRecipe, tag: Uint8Array, part
       return evmDescriptor(bytes(parts[0], 20, 'address'), bytes(parts[1], 32, 'blind'));
     case 'sol_ed25519':
       want(2);
-      return solDescriptor(bytes(parts[0], 32, 'key'), bytes(parts[1], 32, 'blind'));
+      return solDescriptor(solanaKeyFromPoint(parts[0] as Curve25519Affine), bytes(parts[1], 32, 'blind'));
   }
 }
 
