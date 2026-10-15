@@ -1,0 +1,317 @@
+// Arm `sol_ed25519`: the client facade (spec FR-S01 to FR-S03, FR-012,
+// FR-013, FR-017; Q19: an arm-owned facade instead of account.ts edits).
+//
+// THE DEVICE IS A SOLANA WALLET'S PUBLIC KEY: the 32-byte RFC 8032 encoding
+// the wallet exports (its base58 address). The contract takes it as a
+// Curve25519Point and relates it in-circuit to those 32 bytes
+// (`encode_public_key_with_sol_ed25519`), so this module decodes the bytes
+// STRICTLY first: canonical y < p, on the curve, in the prime-order subgroup,
+// not the identity (descriptors.ts `parseSolanaPublicKey`).
+//
+// THE BLIND (spec FR-013, Q13, Q16). Entries and grant ids bind a per-account
+// secret that the wallet re-derives: the wallet signs the readable request
+// message of blind.ts (raw bytes, Solana `signMessage`), twice; both
+// signatures must verify and be identical (RFC 8032 signing is
+// deterministic, so a wallet that is not, for example an MPC or a hedged
+// signer, would lose its accounts on restore and is refused at enrolment);
+// blind = SHA-256(pad32("midnight:account:blind:sol:v1") || signature). The
+// client keeps (network, account index, key, blind) per device in its roster.
+//
+// Platform-neutral: no node:crypto, so the same code runs in a browser page.
+
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { curve25519FromProjective, isValidCurve25519Point, type Curve25519Point } from '@midnight-ntwrk/compact-runtime';
+
+import { pureCircuits } from './contract.js';
+import { base58Encode, parseSolanaPublicKey, solDescriptor, type SolDescriptor } from './descriptors.js';
+import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind } from './blind.js';
+import type { GrantOpening } from './signer.js';
+
+export type { Curve25519Point };
+
+/** The arm's name: the circuit suffix (`<operation>_with_sol_ed25519`). */
+export const SOL_ED25519 = 'sol_ed25519' as const;
+
+/** The order L of the prime-order subgroup (RFC 8032). */
+export const ED25519_L: bigint = ed25519.Point.Fn.ORDER;
+
+const equalBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
+const toHex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+const fromHex = (s: string, n: number, what: string): Uint8Array => {
+  if (!new RegExp(`^[0-9a-f]{${2 * n}}$`).test(s)) throw new Error(`sol_ed25519: ${what} is ${n} bytes of lower-case hex`);
+  return Uint8Array.from(s.match(/../g)!, (h) => parseInt(h, 16));
+};
+const bigLE = (b: Uint8Array): bigint => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
+
+// ── Keys and signatures: strict decoding (the arm's acceptance policy) ─────
+
+/** The circuit's Curve25519Point for a Solana public key (base58 text or the
+ *  32 bytes), decoded strictly: refuses non-canonical encodings, points off
+ *  the curve, the identity, and small-order and mixed-order points. */
+export function solPublicKeyPoint(key: Uint8Array | string): Curve25519Point {
+  const bytes = parseSolanaPublicKey(key);
+  const point = curve25519FromProjective(ed25519.Point.fromBytes(bytes, false));
+  if (!isValidCurve25519Point(point)) throw new Error('sol_ed25519: the key is not a valid Curve25519Point');
+  return { x: point.x, y: point.y };
+}
+
+/** The 32-byte RFC 8032 encoding of a Curve25519Point (what the circuit's
+ *  `encode_public_key_with_sol_ed25519` computes). */
+export function solPublicKeyBytes(pk: Curve25519Point): Uint8Array {
+  return ed25519.Point.fromAffine({ x: pk.x, y: pk.y }).toBytes();
+}
+
+/** An Ed25519 signature as the circuit takes it (the standard library's
+ *  Ed25519Signature): R decoded, s below L, never reduced. */
+export interface SolSignatureArg { r: Curve25519Point; s: bigint }
+
+/** Decodes a 64-byte RFC 8032 signature strictly: R a canonical encoding of a
+ *  prime-order point other than the identity (the arm's `R != O` rule), S
+ *  below L (an S + L twin is refused, never reduced). */
+export function decodeSolSignature(signature: Uint8Array): SolSignatureArg {
+  if (signature.length !== 64) throw new Error('sol_ed25519: a signature is 64 bytes');
+  const rBytes = signature.subarray(0, 32);
+  let R;
+  try { R = ed25519.Point.fromBytes(rBytes, false); } catch (e: any) {
+    throw new Error(`sol_ed25519: the signature's R does not decode (strict RFC 8032): ${e?.message ?? e}`);
+  }
+  if (!equalBytes(R.toBytes(), rBytes)) throw new Error("sol_ed25519: the signature's R is not canonical");
+  if (R.is0()) throw new Error("sol_ed25519: the signature's R is the identity");
+  if (R.isSmallOrder()) throw new Error("sol_ed25519: the signature's R has small order");
+  if (!R.isTorsionFree()) throw new Error("sol_ed25519: the signature's R is not in the prime-order subgroup");
+  const s = bigLE(signature.subarray(32, 64));
+  if (s >= ED25519_L) throw new Error("sol_ed25519: the signature's S is not below L (refused, never reduced)");
+  const r = curve25519FromProjective(R);
+  return { r: { x: r.x, y: r.y }, s };
+}
+
+/**
+ * The client's pre-check (the arm document's acceptance policy, FR-012):
+ * strict decoding of A and of the signature, then cofactorless RFC 8032
+ * verification without ZIP-215 relaxations. Throws with a reason; a wallet
+ * that signed other bytes, with another key, or in a wrapped format (a
+ * Ledger's off-chain envelope) fails here before any proof.
+ */
+export function verifySolSignature(message: Uint8Array, signature: Uint8Array, key: Uint8Array | string): SolSignatureArg {
+  const A = parseSolanaPublicKey(key);
+  const sig = decodeSolSignature(signature);
+  if (!ed25519.verify(signature, message, A, { zip215: false })) {
+    throw new Error('sol_ed25519: the signature does not verify for this key and message');
+  }
+  return sig;
+}
+
+// ── Signers ─────────────────────────────────────────────────────────────────
+
+/** Signs raw bytes and returns the 64-byte signature. Phantom:
+ *  `async (m) => (await provider.signMessage(m, 'utf8')).signature`. */
+export type SolSignFn = (message: Uint8Array) => Promise<Uint8Array> | Uint8Array;
+
+export interface SolSigner { publicKey: Uint8Array; sign: SolSignFn }
+
+/** A software signer from a 32-byte RFC 8032 seed (the scheme a Solana
+ *  wallet uses). Test keys only. */
+export function solSoftwareSigner(seed: Uint8Array): SolSigner {
+  if (seed.length !== 32) throw new Error('sol_ed25519: a seed is 32 bytes');
+  const s = new Uint8Array(seed);
+  return { publicKey: ed25519.getPublicKey(s), sign: (m) => ed25519.sign(m, s) };
+}
+
+/** The point and 32-byte key of a seed through the CONTRACT's own pure
+ *  circuit (spec Q8: SHA-512, clamp, reduce mod L, multiply). */
+export function solPublicKeyFromSeed(seed: Uint8Array): { pk: Curve25519Point; key: Uint8Array } {
+  if (seed.length !== 32) throw new Error('sol_ed25519: a seed is 32 bytes');
+  const [pk, key] = pureCircuits.compute_public_key_with_sol_ed25519(seed);
+  return { pk, key };
+}
+
+// ── The blind (FR-013) ──────────────────────────────────────────────────────
+
+export interface SolBlindRequest {
+  /** The Midnight network name the account lives on ("undeployed", "preview", ...). */
+  network: string;
+  /** 0 for the wallet's first Passport account on this network, then 1, 2, ... */
+  accountIndex: bigint | number;
+}
+
+export interface SolBlindRecord {
+  scheme: 'sol_ed25519';
+  network: string;
+  accountIndex: bigint;
+  key: Uint8Array;
+  blind: Uint8Array;
+}
+
+/** The request message's text and bytes for a key (blind.ts, v1). */
+export function solBlindMessage(key: Uint8Array | string, req: SolBlindRequest): { text: string; bytes: Uint8Array } {
+  const identity = parseSolanaPublicKey(key);
+  const r = { scheme: 'sol_ed25519' as const, network: req.network, identity, accountIndex: req.accountIndex };
+  return { text: blindMessage(r), bytes: blindMessageBytes(r) };
+}
+
+/**
+ * Enrolment and restore: the wallet signs the request message twice; each
+ * signature must pass the pre-check, and the two must be byte-identical
+ * (the sign-twice check). The blind is SHA-256 of the blind tag and the raw
+ * 64-byte signature, computed here and checked against the contract's own
+ * `derive_blind_with_sol_ed25519`.
+ */
+export async function deriveSolBlind(signer: SolSigner, req: SolBlindRequest): Promise<SolBlindRecord> {
+  const key = parseSolanaPublicKey(signer.publicKey);
+  const { bytes } = solBlindMessage(key, req);
+  const first = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
+  verifySolSignature(bytes, first, key);
+  const second = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
+  verifySolSignature(bytes, second, key);
+  const a = canonicalEd25519Signature(first);
+  const b = canonicalEd25519Signature(second);
+  if (!equalBytes(a, b)) {
+    throw new Error('sol_ed25519: the wallet signed the same message twice with different signatures (not deterministic); refused, it could not restore its accounts');
+  }
+  const blind = deriveBlind('sol_ed25519', a);
+  const viaContract: Uint8Array = pureCircuits.derive_blind_with_sol_ed25519(a);
+  if (!equalBytes(blind, viaContract)) throw new Error('sol_ed25519: blind differs from the contract derivation');
+  return { scheme: 'sol_ed25519', network: req.network, accountIndex: BigInt(req.accountIndex), key, blind };
+}
+
+// ── The device ──────────────────────────────────────────────────────────────
+
+export interface SolDeviceOptions {
+  /** The wallet's public key: the 32 bytes or its base58 address. */
+  publicKey: Uint8Array | string;
+  /** The account's blind (deriveSolBlind). */
+  blind: Uint8Array;
+  /** The wallet's signMessage; absent for a key known by its public half only. */
+  sign?: SolSignFn;
+}
+
+export class SolEd25519Device {
+  readonly arm = SOL_ED25519;
+  /** The 32-byte RFC 8032 key (what the wallet exports and the entry binds). */
+  readonly key: Uint8Array;
+  /** The circuit's point for the key. */
+  readonly pk: Curve25519Point;
+  readonly blind: Uint8Array;
+  private readonly signFn?: SolSignFn;
+
+  constructor(opts: SolDeviceOptions) {
+    this.key = parseSolanaPublicKey(opts.publicKey);
+    this.pk = solPublicKeyPoint(this.key);
+    if (!(opts.blind instanceof Uint8Array) || opts.blind.length !== 32) throw new Error('sol_ed25519: a blind is 32 bytes');
+    this.blind = new Uint8Array(opts.blind);
+    this.signFn = opts.sign;
+  }
+
+  /** A device from a software signer and its blind record. */
+  static fromSigner(signer: SolSigner, record: SolBlindRecord): SolEd25519Device {
+    if (!equalBytes(parseSolanaPublicKey(signer.publicKey), record.key)) throw new Error('sol_ed25519: the blind record is for another key');
+    return new SolEd25519Device({ publicKey: record.key, blind: record.blind, sign: signer.sign });
+  }
+
+  /** The base58 address a Solana wallet shows. */
+  get address(): string { return base58Encode(this.key); }
+
+  /** The readable descriptor another readable arm shows for this device. */
+  descriptor(): SolDescriptor { return solDescriptor(this.key, this.blind); }
+
+  entryAt(contractAddress: Uint8Array, epoch: bigint, counter: bigint): Uint8Array {
+    return pureCircuits.derive_device_entry_with_sol_ed25519({ bytes: contractAddress }, this.pk, this.blind, epoch, counter);
+  }
+
+  bootCommitment(salt: Uint8Array): Uint8Array {
+    return pureCircuits.derive_boot_commitment_with_sol_ed25519(salt, this.pk, this.blind);
+  }
+
+  grantId(contractAddress: Uint8Array, originHash: Uint8Array, slot: bigint): Uint8Array {
+    return pureCircuits.derive_grant_id_with_sol_ed25519({ bytes: contractAddress }, this.pk, this.blind, originHash, slot);
+  }
+
+  /** `activate_initial_device_with_sol_ed25519(pk, salt, blind)`. */
+  activationArgs(salt: Uint8Array): [Curve25519Point, Uint8Array, Uint8Array] {
+    if (salt.length !== 32) throw new Error('sol_ed25519: a salt is 32 bytes');
+    return [this.pk, new Uint8Array(salt), this.blind];
+  }
+
+  /** Asks the wallet to sign raw bytes and runs the pre-check on the result. */
+  async signBytes(message: Uint8Array): Promise<{ signature: Uint8Array; sig: SolSignatureArg }> {
+    if (!this.signFn) throw new Error('sol_ed25519: this device has no signer');
+    const signature = new Uint8Array(await this.signFn(new Uint8Array(message)));
+    return { signature, sig: verifySolSignature(message, signature, this.key) };
+  }
+}
+
+// ── The roster (FR-013: key, blind and account index per device) ──────────
+
+export interface SolRosterEntryJson {
+  scheme: 'sol_ed25519';
+  network: string;
+  accountIndex: string;
+  key: string;
+  blind: string;
+  /** The account's contract address, once deployed (hex). */
+  account?: string;
+}
+
+/** Serialises a blind record (plus the account, once known) for storage. */
+export function solRosterEntry(record: SolBlindRecord, account?: Uint8Array): SolRosterEntryJson {
+  return {
+    scheme: 'sol_ed25519', network: record.network, accountIndex: record.accountIndex.toString(),
+    key: toHex(record.key), blind: toHex(record.blind), ...(account ? { account: toHex(account) } : {}),
+  };
+}
+
+/** Parses a stored roster entry strictly. */
+export function parseSolRosterEntry(json: SolRosterEntryJson): SolBlindRecord & { account?: Uint8Array } {
+  if (json?.scheme !== 'sol_ed25519') throw new Error('sol_ed25519: not a sol_ed25519 roster entry');
+  if (!/^(0|[1-9][0-9]{0,9})$/.test(json.accountIndex) || BigInt(json.accountIndex) > 0xffffffffn) throw new Error('sol_ed25519: bad account index');
+  const record: SolBlindRecord & { account?: Uint8Array } = {
+    scheme: 'sol_ed25519', network: json.network, accountIndex: BigInt(json.accountIndex),
+    key: parseSolanaPublicKey(fromHex(json.key, 32, 'key')), blind: fromHex(json.blind, 32, 'blind'),
+  };
+  solBlindMessage(record.key, record);
+  if (json.account !== undefined) record.account = fromHex(json.account, 32, 'account');
+  return record;
+}
+
+// ── Authorisations (registered in signer.ts; the seam's arguments) ─────────
+//
+// The gated circuits' trailing arguments are `(show, auth)`: the display
+// inputs the message was rendered from, then the authorising material. The
+// shapes are fixed with the seam (S5) and the message grammar (S4).
+
+/** The authorising material a `sol_ed25519` device-gated circuit consumes. */
+export interface SolEd25519Authorisation {
+  arm: 'sol_ed25519';
+  pk: Curve25519Point;
+  blind: Uint8Array;
+  /** The device's current use counter: the rolling-entry position (AUTH-9). */
+  use_counter: bigint;
+  sig: SolSignatureArg;
+  /** The display inputs of the operation's message (decimal digits, labels). */
+  show: unknown;
+  /** Exactly what the wallet showed and signed. Not a circuit argument. */
+  message: Uint8Array;
+}
+
+/** The authorising material a `sol_ed25519` grantee twin consumes. */
+export interface SolEd25519GrantAuthorisation {
+  arm: 'sol_ed25519';
+  pk: Curve25519Point;
+  blind: Uint8Array;
+  label: Uint8Array;
+  sig: SolSignatureArg;
+  show: unknown;
+  message: Uint8Array;
+}
+
+/** The trailing circuit arguments of a device-gated call. */
+export function solEd25519AuthArgs(a: SolEd25519Authorisation): unknown[] {
+  return [a.show, { pk: a.pk, blind: a.blind, use_counter: a.use_counter, sig: a.sig }];
+}
+
+/** The trailing circuit arguments of a grantee twin (the openings first, as
+ *  every arm's grant twins take them). */
+export function solEd25519GrantAuthArgs(o: GrantOpening, a: SolEd25519GrantAuthorisation): unknown[] {
+  return [o.slot, o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev,
+    a.show, { pk: a.pk, blind: a.blind, label: a.label, sig: a.sig }];
+}
