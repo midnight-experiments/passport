@@ -1,0 +1,527 @@
+{
+  "format": "sol v1",
+  "lengths": {
+    "rotate_enc_key": 511,
+    "append_inbox": 833,
+    "withdraw_unshielded": 620,
+    "withdraw_shielded": 861,
+    "withdraw_shielded_to_contract": 871,
+    "add_device": 705,
+    "remove_device": 781,
+    "issue_grant": 1646,
+    "revoke_grant": 729,
+    "revoke_all_grants": 389,
+    "publish_recovery_session": 1250,
+    "recover_cancel": 391,
+    "withdraw_unshielded_with_grant": 746,
+    "withdraw_shielded_with_grant": 1586,
+    "withdraw_shielded_to_contract_with_grant": 1596
+  },
+  "calls": [
+    {
+      "name": "rotate_enc_key",
+      "op": "rotate_enc_key",
+      "bytes": 511,
+      "sha256": "34e433fed3bdf21f9304b993b51a627ace93e646d06eb842863ba08c6436305d",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Rotate the encryption key\nSite: Example Wallet                  \nRole: device of this account\nAccount: 06a3d66339341f66d73bd0507e08f83c4c6a3377556c1aef134f756df08e0a35\nSigning key: a819408ce5010ca2e09ef59ac3d89f5ff8595d02b524e61bf8afa894a95d594f\nNew encryption key: cf50252908e527ebc5cacf537c3a4495a0c0ce5e1f0ec383b18290642cc8afaa\nConsequence: coins deposited from now on are encrypted to this key; only its holder can read them.\nDevice nonce: 0                   "
+    },
+    {
+      "name": "rotate_enc_key zero",
+      "op": "rotate_enc_key",
+      "bytes": 511,
+      "sha256": "a62d7ef358856e8039aae5ceedea7f237cc5dc2c88e693ba73b5cf57a5d3bd61",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Rotate the encryption key\nSite: a                               \nRole: device of this account\nAccount: ed0fe2baf82b35eba11b9791f89ce5450588814dc2e7581a8eeab50a88c9e57c\nSigning key: 8174099687a26621f4e2cdd7cc03b3dacedb3fb962255b1aafd033cabe831530\nNew encryption key: 0000000000000000000000000000000000000000000000000000000000000000\nConsequence: coins deposited from now on are encrypted to this key; only its holder can read them.\nDevice nonce: 1                   "
+    },
+    {
+      "name": "append_inbox",
+      "op": "append_inbox",
+      "bytes": 833,
+      "sha256": "cd8c16ccea816b5492d43f3231064b7b606e5da02aa336a9542c0df49f342440",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Append an inbox entry\nSite: Site: Add a device              \nRole: device of this account\nAccount: 03904ea571e469e5aed5698d2477b6e3ff522c2bb4ca42b70c4281c449b84993\nSigning key: b10253764c8b233fb37542e23401c7b450e5a6f9751f3b5a014f6f67e8bc999d\nInbox entry 1 of 6: 923fe53966c6cd9343e11af776cd4b05be315ea4b200b02e4d5dfb0f929b73bf\nInbox entry 2 of 6: ecdf0f12ddc3345a0a2320a6b5fa4c7c5b9ee3a596d642fd285e003545e341e0\nInbox entry 3 of 6: ac4ad3a31dd41c406045bf3b994f86aefafdf8cfa9920f609fd5c971b4f3fe91\nInbox entry 4 of 6: 6849837f27f87cec4d16fa0e0428821ce42ce4cfd18178007b651661195ed68f\nInbox entry 5 of 6: 36bc29ec2e4f01f2e0af5bcedfae48e89f04b7b8466ebdd2ebbca765dcc1d827\nInbox entry 6 of 6: 88dc92a5a0d32f6b4b48de69da8270cf39c6fedf71167c2c992cc96816b34ef3\nDevice nonce: 17                  "
+    },
+    {
+      "name": "append_inbox 0xff",
+      "op": "append_inbox",
+      "bytes": 833,
+      "sha256": "867b81eeea655880b89dd6feefceaf8136d8f76213845b0dae5207f6627ddaf1",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Append an inbox entry\nSite: Consequence: none               \nRole: device of this account\nAccount: cf7afbd11b427d7c6dc290ecc91a69582592acd548d7c280e4c2e4e5a4463b5d\nSigning key: f576104eebeab09651d83acffc77c8b8c6eaa4b767aeab24d7da80f83f51d865\nInbox entry 1 of 6: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nInbox entry 2 of 6: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nInbox entry 3 of 6: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nInbox entry 4 of 6: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nInbox entry 5 of 6: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nInbox entry 6 of 6: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "withdraw_unshielded 0",
+      "op": "withdraw_unshielded",
+      "bytes": 620,
+      "sha256": "86614cb13a2d72986ed1b2f4eeff1744d6c1e2a52ef59faacdcb72c9a7709153",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: device of this account\nAccount: 1c6c41f5155b8678f42dcb3c5ebb97fed1b0ddc748a9622f020993b18f07f26e\nSigning key: a4b3504c2769fce9547f6dda310dd8b094d630a044d65f5324d4b37310aab714\nToken: d0f631ca1ddba8db3bcfcb9e057cdc98d0379f1bee00e75a545147a27dadd982\nAmount (base units): 1000000                                \nThis site labels it: 1.000000 tUSDC                                   \nTo unshielded address: c7d3ddc2d520e788d9f0c2b830eed54ed2510ea6eaa0ad4b7573c7e554b78928\nDevice nonce: 0                   "
+    },
+    {
+      "name": "withdraw_shielded 0",
+      "op": "withdraw_shielded",
+      "bytes": 861,
+      "sha256": "10cb26c1f321dc19728df54aa47f51f4cb2a4794ae19ce3f012bb2e6b6b28dc4",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: 79a5cd1f7350ae5fba292d6fcb68db53fa2f959079b6ee3413a1dd528025a543\nSigning key: 07e7394e0702340d9fd1d777fbbad2804a5188d1dd07ff580f473bd7645ff205\nToken: d0f631ca1ddba8db3bcfcb9e057cdc98d0379f1bee00e75a545147a27dadd982\nAmount (base units): 1000000                                \nThis site labels it: 1.000000 tUSDC                                   \nTo shielded key: 91e91f9c37c515f868444200f8131ec79f53f762138c2918549284cd0c0be335\nSpent coin value: 1000000                                \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 0                   \nChange back to this account: 0                                      \nDevice nonce: 1                   "
+    },
+    {
+      "name": "withdraw_shielded_to_contract 0",
+      "op": "withdraw_shielded_to_contract",
+      "bytes": 871,
+      "sha256": "f3912aa0b050c0822c2398965629f45a8d541ad63e59b6d50769d8ee499841e3",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract\nSite: Example Wallet                  \nRole: device of this account\nAccount: 2f76d49c9f42276337f9d8241d65cb692bcf0fb2f6901184b5b1e72012a35005\nSigning key: 8dfad052fee5c62957d3ebe1752219a02f45634b2c32a6ac408b26ffcedfb7da\nToken: d0f631ca1ddba8db3bcfcb9e057cdc98d0379f1bee00e75a545147a27dadd982\nAmount (base units): 1000000                                \nThis site labels it: 1.000000 tUSDC                                   \nTo contract: ac6d3d22664f36b668f4d92031466c792a5b932df509bbb11a06994368f419f8\nSpent coin value: 1000000                                \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nDevice nonce: 17                  "
+    },
+    {
+      "name": "withdraw_unshielded 1",
+      "op": "withdraw_unshielded",
+      "bytes": 620,
+      "sha256": "fbc6b56e7d4ec82a2d03501f2b56751c33034c664d264e5e231b4c603e0b7dc8",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens\nSite: a                               \nRole: device of this account\nAccount: 4d6124c26d1d9b9573e06a739fef0ca093646d546fe7e97b0cd51030f21b9e41\nSigning key: 1e3f92d0f678eb83b0bf93855d90699d8ae5dfb4ae023bdf352bd8d93f2060b1\nToken: 0000000000000000000000000000000000000000000000000000000000000000\nAmount (base units): 0                                      \nThis site labels it: 0 NIGHT                                          \nTo unshielded address: 23595baa7c733c28d1b0cdbf7c7fcf69467f55d8444cb44d4114a8e1d032914b\nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "withdraw_shielded 1",
+      "op": "withdraw_shielded",
+      "bytes": 861,
+      "sha256": "9183e8e841fe7f9f3678de026d580c46b5f89398e6384ce8c0c69c92053c66dc",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens\nSite: Site: Add a device              \nRole: device of this account\nAccount: 2f7bf51b152ff70b1718753c46b6ef7fbe1260aea06acf8e16f64c07347e5524\nSigning key: 5bda7a9c0fb9e5102411342f9bedf63f37d8835ee6e903e95dd3050fd15af81c\nToken: 0000000000000000000000000000000000000000000000000000000000000000\nAmount (base units): 0                                      \nThis site labels it: 0 NIGHT                                          \nTo shielded key: 8c4bba9e7c828a1bbd6fb23f09d445de192ac2e9fc0e580f8b236f5d6c7eb5c6\nSpent coin value: 7                                      \nSpent coin nonce: 6f5eba2319bd7584711fc21c2eb5d4bb863327bb7a5aec7ea92effdbf917cd8f\nSpent coin index: 1000                \nChange back to this account: 7                                      \nDevice nonce: 0                   "
+    },
+    {
+      "name": "withdraw_shielded_to_contract 1",
+      "op": "withdraw_shielded_to_contract",
+      "bytes": 871,
+      "sha256": "44948acd7dc072043694fa81c8bbc78d1d62ff3125d56914c9c6fc8fdf7da834",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract\nSite: Consequence: none               \nRole: device of this account\nAccount: 19a32960cbb327471fab9d2d1592a99d6164248209d223a803a26c933c46b5cc\nSigning key: dd9d6e0266d0a3f9adf3748ba973419b373d33434f649276549a1963164e7e49\nToken: 0000000000000000000000000000000000000000000000000000000000000000\nAmount (base units): 0                                      \nThis site labels it: 0 NIGHT                                          \nTo contract: ca6cb4bea7c5b95f3312897dfc0cd551c2d095065606f16cfe583c682f0ce51f\nSpent coin value: 0                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nDevice nonce: 1                   "
+    },
+    {
+      "name": "withdraw_unshielded 2",
+      "op": "withdraw_unshielded",
+      "bytes": 620,
+      "sha256": "04ca053d9d7267dccee2f7b0d49d4b80d6255b4bbb1abb03686d6c5f4b026f89",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: device of this account\nAccount: caca68d28f94797a4e22118af27f5158e3f4e75f46a031a09fe64beb44ac057a\nSigning key: 148bc7fa770e6e057657d90f45b92553689e211e96863a401ec8fb455f3091b1\nToken: 7c1c97df17c066924822b0af09a65251554962c61e23329aed04cd19020dc3b8\nAmount (base units): 340282366920938463463374607431768211455\nThis site labels it: 340282366920938463463.374607431768211455 ABCDEFGH\nTo unshielded address: 65b2bbbf1a23e1e0dcc443a0bfdeff977593c20083f2273ffb6f62cf0c727f49\nDevice nonce: 17                  "
+    },
+    {
+      "name": "withdraw_shielded 2",
+      "op": "withdraw_shielded",
+      "bytes": 861,
+      "sha256": "c5c32750b14389b27d7dc9039e723242cd4e935eb4c34e6130ab7217056d0845",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: 183c9ae2002fa1db46d329a6e80ee082ef207649ce338cf524eda7e44d52bbd3\nSigning key: e964e91cb42e10c4f7e0ecd1a344d4fa24306de8ae45fb20bcd0f482f732cbff\nToken: 7c1c97df17c066924822b0af09a65251554962c61e23329aed04cd19020dc3b8\nAmount (base units): 340282366920938463463374607431768211455\nThis site labels it: 340282366920938463463.374607431768211455 ABCDEFGH\nTo shielded key: b604257892f6c012bf913cef1edd2d3a489850457173b549795f4551eb6b45e9\nSpent coin value: 340282366920938463463374607431768211455\nSpent coin nonce: ce5dfbf490efb0c5132dabef3377300b9f3a216bb5b064ff323d258c48e0301b\nSpent coin index: 2000                \nChange back to this account: 0                                      \nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "withdraw_shielded_to_contract 2",
+      "op": "withdraw_shielded_to_contract",
+      "bytes": 871,
+      "sha256": "4f32d5bf8fe4d3bff5d632197afe31e832c200964e3c1158269d6c02397cc9d4",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract\nSite: Example Wallet                  \nRole: device of this account\nAccount: 38f064b303ae0cc9bf9ebcec06c5a2514b46fd272e9e6f6c014e963c7d9bb699\nSigning key: 040623b913f92eb696aa476bd8f9bf942fb5e446f3a074a8ef553ae6fd38559c\nToken: 7c1c97df17c066924822b0af09a65251554962c61e23329aed04cd19020dc3b8\nAmount (base units): 340282366920938463463374607431768211455\nThis site labels it: 340282366920938463463.374607431768211455 ABCDEFGH\nTo contract: 4099c0d16a5c3c7380e26dd85abf92a237947b799363da44ef7b4d7e2efa4e2d\nSpent coin value: 340282366920938463463374607431768211455\nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nDevice nonce: 0                   "
+    },
+    {
+      "name": "withdraw_unshielded 3",
+      "op": "withdraw_unshielded",
+      "bytes": 620,
+      "sha256": "4ec84fc0414a9829bb47f02351a8735320337b0d5737496120d497317f8a3ca2",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens\nSite: a                               \nRole: device of this account\nAccount: 4433bc66ae08f6d5476eee19a8c9dfd3e11f50c8ffe92631df8ff5422f2c459f\nSigning key: 485246e6c73d3289378a31c7e47401cdead98b5a7c64a5a48e1b60a4f9f3d45f\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo unshielded address: 939d818e80a241665d9546309f94e55f3c747a2edb639ceaf67cc894b37e0972\nDevice nonce: 1                   "
+    },
+    {
+      "name": "withdraw_shielded 3",
+      "op": "withdraw_shielded",
+      "bytes": 861,
+      "sha256": "dd335792b30abd2bf6747cf19a21cd068688a85bdc2378b26b8b174544f175fa",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens\nSite: Site: Add a device              \nRole: device of this account\nAccount: a8a8b8074a6f43916156b16ed322a98430f3ca2d71f2c071aa8bfce0626b6f60\nSigning key: 1e0c92fd487aae4027971e42724db2c2967775fa0d987582ddee7d4d57550ad6\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo shielded key: b266db9649984b4dd680ab7dd39fb64f2ce4ec3f154bfb588bc44eacb84e39a0\nSpent coin value: 26                                     \nSpent coin nonce: 917d2955d0e251727fd075b38168f3769650a87a01703f73e3849332417306fe\nSpent coin index: 3000                \nChange back to this account: 21                                     \nDevice nonce: 17                  "
+    },
+    {
+      "name": "withdraw_shielded_to_contract 3",
+      "op": "withdraw_shielded_to_contract",
+      "bytes": 871,
+      "sha256": "e15f4dbf516cdcc6137367bd10b5eb7d449286917f65e7f2e673cbbfc7af5ac3",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract\nSite: Consequence: none               \nRole: device of this account\nAccount: 788a4a82dfdb02a84d6fbf59655be3293fdd798937639691d99c296c7856f025\nSigning key: 6b4e7621b69f1b9e9a0579f021f78c34006ff840a27f7026e1b698a9d3eac1a1\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo contract: b8dc11337a1a3e19cc371b51a6ecc09665eb12ced69bb7ea46c8d60a50a68a6b\nSpent coin value: 5                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "add_device midnight:account:device:evm:v2",
+      "op": "add_device",
+      "bytes": 705,
+      "sha256": "58cf6ce66af40dd8f7104ba152ce8b32f7a93ccbd9eb7fecc222c81faa272397",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Add a device\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: device of this account\nAccount: edd94c5dc803a9be6b486478a87af4dc3a1b464e56cac5215059dc1973da29d7\nSigning key: a94963d1046f43c9b6749c90fbf32ed9fa61cb21449039bf16fbcaa2c812508e\nConsequence: gives this device FULL control of this account.\nDevice scheme: midnight:account:device:evm:v2  \nEthereum address: 0x603871c2ddd41c26ee77495e2e31e6de7f9957e0\nDevice privacy salt: 1d1f1dd4f4229d1bd13e698acbd5f820e9591bab5c8fd015846d1bf8187a25e5                                                                                                                                       \nDevice nonce: 0                   "
+    },
+    {
+      "name": "remove_device midnight:account:device:evm:v2",
+      "op": "remove_device",
+      "bytes": 781,
+      "sha256": "d8fa11fb9e922bb7d27a1cf4c87528320c065c6eb3531a4e2fc50a9da9e52b00",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Remove a device\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: 3c9e6f7d7c7424d362e1da167418831c6de2ee48a459c42577d31e40372d5930\nSigning key: aa9289d9eb73a66807b3df01bdc5dd9cef06ee67798469aa03111fa679fd6fff\nConsequence: the removed device can no longer act for this account.\nDevice scheme: midnight:account:device:evm:v2  \nEthereum address: 0x603871c2ddd41c26ee77495e2e31e6de7f9957e0\nDevice privacy salt: 1d1f1dd4f4229d1bd13e698acbd5f820e9591bab5c8fd015846d1bf8187a25e5                                                                                                                                       \nDevice use counter: 4                   \nDevice epoch: 1         \nDevice nonce: 1                   "
+    },
+    {
+      "name": "add_device midnight:account:device:v1",
+      "op": "add_device",
+      "bytes": 705,
+      "sha256": "0058e5a339bdb974ac27340aed4b8f46f70e90eeded0e28de059d7adabe6f24d",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Add a device\nSite: Example Wallet                  \nRole: device of this account\nAccount: a90e16488b021398da63dbd4e977c6fcf825db57725fbca388259f9d8c398e63\nSigning key: 4b28763730692691823ebf2fd111288684a6bc966fa7285b908d7420a575de90\nConsequence: gives this device FULL control of this account.\nDevice scheme: midnight:account:device:v1      \nJubJub key x: 765b4bcb86288a3b0de8dd9dedb10f9734e82d9f5c07d2d51c7f99552f150271\nJubJub key y: 608741cee17ca4b4226bf56ab2f02287daca3188973ce8bb5db1647bb5bc5e4c                                                                                                                            \nDevice nonce: 17                  "
+    },
+    {
+      "name": "remove_device midnight:account:device:v1",
+      "op": "remove_device",
+      "bytes": 781,
+      "sha256": "dd2107bb44c18c29d3973ee8dd6b163d6d1e094d1feabf9a081104308652efb8",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Remove a device\nSite: a                               \nRole: device of this account\nAccount: 4ab554d655b0e859cb8ced80407ffc7833c38083479bd9d4d3b36d2fdcdb03c1\nSigning key: be003d98279fed79b6332ec717f4c4e9a6bdaa607e33d2007a67c73054af1642\nConsequence: the removed device can no longer act for this account.\nDevice scheme: midnight:account:device:v1      \nJubJub key x: 765b4bcb86288a3b0de8dd9dedb10f9734e82d9f5c07d2d51c7f99552f150271\nJubJub key y: 608741cee17ca4b4226bf56ab2f02287daca3188973ce8bb5db1647bb5bc5e4c                                                                                                                            \nDevice use counter: 4                   \nDevice epoch: 1         \nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "add_device midnight:account:device:sol:v1",
+      "op": "add_device",
+      "bytes": 705,
+      "sha256": "bf6fda24b7bbcb0fec62dd6b3eb9b6eb5f9bd5c66613194a867e573a46dd2187",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Add a device\nSite: Site: Add a device              \nRole: device of this account\nAccount: 1d8749fe1c973eeba887e0c20cab8f4a2844405e37a863347f22966dcf0f52ee\nSigning key: 7db4e26ca1efc6d6169b3bc758b158280021aa5606c7202304b5ca44826932ca\nConsequence: gives this device FULL control of this account.\nDevice scheme: midnight:account:device:sol:v1  \nSolana key: 32b56ed53348a8587f30c90e5c6406df95d3b8ab1130b1da62bcf492a8ed8a63\nDevice privacy salt: 896fdfdb1426bfb4030be0c870ea85a27ce51290b16eb78b18893c2aedbb034a                                                                                                                       \nDevice nonce: 0                   "
+    },
+    {
+      "name": "remove_device midnight:account:device:sol:v1",
+      "op": "remove_device",
+      "bytes": 781,
+      "sha256": "1513fd680cd1a46e0ea40800468e3be0c92267f39f69559e4797df2ae5336b09",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Remove a device\nSite: Consequence: none               \nRole: device of this account\nAccount: 1e06965ecaaafec00c00a642277ab6c299bc2b0a545fdae961eacae8c0ab8181\nSigning key: bbe3d6a9e6f340971b345ed909009c64866cdad0bb6e3fafe4cbdafd57e8e5e8\nConsequence: the removed device can no longer act for this account.\nDevice scheme: midnight:account:device:sol:v1  \nSolana key: 32b56ed53348a8587f30c90e5c6406df95d3b8ab1130b1da62bcf492a8ed8a63\nDevice privacy salt: 896fdfdb1426bfb4030be0c870ea85a27ce51290b16eb78b18893c2aedbb034a                                                                                                                       \nDevice use counter: 4                   \nDevice epoch: 1         \nDevice nonce: 1                   "
+    },
+    {
+      "name": "add_device midnight:account:device:k1:v2",
+      "op": "add_device",
+      "bytes": 705,
+      "sha256": "56b376edfad9c7d4a3dbe78cadbcecab0fb1a70af4aa89af5945b36b57f507b9",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Add a device\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: device of this account\nAccount: b9d4f5852a82f65b3a8ca4f97b514fe4573079de8dc73b3cae2bac7531780e20\nSigning key: 8ca0692fef99229301a9c46e4646106c373d5c8b6746b5e8105ec82e10b692d8\nConsequence: gives this device FULL control of this account.\nDevice scheme: midnight:account:device:k1:v2   \nsecp256k1 key x: d1a4ef5a413173f3187dc61f00f98b7182a15c7e2461f8eab7e4030654478465\nsecp256k1 key y: 7c3086a60405b43dba3feef2a42df61a5ad7f00579c9b790e768083f4e587620\nSigning envelope: 1                                                                                                  \nDevice nonce: 17                  "
+    },
+    {
+      "name": "remove_device midnight:account:device:k1:v2",
+      "op": "remove_device",
+      "bytes": 781,
+      "sha256": "1a9b094e93c91317287b4ad2d0d5c20492df0002dda877ff713dc7a87b502018",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Remove a device\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: c5dcee11610c6a32271550f68647e109dc8e4cf3a607b6c9869dafe7f617ae10\nSigning key: b774b982ad17764f5783632b0c4c841b80ec78ee67f3ccc5d9488d13c6850955\nConsequence: the removed device can no longer act for this account.\nDevice scheme: midnight:account:device:k1:v2   \nsecp256k1 key x: d1a4ef5a413173f3187dc61f00f98b7182a15c7e2461f8eab7e4030654478465\nsecp256k1 key y: 7c3086a60405b43dba3feef2a42df61a5ad7f00579c9b790e768083f4e587620\nSigning envelope: 1                                                                                                  \nDevice use counter: 4                   \nDevice epoch: 1         \nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "add_device midnight:account:device:r1:v2",
+      "op": "add_device",
+      "bytes": 705,
+      "sha256": "5923b107b1527ffd3ccc0accc37c39080418f1e7bebad4b78a7b181c144ade20",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Add a device\nSite: Example Wallet                  \nRole: device of this account\nAccount: 594c173f7fdee4b629e20728729b8ee85dedd3a2354fa8e550ca34098b01a8ca\nSigning key: e8753fbc84820c5b05390be595e6b9e5fab5fecda01bd3960de363c45859ddf8\nConsequence: gives this device FULL control of this account.\nDevice scheme: midnight:account:device:r1:v2   \nPasskey key x: 9c76bfc52471e1db3181b45dae7b2c320226454cdd8b4a0fd4deb28c4fdc1b50\nPasskey key y: 57a7b50a5ea928451084d14b375fda9e39bd2fc18d62be3e4fe73fda450beed1\nPasskey origin: https://a.example.com\nPasskey RP (hash): 796e80c7e5bf8a48cb603f229eeec578ec72443dbfe37710cc80de67228c6713\nDevice nonce: 0                   "
+    },
+    {
+      "name": "remove_device midnight:account:device:r1:v2",
+      "op": "remove_device",
+      "bytes": 781,
+      "sha256": "43016e7f3dff572142843d19464fe3a05f7a8513f73fb649afe7c7ae9cf547a0",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Remove a device\nSite: a                               \nRole: device of this account\nAccount: ae1b0ca4356804b5332bd02c35120f6cbef5600a471ba8e615a230cd65bc7f9c\nSigning key: be6463cd7e9e1395bb53c80d6e755af25751f678a35aa16e8d1915b45ee8852a\nConsequence: the removed device can no longer act for this account.\nDevice scheme: midnight:account:device:r1:v2   \nPasskey key x: 9c76bfc52471e1db3181b45dae7b2c320226454cdd8b4a0fd4deb28c4fdc1b50\nPasskey key y: 57a7b50a5ea928451084d14b375fda9e39bd2fc18d62be3e4fe73fda450beed1\nPasskey origin: https://a.example.com\nPasskey RP (hash): 796e80c7e5bf8a48cb603f229eeec578ec72443dbfe37710cc80de67228c6713\nDevice use counter: 4                   \nDevice epoch: 1         \nDevice nonce: 1                   "
+    },
+    {
+      "name": "remove_device max counter/epoch",
+      "op": "remove_device",
+      "bytes": 781,
+      "sha256": "35bf4d2d027cbd159824b398634f807dc9995c5a61c804b2af88c5208bbf6d9d",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Remove a device\nSite: Site: Add a device              \nRole: device of this account\nAccount: f2517bee4b584d5c41f90d3bb2316a3d4c2a17bb1576c51f45d77afcfe2d4f5a\nSigning key: 7b09b62019a664ab842cd7397595532838266bf132089eafea3a66c9e26d5ddd\nConsequence: the removed device can no longer act for this account.\nDevice scheme: midnight:account:device:sol:v1  \nSolana key: 32b56ed53348a8587f30c90e5c6406df95d3b8ab1130b1da62bcf492a8ed8a63\nDevice privacy salt: 896fdfdb1426bfb4030be0c870ea85a27ce51290b16eb78b18893c2aedbb034a                                                                                                                       \nDevice use counter: 18446744073709551615\nDevice epoch: 4294967295\nDevice nonce: 17                  "
+    },
+    {
+      "name": "remove_device literal",
+      "op": "remove_device",
+      "bytes": 781,
+      "sha256": "569e23a97ac3335511107487d817652d670a9f64399b5a9eb4f7933774b66515",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Remove a device\nSite: Consequence: none               \nRole: device of this account\nAccount: 68f0ba5476b681cfc0487e996a5eb185bbe0c719a712c04360bc7dfa53705e20\nSigning key: 10a8cdd514d19af335f27cf4392eaeeebdbdf4462b1a5846f16dc0c446243325\nConsequence: the removed device can no longer act for this account.\nRemoves a device this wallet cannot identify\nDevice entry: a3c7f8cabebcea5261cb9ffe51a847d6d74fe8c90c76d886d4748c8f74119383                                                                                                                                                                                                                                                                                \nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "issue_grant midnight:account:grant:id:evm:v2",
+      "op": "issue_grant",
+      "bytes": 1646,
+      "sha256": "cfd020d656abbc7a2ad9cf2ec285af8aaa1e33c0b842941bc58031632de0ce6b",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: device of this account\nAccount: 25afa7834300983366e2a00cab28212516d9d87090780ada87ce8d6dc0623099\nSigning key: 8c76fc12beab527a127470939e946aa2ca17eb3c0c84ea667ba4184b929076f8\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:evm:v2\nEthereum address: 0x69895451e13a3ada9e75b59b4499090f44e99e88\nDevice privacy salt: 9f75bfc33fb0bad8d9faad0efc7457f440f1cbd388e01cb7f46f540d19e3a418\nGrantee label: Example dApp                                                                                                       \nGrantee slot: 0  \nMay withdraw unshielded: yes\nMay withdraw shielded: yes\nMay withdraw shielded to a contract: no \nMay read the inbox: yes\nToken: b66330012f22cdd0db6c60056479084357455b9460004a5582d6d1586f9ead08\nRecipient kind: any recipient     \nRecipient: 0000000000000000000000000000000000000000000000000000000000000000\nMax coin value: 340282366920938463463374607431768211455\nPer-call cap: 340282366920938463463374607431768211455\nTotal cap: 340282366920938463463374607431768211455\nExpires at (block time, seconds; 0 = never): 0                   \nPasskey RP (hash): 0000000000000000000000000000000000000000000000000000000000000000\nInbox read key: a38f7d4d4d4223954e18acb9e3a940dbd4fe82cb91a2386255b531383d084f45\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: no \nCaller: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 0                   "
+    },
+    {
+      "name": "revoke_grant midnight:account:grant:id:evm:v2",
+      "op": "revoke_grant",
+      "bytes": 729,
+      "sha256": "3e863d9969f2fc05de8244ed21544d1373e62c9b3c3b060d72080f1354f91686",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Revoke a scoped grant\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: 4a55d40d6f6837c671c5f097350ec54b563a5f211a6260a81f72f4d22c208432\nSigning key: bd48fa291f9292daa2953e3f4d7252ff3a916dfdfd7cda1c48f95103e7cd8fd0\nConsequence: the grantee can no longer act under this grant.\nGrantee scheme: midnight:account:grant:id:evm:v2\nEthereum address: 0x69895451e13a3ada9e75b59b4499090f44e99e88\nDevice privacy salt: 9f75bfc33fb0bad8d9faad0efc7457f440f1cbd388e01cb7f46f540d19e3a418\nGrantee label: Example dApp                                                                                                       \nGrantee slot: 0  \nDevice nonce: 1                   "
+    },
+    {
+      "name": "issue_grant midnight:account:grant:id:v1",
+      "op": "issue_grant",
+      "bytes": 1646,
+      "sha256": "76412282bb9ab509917aaf746a32898a9f331137181ef049e5370f9de7dbf1df",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: Example Wallet                  \nRole: device of this account\nAccount: 154ec9eb4acde1aa08fa0ad63a7c240790c54d41676fcff9902e7d779daa4786\nSigning key: ac2b9048f03250d1026b072e624a354036488d7b2844882f5da19220f8650199\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:v1    \nJubJub key x: ae76d444727e0458cc2f0575a79e3186404d9f3458c728cc6166634dd7de8cad\nJubJub key y: 3d8c113c707e3108e355c839e98af50f22f3d0c3e315afca19af1d49eaab96e6\nGrantee site label (hash): 54f39125458832ffc6a105c43d22e0d4b0a3aeb7958fa02c4cb3cd5118f80137                            \nGrantee slot: 7  \nMay withdraw unshielded: yes\nMay withdraw shielded: no \nMay withdraw shielded to a contract: no \nMay read the inbox: no \nToken: 0b07c0d4d7639691476823f1d4618beef2bb98a4358e4ee05bf2d4f65664d44d\nRecipient kind: unshielded address\nRecipient: c5a4dd8733e10c84f8ac8c5d32ed56298c1af922317a9cd26932477ec0b0fdd9\nMax coin value: 1000                                   \nPer-call cap: 100                                    \nTotal cap: 1000                                   \nExpires at (block time, seconds; 0 = never): 1800000000          \nPasskey RP (hash): 0000000000000000000000000000000000000000000000000000000000000000\nInbox read key: 0000000000000000000000000000000000000000000000000000000000000000\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: yes\nCaller: 61de55ba3388aec4fdf6ecfc6eef846fb0f1b13e28cc8381270c27ffa313aee5\nDevice nonce: 17                  "
+    },
+    {
+      "name": "revoke_grant midnight:account:grant:id:v1",
+      "op": "revoke_grant",
+      "bytes": 729,
+      "sha256": "41962c7ca68dac7965a6e08fbc8d6e93247b7034103b121b954e6b69fe44c112",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Revoke a scoped grant\nSite: a                               \nRole: device of this account\nAccount: f03f1ff14ac7f300b166a0fc85ed9d3d5cbfc19371748fc2e8438e98187be9a8\nSigning key: 580a7865c0b557a35f895c1d166b3a7c8efdd6a441a5a30490ac71a487fd31ae\nConsequence: the grantee can no longer act under this grant.\nGrantee scheme: midnight:account:grant:id:v1    \nJubJub key x: ae76d444727e0458cc2f0575a79e3186404d9f3458c728cc6166634dd7de8cad\nJubJub key y: 3d8c113c707e3108e355c839e98af50f22f3d0c3e315afca19af1d49eaab96e6\nGrantee site label (hash): 54f39125458832ffc6a105c43d22e0d4b0a3aeb7958fa02c4cb3cd5118f80137                            \nGrantee slot: 7  \nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "issue_grant midnight:account:grant:id:sol:v1",
+      "op": "issue_grant",
+      "bytes": 1646,
+      "sha256": "9b84f8ab379dfd252f7175ef39b5bc102d207ded6e99c8db3b768bd1bc71edbb",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: Site: Add a device              \nRole: device of this account\nAccount: 74331f54dbe26381f43bcc4e4df554c678c76cecd81dd825a981129f4bf38267\nSigning key: 3671f84859cef1f2c2f3b7cf2d834c4d2c79ff3890135dfff752367e7186bf72\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:sol:v1\nSolana key: e79afbc118f62c69ce6955da55396a49f466eddb05bdaf2e4e15c3e93c715131\nDevice privacy salt: bfe7bdc39dec38b1edc5eababd9f469fabb18cf216771042867c1eeac1e63853\nGrantee label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                                                                   \nGrantee slot: 255\nMay withdraw unshielded: yes\nMay withdraw shielded: yes\nMay withdraw shielded to a contract: yes\nMay read the inbox: yes\nToken: 6478006603ba3f6802cb01e1a58c87385fd18441a43ebf8d3b8bb585e439211c\nRecipient kind: shielded key      \nRecipient: b3144fef4e2fa695f8904e9af2594628834cfe85e03cb2a0e3c1f3f1b7db46ad\nMax coin value: 1                                      \nPer-call cap: 1                                      \nTotal cap: 1                                      \nExpires at (block time, seconds; 0 = never): 18446744073709551615\nPasskey RP (hash): 0000000000000000000000000000000000000000000000000000000000000000\nInbox read key: 3da58e8427d6c6287dbdcdbd281571172aa68805ef4fa7c811537518527c337e\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: no \nCaller: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 0                   "
+    },
+    {
+      "name": "revoke_grant midnight:account:grant:id:sol:v1",
+      "op": "revoke_grant",
+      "bytes": 729,
+      "sha256": "585c73e9c93eb93f31c23fb6e79b04e3f1d9d3a8fdfb33c3a8bb235dd6dc86b7",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Revoke a scoped grant\nSite: Consequence: none               \nRole: device of this account\nAccount: 03aff6701b0282b1c89d3ee1ca999073917a4e707cf2cc45ba999a364d6f3d35\nSigning key: 77442a2b9662a1f98efd1524612cdbab1b7f664c30e3ad5562666710a904c7bc\nConsequence: the grantee can no longer act under this grant.\nGrantee scheme: midnight:account:grant:id:sol:v1\nSolana key: e79afbc118f62c69ce6955da55396a49f466eddb05bdaf2e4e15c3e93c715131\nDevice privacy salt: bfe7bdc39dec38b1edc5eababd9f469fabb18cf216771042867c1eeac1e63853\nGrantee label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                                                                   \nGrantee slot: 255\nDevice nonce: 1                   "
+    },
+    {
+      "name": "issue_grant midnight:account:grant:id:k1:v1",
+      "op": "issue_grant",
+      "bytes": 1646,
+      "sha256": "41ce56be140fbb7ac8ababf279dc2a1a3ca41598e9def96019f01ad7bdbafedf",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: device of this account\nAccount: 37f8badd04a2eb32b25c36ca290c9fc920f2068eac43b15d38134d92b336ca07\nSigning key: b06f72b5c2c02740fd22d7150a0646afffb3779d7ea189ae9d66c71dfcb0898d\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:k1:v1 \nsecp256k1 key x: 0cfe0785548f6d5af000f0e4faa9450ce6ed6a566678504f64e3d8a64c01f2a0\nsecp256k1 key y: aeaca7ffb6dbf13dbfe7f98b06d2d560253f331ab0551a8f63596a747c2e0f2a\nSigning envelope: 0  \nGrantee site label (hash): 641ada1ff964e61473df590e58139cf6458325a619ab9baf487b032c60251a50\nGrantee slot: 1  \nMay withdraw unshielded: yes\nMay withdraw shielded: no \nMay withdraw shielded to a contract: no \nMay read the inbox: no \nToken: 868b8ebe42990b9d26edf7bb6767cc04dfadd2435bce9949773b2e992ff7afc6\nRecipient kind: contract          \nRecipient: 4187ee7c6de91e3b8f50274e72e7d38174f8cb1dda90a5c993f620b6b638d54f\nMax coin value: 50                                     \nPer-call cap: 50                                     \nTotal cap: 100                                    \nExpires at (block time, seconds; 0 = never): 1                   \nPasskey RP (hash): 0000000000000000000000000000000000000000000000000000000000000000\nInbox read key: 0000000000000000000000000000000000000000000000000000000000000000\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: no \nCaller: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 17                  "
+    },
+    {
+      "name": "revoke_grant midnight:account:grant:id:k1:v1",
+      "op": "revoke_grant",
+      "bytes": 729,
+      "sha256": "6eff49808f34c93a3b9db5bd98eea42bbcc24a23046d1fedfc712dd23c9323d4",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Revoke a scoped grant\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: e2f519936e7a3030c759213617f094e3f7a65c0fef781eeee50e2fe5895faa38\nSigning key: 64228ee43df4326c42292d5e31fe97d498cddccb96bb33866842005b493fa1ba\nConsequence: the grantee can no longer act under this grant.\nGrantee scheme: midnight:account:grant:id:k1:v1 \nsecp256k1 key x: 0cfe0785548f6d5af000f0e4faa9450ce6ed6a566678504f64e3d8a64c01f2a0\nsecp256k1 key y: aeaca7ffb6dbf13dbfe7f98b06d2d560253f331ab0551a8f63596a747c2e0f2a\nSigning envelope: 0  \nGrantee site label (hash): 641ada1ff964e61473df590e58139cf6458325a619ab9baf487b032c60251a50\nGrantee slot: 1  \nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "issue_grant midnight:account:grant:id:r1:v1",
+      "op": "issue_grant",
+      "bytes": 1646,
+      "sha256": "a70d2523905b7a74289f844c74e7140a4ed4bfebcbf337fec60c8e0505c6553e",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: Example Wallet                  \nRole: device of this account\nAccount: e180342f7c35331629cc326d4b1d371c686473ffefe0bf963a425545b149b849\nSigning key: 48e0020d893d600c966f41f2491effce03bf5ebce0e66fd8a10d4a85c4a04883\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:r1:v1 \nPasskey key x: 529f2e3f7652ca17de63fdcff0abf23d0de495b327c891feab6f9782f90c3762\nPasskey key y: 774a6c7ffe1c6589dbee474b3754eb6c3118ab941df48f68934961d8917f9c49\nPasskey origin: https://b.example.org                                                                                \nGrantee slot: 2  \nMay withdraw unshielded: no \nMay withdraw shielded: yes\nMay withdraw shielded to a contract: no \nMay read the inbox: yes\nToken: 8fcd43a06c7c3d895f1538de0abe77ef28bbcf808e0bdbf1406ce767ec97902b\nRecipient kind: any recipient     \nRecipient: 0000000000000000000000000000000000000000000000000000000000000000\nMax coin value: 0                                      \nPer-call cap: 0                                      \nTotal cap: 0                                      \nExpires at (block time, seconds; 0 = never): 0                   \nPasskey RP (hash): 308c94b67244d5a57d1625e1c18e8ce8ca22a8daef6bbb7738f351acc8efb5a7\nInbox read key: b20d384e86bb937dab22f8dae97bb2e75e24d1cdcfbbad1f08005002a17f9019\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: no \nCaller: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 0                   "
+    },
+    {
+      "name": "revoke_grant midnight:account:grant:id:r1:v1",
+      "op": "revoke_grant",
+      "bytes": 729,
+      "sha256": "5f90ea130dc4c92be5c41f0cf00a6fcb16c9af5f5cc94169e54cb66878d7f976",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Revoke a scoped grant\nSite: a                               \nRole: device of this account\nAccount: f0999e06e5121dbcdc76ac3e9c6ff7ed67dda05dca395d1a15ad1fe16d85eaea\nSigning key: d5752f8676d5eae0b7bed4361059155a0164a71e3f8394f116483fc3a1fd58b2\nConsequence: the grantee can no longer act under this grant.\nGrantee scheme: midnight:account:grant:id:r1:v1 \nPasskey key x: 529f2e3f7652ca17de63fdcff0abf23d0de495b327c891feab6f9782f90c3762\nPasskey key y: 774a6c7ffe1c6589dbee474b3754eb6c3118ab941df48f68934961d8917f9c49\nPasskey origin: https://b.example.org                                                                                \nGrantee slot: 2  \nDevice nonce: 1                   "
+    },
+    {
+      "name": "revoke_all_grants",
+      "op": "revoke_all_grants",
+      "bytes": 389,
+      "sha256": "a0e362ff439ab91775cd449717bcec747106ba59ad26edf6a565866cac266263",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Revoke all scoped grants\nSite: Site: Add a device              \nRole: device of this account\nAccount: 5e12d218654ba7d91584719906992be583ec0964cefe0bbaede980e9894bbf06\nSigning key: d43d966374e674084f9b94c581f709f543fe863253055ce5fb8b3115b771f448\nConsequence: every scoped grant of this account stops working.\nDevice nonce: 17                  "
+    },
+    {
+      "name": "publish_recovery_session",
+      "op": "publish_recovery_session",
+      "bytes": 1250,
+      "sha256": "c14691a6ec3e80df49154cbb3703be3736272ae4f2b64b113bc0d2d3cd24a69f",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Publish a recovery session\nSite: Consequence: none               \nRole: device of this account\nAccount: 6b8212040b819d7c18bc8b7d0f76ddfa5fc8b7b83d226d822c6bd3fe9f176dfa\nSigning key: 4137147395b7a3f13a2bbda9523fb9f78d7d797bf91a01a90beaecbcf7cad368\nConsequence: sets this account's recovery key; its holder can take over this account after the veto window.\nRecovery key x: 65c858d48898a9c8076d192454c54564e699e368f0d4831a9dc630316b4d387f\nRecovery key y: 39e6b11954e2c6c1d81a654d0a04fab0d626ddd012e6284efc77bd3cc81d2976\nSession nonce: 8320afe4786b1bdfe350c64a36bde810a887e47e975d1b886e929f9316cacf32\nBackup vector value 1 of 4: 0000000000000000000000000000000000000000000000000000000000000001\nBackup vector value 2 of 4: 73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000\nBackup vector value 3 of 4: 0000000000000000000000000000000000000000000000000000000000000000\nBackup vector value 4 of 4: 0000000000000000000000000000000000000000000000000000000000000000\nBackup vector length: 2  \nKey wrap part 1 of 2: f0a289923ed634acec748941a7fab6a057e5d4a5cb29e5e2b6136d639897c74a\nKey wrap part 2 of 2: 1c89970ea402eabe9b2d7f9394c3490f28908dc6b79c68f1a7e080d941bc027c\nDevice nonce: 18446744073709551615"
+    },
+    {
+      "name": "publish_recovery_session 4",
+      "op": "publish_recovery_session",
+      "bytes": 1250,
+      "sha256": "eca301e863697a0062e3105488210635767742605051c4804d46b72052070ff8",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Publish a recovery session\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: device of this account\nAccount: eeb1556561e15a3028c792a47196ac6edbbfb1ba158424ec14d9d8d99ce6a659\nSigning key: bd9905f6cfbf1d2b8df04b8a5d51dab41a39d749e295d8f253846e16744c5a21\nConsequence: sets this account's recovery key; its holder can take over this account after the veto window.\nRecovery key x: 6c1125cadee1b63a6af9f2f212e90d1ef72b18658a5951c48ae410dc2b95937b\nRecovery key y: 1993483e7fe2277566015d659b27a0e03d35665010cafa86472556c53ae0b494\nSession nonce: a786ee13c2653b70bb3b196de9f39296b2a7ffb34f1b97bc1d30285d9f03def0\nBackup vector value 1 of 4: 0000000000000000000000000000000000000000000000000000000000000005\nBackup vector value 2 of 4: 0000000000000000000000000000000000000000000000000000000000000006\nBackup vector value 3 of 4: 0000000000000000000000000000000000000000000000000000000000000007\nBackup vector value 4 of 4: 0000000000000000000000000000000000000000000000000000000000000008\nBackup vector length: 4  \nKey wrap part 1 of 2: 0000000000000000000000000000000000000000000000000000000000000000\nKey wrap part 2 of 2: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 0                   "
+    },
+    {
+      "name": "recover_cancel",
+      "op": "recover_cancel",
+      "bytes": 391,
+      "sha256": "29bf52a45b85db9d672a09ba0aa3b223f98c7927f2788378e63b6f3a737e1b01",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Cancel a pending recovery\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: 7eb2d86b38482ab20742cbd14dccf3d1d4405d3086839836d53b6290acb7a9d1\nSigning key: 401f59f2435737f0e660c91c67af8df025cc5ad951a984b2a05ba729ccd77100\nConsequence: the pending recovery of this account is cancelled.\nDevice nonce: 1                   "
+    },
+    {
+      "name": "withdraw_unshielded_with_grant 0",
+      "op": "withdraw_unshielded_with_grant",
+      "bytes": 746,
+      "sha256": "648c32a0b7cc280946d560bf9a67274fee8bc9224c1856ee17c0d8878ccaa6ee",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens under a grant\nSite: Example Wallet                  \nRole: grantee of a scoped grant\nAccount: 06a3d66339341f66d73bd0507e08f83c4c6a3377556c1aef134f756df08e0a35\nSigning key: a819408ce5010ca2e09ef59ac3d89f5ff8595d02b524e61bf8afa894a95d594f\nToken: d0f631ca1ddba8db3bcfcb9e057cdc98d0379f1bee00e75a545147a27dadd982\nAmount (base units): 1000000                                \nThis site labels it: 1.000000 tUSDC                                   \nTo unshielded address: 174673dbb147f3b6113b102f6a8ddcb8d859f9e390cdcec0deba656f8ec5ad2e\nGrant label: Example dApp                    \nGrant slot: 0  \nGrant issued at nonce: 0                   \nGrant use nonce: 0                   "
+    },
+    {
+      "name": "withdraw_shielded_with_grant 0",
+      "op": "withdraw_shielded_with_grant",
+      "bytes": 1586,
+      "sha256": "d44eba191bc14141e728072aad9c6e3cbacb6e754f80f07be6e746dfd6df7df6",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens under a grant\nSite: a                               \nRole: grantee of a scoped grant\nAccount: ed0fe2baf82b35eba11b9791f89ce5450588814dc2e7581a8eeab50a88c9e57c\nSigning key: 8174099687a26621f4e2cdd7cc03b3dacedb3fb962255b1aafd033cabe831530\nToken: d0f631ca1ddba8db3bcfcb9e057cdc98d0379f1bee00e75a545147a27dadd982\nAmount (base units): 1000000                                \nThis site labels it: 1.000000 tUSDC                                   \nTo shielded key: a7baf7c5c181cb6ce49b58579e31f42cbdce059e498bd3c0814df4df2ddccd59\nChange entry 1 of 6: 692915122e798ee8137da8893dc120649444d63766118c13ce5727e494d97023\nChange entry 2 of 6: e08fa2b826c49cae26dcba268117eb6a20088f1720cd46ef799162d2652f71e1\nChange entry 3 of 6: 92ae698921e5ef7bbc3928ef36ec9953d8a3bb27d7b9340d7d154ffd50d6f451\nChange entry 4 of 6: 17e424f353c377c4c1a841b96aac449b2efdbb670230e623f14e42cdbf41d55f\nChange entry 5 of 6: 1a7cd79a6987be199d201fdc9ed727e296516331a1043835e66c02bbd025fadb\nChange entry 6 of 6: ecf08fc92fad00cf59af19dcd5ac1b9c2f179e4820b48b021e08887a142431b0\nChange entry key: b6d56e46fb665738a83c99fca9e215b1ac0b7cb19b5a659ca98bbf2e67b3e49f\nSpent coin value: 1000009                                \nSpent coin nonce: 9d109e0c6a5ccedf2cd060f1437027e97d406cc9efb840b4a672deae19bade79\nSpent coin index: 0                   \nChange back to this account: 9                                      \nGrant label: z                               \nGrant slot: 3  \nGrant issued at nonce: 5                   \nGrant use nonce: 1                   "
+    },
+    {
+      "name": "withdraw_shielded_to_contract_with_grant 0",
+      "op": "withdraw_shielded_to_contract_with_grant",
+      "bytes": 1596,
+      "sha256": "f4a9114ee4b3eb953a7c138e9658d09d2118dccf124a907757be17a57ce9d253",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract under a grant\nSite: Site: Add a device              \nRole: grantee of a scoped grant\nAccount: 03904ea571e469e5aed5698d2477b6e3ff522c2bb4ca42b70c4281c449b84993\nSigning key: b10253764c8b233fb37542e23401c7b450e5a6f9751f3b5a014f6f67e8bc999d\nToken: d0f631ca1ddba8db3bcfcb9e057cdc98d0379f1bee00e75a545147a27dadd982\nAmount (base units): 1000000                                \nThis site labels it: 1.000000 tUSDC                                   \nTo contract: 1713e3912754cb565cf018e107c853f094c92155b265670f949b6ac48afb94d6\nChange entry 1 of 6: 836de6cab5e5d68dac5cc5bebe09fd325f832afc7f63f12d3b6cd8ec714f99af\nChange entry 2 of 6: ce1f0763bbc3e18bc714dd6b0a79b44959e032266a855f392cd4f6ae0dccf22b\nChange entry 3 of 6: 09ac586eb5c045bc40fdf330adb40d8b8c0b078ac545b9e4c620586bccfdd750\nChange entry 4 of 6: 3b84e2f49a8379bc71ceb27457a165b90e369652b036d793ec774f5ebf78f259\nChange entry 5 of 6: 9c526d90c0bde13ec41be3eca0467d025d551c0dbdc71fa47fe5d1b2c5aab2f8\nChange entry 6 of 6: a3ba4f36090741dd1956769b428c64f55c8f1795b9bea3f402192d0bff998532\nChange entry key: 85bdc88ff4a131be6a898c5dedf41f91dafb086cd7115e5f19444b7485135c50\nSpent coin value: 1000000                                \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nGrant label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nGrant slot: 255\nGrant issued at nonce: 18446744073709551615\nGrant use nonce: 17                  "
+    },
+    {
+      "name": "withdraw_unshielded_with_grant 1",
+      "op": "withdraw_unshielded_with_grant",
+      "bytes": 746,
+      "sha256": "bc102fc5f183aa1551a9e48ece50b1478e8b3f00fde365d425b1c621ba7a14be",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens under a grant\nSite: Consequence: none               \nRole: grantee of a scoped grant\nAccount: cf7afbd11b427d7c6dc290ecc91a69582592acd548d7c280e4c2e4e5a4463b5d\nSigning key: f576104eebeab09651d83acffc77c8b8c6eaa4b767aeab24d7da80f83f51d865\nToken: 0000000000000000000000000000000000000000000000000000000000000000\nAmount (base units): 0                                      \nThis site labels it: 0 NIGHT                                          \nTo unshielded address: 15bc3e5e6188999917bbe30753a660bf87f7ed19d51f989505346f167ed48bb8\nGrant label: Example dApp                    \nGrant slot: 0  \nGrant issued at nonce: 0                   \nGrant use nonce: 18446744073709551615"
+    },
+    {
+      "name": "withdraw_shielded_with_grant 1",
+      "op": "withdraw_shielded_with_grant",
+      "bytes": 1586,
+      "sha256": "c2b8fc711425356b9edb2b5127a804314f981cb9c9cf182f3bfa029c0e361c44",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens under a grant\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: grantee of a scoped grant\nAccount: 1c6c41f5155b8678f42dcb3c5ebb97fed1b0ddc748a9622f020993b18f07f26e\nSigning key: a4b3504c2769fce9547f6dda310dd8b094d630a044d65f5324d4b37310aab714\nToken: 0000000000000000000000000000000000000000000000000000000000000000\nAmount (base units): 0                                      \nThis site labels it: 0 NIGHT                                          \nTo shielded key: 195e4066b75a3b34fdd70e53d25b77ecca60202f01e64654214121b539d215b4\nChange entry 1 of 6: 6c7441675aa73f7bfd25aab34be9d58a0734236213dc680026e26b7c46a6288c\nChange entry 2 of 6: 896ad88bf238b147fc79de9366a249352117b4ea41795594830de5b393718830\nChange entry 3 of 6: e8cb5f7e36c08d0d866cf8f0ed594f0959cf125db213defa23f0c86f9eca0bc4\nChange entry 4 of 6: b5366ae6c5161cd3b33931411b660c2ebe8601318878f8a739e084885d4f7985\nChange entry 5 of 6: 1a9bbf7b15ec22e408450da071658b5f7b8fe108034f93bf4ddb0ecc37946aec\nChange entry 6 of 6: 8c8e0791ecceb184589711b49012acfa3c8a70e1963b4a027863be437b611cf4\nChange entry key: 358b7591f24d313e523c7b34b8bd513e4310e08d058aee11d679ba41958853fe\nSpent coin value: 9                                      \nSpent coin nonce: 9d109e0c6a5ccedf2cd060f1437027e97d406cc9efb840b4a672deae19bade79\nSpent coin index: 1                   \nChange back to this account: 9                                      \nGrant label: z                               \nGrant slot: 3  \nGrant issued at nonce: 5                   \nGrant use nonce: 0                   "
+    },
+    {
+      "name": "withdraw_shielded_to_contract_with_grant 1",
+      "op": "withdraw_shielded_to_contract_with_grant",
+      "bytes": 1596,
+      "sha256": "2308edb5b9898523e5cd164615c044ff24a19b9ba88053e86e12a5f1c2198a4d",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract under a grant\nSite: Account 00 nonce 1              \nRole: grantee of a scoped grant\nAccount: 79a5cd1f7350ae5fba292d6fcb68db53fa2f959079b6ee3413a1dd528025a543\nSigning key: 07e7394e0702340d9fd1d777fbbad2804a5188d1dd07ff580f473bd7645ff205\nToken: 0000000000000000000000000000000000000000000000000000000000000000\nAmount (base units): 0                                      \nThis site labels it: 0 NIGHT                                          \nTo contract: 5e60882b0345be97ce7d35a778f6673f1db44ef932538de5e752020ffd384175\nChange entry 1 of 6: 42842171ac6929b100b81e2b2d08ddbd95afdb9067e217ddbef9ce1a4dde37e2\nChange entry 2 of 6: 85be3847e7ea0e776075263b8bb988024f4c28aad01b196b4882d135cbfb7a57\nChange entry 3 of 6: a9598a52e5192c94b351e38edf2adacf6498ffa400d8104568ebbd1ae6cfa432\nChange entry 4 of 6: 88276e339868f973c0e82740b72c0c5ebedadeb3221369a8ab4b0d1bd686332a\nChange entry 5 of 6: 4027d01cff99998169182d163148f364f2c7d86102fc027b630bc20d23767c49\nChange entry 6 of 6: 6a71e5f2a5d8a45102b8fa1afc79b1bd69dd0af4182dad29f0414de530cb0f52\nChange entry key: 13a3ec805ab247fa5bcdfa2c6f0790c57371f0a9227b81a240d6e75eaea0a7fa\nSpent coin value: 0                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nGrant label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nGrant slot: 255\nGrant issued at nonce: 18446744073709551615\nGrant use nonce: 1                   "
+    },
+    {
+      "name": "withdraw_unshielded_with_grant 2",
+      "op": "withdraw_unshielded_with_grant",
+      "bytes": 746,
+      "sha256": "94f3e33b07a8ceeb11fc9eba016c74c9fb7587a48eb7ead8e84d117a693ff547",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens under a grant\nSite: Example Wallet                  \nRole: grantee of a scoped grant\nAccount: 2f76d49c9f42276337f9d8241d65cb692bcf0fb2f6901184b5b1e72012a35005\nSigning key: 8dfad052fee5c62957d3ebe1752219a02f45634b2c32a6ac408b26ffcedfb7da\nToken: 7c1c97df17c066924822b0af09a65251554962c61e23329aed04cd19020dc3b8\nAmount (base units): 340282366920938463463374607431768211455\nThis site labels it: 340282366920938463463.374607431768211455 ABCDEFGH\nTo unshielded address: 32b1d09cc73e37ba5a3da8d733c203680cb81de56476df308f5838b99f12e8ee\nGrant label: Example dApp                    \nGrant slot: 0  \nGrant issued at nonce: 0                   \nGrant use nonce: 17                  "
+    },
+    {
+      "name": "withdraw_shielded_with_grant 2",
+      "op": "withdraw_shielded_with_grant",
+      "bytes": 1586,
+      "sha256": "aac31718a75627adffb75a59fcd96e42fa63a766a8276f3f8aa47131c22279c7",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens under a grant\nSite: a                               \nRole: grantee of a scoped grant\nAccount: 4d6124c26d1d9b9573e06a739fef0ca093646d546fe7e97b0cd51030f21b9e41\nSigning key: 1e3f92d0f678eb83b0bf93855d90699d8ae5dfb4ae023bdf352bd8d93f2060b1\nToken: 7c1c97df17c066924822b0af09a65251554962c61e23329aed04cd19020dc3b8\nAmount (base units): 340282366920938463463374607431768211455\nThis site labels it: 340282366920938463463.374607431768211455 ABCDEFGH\nTo shielded key: 547741f1623e21f3916ccffcae9b350a9f28d61eadfef483163eea1f0f213e7f\nChange entry 1 of 6: 31f02ae2cbc13ccfa528a1f534e743d3c2a8394ecf8e9b6f7f1dd571dec8579c\nChange entry 2 of 6: 9d91ae9c0ff94d939900ac644e2c72f3ce387e3f2c6b9ebe76221201b0ff3356\nChange entry 3 of 6: 7411dcfccc92285c2294922734765119ad13d979a1e96d145e469c10bf7be12d\nChange entry 4 of 6: 9e393a993e84bd41310e78a7189577f2b065f4650f745d1843d5c2a4e3afcce0\nChange entry 5 of 6: d5879c4f0c6d0439e314232519b95280d847f6987f4e51a2ef23adff987a9722\nChange entry 6 of 6: 5308ee48871b8ab55b3f08e36e7b84c271f379e264aaf483c3d3acb429b82825\nChange entry key: a4d69d3ec67354d851fc9ffae6d68e2fd15cfbebbcfe4cb4067b6fac22907e6b\nSpent coin value: 340282366920938463463374607431768211455\nSpent coin nonce: 9d109e0c6a5ccedf2cd060f1437027e97d406cc9efb840b4a672deae19bade79\nSpent coin index: 2                   \nChange back to this account: 0                                      \nGrant label: z                               \nGrant slot: 3  \nGrant issued at nonce: 5                   \nGrant use nonce: 18446744073709551615"
+    },
+    {
+      "name": "withdraw_shielded_to_contract_with_grant 2",
+      "op": "withdraw_shielded_to_contract_with_grant",
+      "bytes": 1596,
+      "sha256": "65dc410586b024ecaced0d78f381893771e5f1f8ea8029579bdaf7f5f7788993",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract under a grant\nSite: Site: Add a device              \nRole: grantee of a scoped grant\nAccount: 2f7bf51b152ff70b1718753c46b6ef7fbe1260aea06acf8e16f64c07347e5524\nSigning key: 5bda7a9c0fb9e5102411342f9bedf63f37d8835ee6e903e95dd3050fd15af81c\nToken: 7c1c97df17c066924822b0af09a65251554962c61e23329aed04cd19020dc3b8\nAmount (base units): 340282366920938463463374607431768211455\nThis site labels it: 340282366920938463463.374607431768211455 ABCDEFGH\nTo contract: 18d2ebb6e723a2c7e488b0de2704b6867001a53fe6e1e5e9f5c6ee64bba8037c\nChange entry 1 of 6: d3bb6701daa20f5d2a90d78449d588fa9c39031e3fe3185d3ced71f3f0d76e46\nChange entry 2 of 6: 6dd59d220bf76b980bfa077bcd2bd46c95d36e5d8296f0dc01d82bacf8ca2e7d\nChange entry 3 of 6: 09f3118af7e67b452d97d5a3f7b21875bd34935b6a12eb98d0143d759264ea04\nChange entry 4 of 6: 2f41e5a111702e332a2b463b8b7a3e3a07a332df93d8405905cd2164fefb6093\nChange entry 5 of 6: b1bf2416ac9881716a2c7ce431a1e9782adb9f955e92cc8f7976325cd6c588ec\nChange entry 6 of 6: 9e5ad01fc75292c2193a76d22758dee8339f5eac47442aedf82f6eb22dd73871\nChange entry key: 7cba824311e0d9e258de9bc30596f912b3c2653113245903bc102df68e6ee2fa\nSpent coin value: 340282366920938463463374607431768211455\nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nGrant label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nGrant slot: 255\nGrant issued at nonce: 18446744073709551615\nGrant use nonce: 0                   "
+    },
+    {
+      "name": "withdraw_unshielded_with_grant 3",
+      "op": "withdraw_unshielded_with_grant",
+      "bytes": 746,
+      "sha256": "3d9b3e7b4254f7e43548a7e78adfb40d20bb8f37bbfa4e8ff4bcb05c51095848",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw unshielded tokens under a grant\nSite: Consequence: none               \nRole: grantee of a scoped grant\nAccount: 19a32960cbb327471fab9d2d1592a99d6164248209d223a803a26c933c46b5cc\nSigning key: dd9d6e0266d0a3f9adf3748ba973419b373d33434f649276549a1963164e7e49\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo unshielded address: b99e8ba4f8116ab6ecb574202dbadd9d5dd3d51182dc160f36ddf4fe4c351c33\nGrant label: Example dApp                    \nGrant slot: 0  \nGrant issued at nonce: 0                   \nGrant use nonce: 1                   "
+    },
+    {
+      "name": "withdraw_shielded_with_grant 3",
+      "op": "withdraw_shielded_with_grant",
+      "bytes": 1586,
+      "sha256": "102508ae7a96b75924f346a07d2389b31665de4a005d52e1561d7c4e2192701a",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens under a grant\nSite: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nRole: grantee of a scoped grant\nAccount: caca68d28f94797a4e22118af27f5158e3f4e75f46a031a09fe64beb44ac057a\nSigning key: 148bc7fa770e6e057657d90f45b92553689e211e96863a401ec8fb455f3091b1\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo shielded key: 73e2fb101feb194a8d159e9b926288e5170a20aebb73b81da4af64eff09e0632\nChange entry 1 of 6: 220a3380f2b1878a2535c3993c44dc6dd6e88fd103adff43faf98d2fd225dbdb\nChange entry 2 of 6: 64163dc38d49f4d505375f966d6bbb9d658e186d34a22dff3c32ce435e42be6d\nChange entry 3 of 6: 07bdc3995fe5af00c288af21dc9cfb19a65eef5ffefb62b88cbb0602cfb0315c\nChange entry 4 of 6: e7e386a1a70dd75865436f5f1a591916e685e919c802ad3ee42e123d35be245e\nChange entry 5 of 6: 37865c20a3ae64ce348933680379b0a2b4c9ce63283ab656ce532a8cd2ea48f3\nChange entry 6 of 6: 212bb1010e7030dc43b45efcdb0d630844f6fb2193685feb66da5d6ef52c6df4\nChange entry key: f88fb2e0a370e737e5c4e0c36ea8badcde2e8ec947ba1325f417e07f229bb21a\nSpent coin value: 14                                     \nSpent coin nonce: 9d109e0c6a5ccedf2cd060f1437027e97d406cc9efb840b4a672deae19bade79\nSpent coin index: 3                   \nChange back to this account: 9                                      \nGrant label: z                               \nGrant slot: 3  \nGrant issued at nonce: 5                   \nGrant use nonce: 17                  "
+    },
+    {
+      "name": "withdraw_shielded_to_contract_with_grant 3",
+      "op": "withdraw_shielded_to_contract_with_grant",
+      "bytes": 1596,
+      "sha256": "b71d7dd63e0ef7610b36f116f14cd640b1a0e559e3d06bdc894d63e9bd37cda6",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Withdraw shielded tokens to a contract under a grant\nSite: Account 00 nonce 1              \nRole: grantee of a scoped grant\nAccount: 183c9ae2002fa1db46d329a6e80ee082ef207649ce338cf524eda7e44d52bbd3\nSigning key: e964e91cb42e10c4f7e0ecd1a344d4fa24306de8ae45fb20bcd0f482f732cbff\nToken: 0012a3fa000c5dc26ee658c3c58e12cecd58d6455cec3d5621f0c787675b38aa\nAmount (base units): 5                                      \nThis site labels it: 0.000000000000000005 ?                           \nTo contract: 1a6ce3996f186fbeab46371aa04cf7e7fd4e2dcdee57eac8434e2a022002698a\nChange entry 1 of 6: c8acd2a6649cc5cd9fd65593019f4a1a5dd29ec97a9d9ccd688c3369960b129e\nChange entry 2 of 6: b78d0c9784d5659a2e3d6b68e45838c0f8bf0e95aa656fb6066e9fa856d6a20a\nChange entry 3 of 6: ab9fbc9678b05cf998663c9fb1a1a5faa744bd205ad754fb6e6b97020ead0543\nChange entry 4 of 6: db563fbee4be7c293a55def4cc2b1f08158edc511134a4d0a0a2b02d3f0872c7\nChange entry 5 of 6: 503fc80d5e98ff2f673dc6b036db48f419c0f8fd93e31020f8bfe8686f826a8a\nChange entry 6 of 6: dd58ac9e7685342826ecdd5d1181fffa773d50a824b6d2fdb272f37cdc0d0e35\nChange entry key: a8ced05e38a19aabe7e8d62009ef748db792edf8be4e27d7cb6e8919d7278cc9\nSpent coin value: 5                                      \nSpent coin nonce: 820d5d8baf762ec66dcd56fed15c78bf2798d4f9bd492f4553e99b4684865498\nSpent coin index: 18446744073709551615\nChange back to this account: 0                                      \nGrant label: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nGrant slot: 255\nGrant issued at nonce: 18446744073709551615\nGrant use nonce: 18446744073709551615"
+    }
+  ],
+  "negatives": [
+    {
+      "name": "amount digits of another value: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: digits do not match the value"
+    },
+    {
+      "name": "amount with a leading zero: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: leading zero"
+    },
+    {
+      "name": "amount right-aligned: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: not a left-aligned decimal"
+    },
+    {
+      "name": "claim digits of another value: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: digits do not match the value"
+    },
+    {
+      "name": "claim with 19 decimals: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: more than 18 decimals"
+    },
+    {
+      "name": "claim symbol of 9 characters: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: symbol longer than 8"
+    },
+    {
+      "name": "claim with a line break: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: not a site amount label"
+    },
+    {
+      "name": "nonce digits of another value: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: digits do not match the value"
+    },
+    {
+      "name": "site label with a leading space: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: not a zero-padded label"
+    },
+    {
+      "name": "site label with two spaces: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: not a zero-padded label"
+    },
+    {
+      "name": "site label with a line break: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: not a zero-padded label"
+    },
+    {
+      "name": "site label with a byte after the padding: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: not a zero-padded label"
+    },
+    {
+      "name": "empty site label: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: not a zero-padded label"
+    },
+    {
+      "name": "hex nibbles of another account: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: hex digits do not match the value"
+    },
+    {
+      "name": "hex nibbles off by one in the recipient: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: hex digits do not match the value"
+    },
+    {
+      "name": "hex nibble 16 (not a nibble): circuit",
+      "layer": "runtime",
+      "refusal": "type error: sol_message_withdraw_unshielded argument 9 at account-sol-ed25519.compact line 766 char 1; expected value of"
+    },
+    {
+      "name": "site label with a line break: renderer",
+      "layer": "client",
+      "refusal": "sol message: a label is visible words separated by single spaces"
+    },
+    {
+      "name": "site label longer than 32 bytes: renderer",
+      "layer": "client",
+      "refusal": "sol message: a label is at most 32 bytes"
+    },
+    {
+      "name": "unknown recipient kind: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: unknown recipient kind"
+    },
+    {
+      "name": "unregistered target tag: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: descriptor: not a registered device tag"
+    },
+    {
+      "name": "passkey origin characters of another origin: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: characters do not match the value"
+    },
+    {
+      "name": "non-visible passkey origin: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: passkey origin not visible ASCII"
+    },
+    {
+      "name": "grant label characters of another label: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: characters do not match the value"
+    },
+    {
+      "name": "withdrawal above the spent coin: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: amount above the spent coin's value"
+    },
+    {
+      "name": "withdrawal above the spent coin: renderer",
+      "layer": "client",
+      "refusal": "sol message: amount above the spent coin's value"
+    }
+  ]
+}
