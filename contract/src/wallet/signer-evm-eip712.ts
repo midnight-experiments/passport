@@ -721,6 +721,62 @@ export async function revokeAllGrantsWithEvmEip712(account: EvmEip712LifecycleSu
   return { typedData, auth, txId: txIdOf(r) };
 }
 
+// ── Recovery (S9E) ───────────────────────────────────────────────────────────
+//
+// The two device-gated recovery operations. The recovery gate itself
+// (recover_submit) and finalisation are arm-independent and stay on
+// CustodyAccount (recoverSubmit, recoverFinalise).
+
+/** One recovery session's artefact set (recovery MIP section 5), as the
+ *  client's own guardian ceremony produced it (a client obligation, Q18):
+ *  P = s·G for the session's fresh secret, a fresh 32-byte session
+ *  identifier, 1..4 public phi values, and the 64-byte wrap. */
+export interface EvmEip712RecoveryArtefacts {
+  recoveryPk: { x: bigint; y: bigint };
+  sessionNonce: Uint8Array;
+  phi: bigint[];
+  wrap: Uint8Array;
+}
+
+/** The circuit's operands of a session: the phi slots (unused ones zero) and
+ *  the length field. Refuses what the chip would refuse, before any wallet
+ *  signature (as upstream's publishRecoverySession does). */
+export function evmEip712RecoverySession(a: EvmEip712RecoveryArtefacts) {
+  if (a.phi.length < 1 || a.phi.length > 4) throw new Error(`evm_eip712: phi carries ${a.phi.length} entries; the slot bound admits 1..4`);
+  if (a.sessionNonce.length !== 32 || a.sessionNonce.every((b) => b === 0)) {
+    throw new Error('evm_eip712: a session identifier is 32 non-zero bytes (REC-4)');
+  }
+  if (a.wrap.length !== 64) throw new Error('evm_eip712: the recovery wrap is 64 bytes');
+  const slots: [bigint, bigint, bigint, bigint] = [0n, 0n, 0n, 0n];
+  a.phi.forEach((p, i) => { slots[i] = p; });
+  return { recoveryPk: a.recoveryPk, sessionNonce: new Uint8Array(a.sessionNonce), phi: slots, phiLen: BigInt(a.phi.length), wrap: new Uint8Array(a.wrap) };
+}
+
+/** publish_recovery_session_with_evm_eip712: the PublishRecoverySession
+ *  message ("Sets this account's recovery key", the new recovery key, the
+ *  session identifier, the four phi values, the length and the 64-byte wrap,
+ *  all in full), signed by the device's wallet, then the call. */
+export async function publishRecoverySessionWithEvmEip712(account: EvmEip712LifecycleSurface, device: EvmEip712Device, artefacts: EvmEip712RecoveryArtefacts) {
+  const session = evmEip712RecoverySession(artefacts);
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.publishRecoverySession(frame, session);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.publish_recovery_session_with_evm_eip712(
+    session.recoveryPk, session.sessionNonce, ...session.phi, session.phiLen, session.wrap, authArg(auth));
+  return { typedData, auth, txId: txIdOf(r) };
+}
+
+/** recover_cancel_with_evm_eip712: the CancelRecovery message (the frame
+ *  alone: account, device, authNonce), signed, then the call; vetoes the
+ *  pending recovery. */
+export async function recoverCancelWithEvmEip712(account: EvmEip712LifecycleSurface, device: EvmEip712Device) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.cancelRecovery(frame);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.recover_cancel_with_evm_eip712(authArg(auth));
+  return { typedData, auth, txId: txIdOf(r) };
+}
+
 /** The grantee frame of the next call under the grantee's grant. */
 async function granteeFrame(account: EvmEip712GrantSurface, g: EvmEip712Grantee) {
   const rec = await account.grantRecord(g.grantId(account.addressBytes));
