@@ -15,6 +15,7 @@
 // Sections (all by default; or name them on the command line):
 //   activation  (S2E) wrong blind, wrong address, the point at infinity in
 //               both encodings;
+//   reactivation (S5E) activating an account that is already booted;
 //   qa1         (S5E, audit QA-1) a point whose coordinate is not reduced
 //               below the base-field modulus, at the representation boundary;
 //   seam        (S5E) rotate_enc_key_with_evm_eip712: the binding matrix
@@ -42,7 +43,7 @@ import {
   POINT_AT_INFINITY_OVERRIDES, NON_CANONICAL_COORDINATE_OVERRIDES, type LocalAccount,
 } from './evm-eip712-negative.js';
 
-const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'qa1', 'seam'];
+const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam'];
 const SEED = 'aa00067/e/s5/evm-eip712-prover/v1';
 let ctr = 0;
 const rnd = (n: number) => new Uint8Array(createHash('sha256').update(SEED).update(String(ctr++)).digest().subarray(0, n));
@@ -124,6 +125,17 @@ if (SECTIONS.includes('activation')) {
     [{ x: 0n, y: 0n, identity: true }, salt, device.blind], 'identity point', [INFINITY, STDLIB_ADDR_IDENTITY], POINT_AT_INFINITY_OVERRIDES);
   await negative('activation', 'point at infinity, unflagged {0, 0, not identity}', await dormant(infinityBoot, recoveryPk), ACTIVATE,
     [{ x: 0n, y: 0n, identity: false }, salt, device.blind], 'expected value of type Secp256k1Point', [INFINITY], POINT_AT_INFINITY_OVERRIDES);
+}
+
+// ── reactivation (S5E) ──────────────────────────────────────────────────────
+if (SECTIONS.includes('reactivation')) {
+  const ALREADY = 'already activated';
+  const fresh = await dormant(device.bootCommitment(salt), recoveryPk);
+  const patched = await loadPatched([ALREADY, BOOT]);
+  await positive('reactivation', 'first activation (patched path)', patched.Contract, fresh, ACTIVATE, device.activationArgs(salt));
+  const booted = (await execute(Original.Contract, fresh, ACTIVATE, device.activationArgs(salt))).after;
+  // the same device again (its boot commitment was cleared: two asserts fail)
+  await negative('reactivation', 'activate a booted account again (same device)', booted, ACTIVATE, device.activationArgs(salt), ALREADY, [ALREADY, BOOT]);
 }
 
 // ── QA-1: coordinates not reduced below p (S5E) ─────────────────────────────
