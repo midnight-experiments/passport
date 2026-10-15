@@ -11,6 +11,12 @@
 //              byte (both RFC 6979); ethers recovers the address and the
 //              public point; ethers' sha256 of the blind preimage == the
 //              blind (enrolment and the contract's derive_blind)
+//   frozen     (S4E) every vector of src/tests/vectors/evm-eip712-v2.json:
+//              ethers' encodeType, domain hash, struct hash and digest of the
+//              frozen typed data equal the frozen values (which the
+//              generator took from ethers); the contract's pure circuits
+//              equal them too; ethers' signTypedData == the software
+//              wallet's, byte for byte, and ethers recovers the signer
 //
 // Writes $EVIDENCE_DIR/evm-eip712-ethers.json when EVIDENCE_DIR is set.
 
@@ -20,6 +26,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { pureCircuits } from '../wallet/contract.js';
+import { contractStructHash, typedDataOf } from './evm-eip712-vectors.js';
+import { typeString, toHex as hx } from '../wallet/evm-eip712-codec.js';
 import { evmChecksumAddress, padTag } from '../wallet/descriptors.js';
 import { blindMessageBytes } from '../wallet/blind.js';
 import {
@@ -91,7 +99,36 @@ for (const [k, network, index] of [[1n, 'undeployed', 0], [1n, 'undeployed', 1],
 }
 console.log(`  ✓ blind: EIP-191 digest, personal_sign bytes, recovery, canonical form and blind == ethers (${checks.blind} checks)`);
 
-const report = { suite: 'evm-eip712-ethers', step: 'S2E', ethersVersion: ethers.version, seed: SEED, ranAt: new Date().toISOString(), checks, vectors, verdict: 'PASS' };
+// ── Frozen EIP-712 vectors (S4E) ─────────────────────────────────────────────
+const FROZEN = JSON.parse(fs.readFileSync(new URL('./vectors/evm-eip712-v2.json', import.meta.url), 'utf8'));
+{
+  const signer = new ethers.Wallet(sk32(0x5eedn));
+  const ours = new SoftwareEvmWallet(0x5eedn);
+  for (const v of FROZEN.vectors) {
+    const { EIP712Domain, ...types } = v.typedData.types;
+    const enc = ethers.TypedDataEncoder.from(types);
+    assert.equal(enc.encodeType(v.typedData.primaryType), v.encodeType, `${v.name}: encodeType`);
+    assert.equal(ethers.TypedDataEncoder.hashDomain(v.typedData.domain), v.domainSeparator, `${v.name}: domain`);
+    assert.equal(ethers.TypedDataEncoder.hashStruct(v.typedData.primaryType, types, v.typedData.message), v.structHash, `${v.name}: struct hash`);
+    assert.equal(ethers.TypedDataEncoder.hash(v.typedData.domain, types, v.typedData.message), v.digest, `${v.name}: digest`);
+    const { typedData, encodeType, domainSeparator, structHash, digest, ...input } = v;
+    assert.deepEqual(JSON.parse(JSON.stringify(typedDataOf(input))), v.typedData, `${v.name}: the client rebuilds the typed data`);
+    assert.equal(hx(contractStructHash(pc, input)), v.structHash, `${v.name}: contract struct hash`);
+    const theirs = await signer.signTypedData(v.typedData.domain, types, v.typedData.message);
+    const mine = await ours.signTypedData(v.typedData);
+    assert.equal(theirs, '0x' + hex(mine), `${v.name}: signTypedData == ethers, byte for byte`);
+    assert.equal(ethers.verifyTypedData(v.typedData.domain, types, v.typedData.message, theirs), signer.address, `${v.name}: ethers recovers the signer`);
+    ok('frozen', 8);
+  }
+  for (const [k, str] of Object.entries(FROZEN.typeStrings as Record<string, string>)) {
+    const [p, n] = k.split('/');
+    assert.equal(typeString(p, n), str);
+    ok('frozen');
+  }
+}
+console.log(`  ✓ frozen: ${FROZEN.vectors.length} vectors and ${Object.keys(FROZEN.typeStrings).length} type strings == ethers; contract and client agree; signTypedData == ethers (${checks.frozen} checks)`);
+
+const report = { suite: 'evm-eip712-ethers', step: 'S2E+S4E', ethersVersion: ethers.version, seed: SEED, ranAt: new Date().toISOString(), checks, vectors, verdict: 'PASS' };
 if (process.env.EVIDENCE_DIR) {
   const file = path.join(process.env.EVIDENCE_DIR, 'evm-eip712-ethers.json');
   fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });

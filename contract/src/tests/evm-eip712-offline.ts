@@ -17,6 +17,15 @@
 //                refused, per-index and per-network separation
 //   roster       record round trip; a record whose address is not its point's
 //                refused; restore finds accounts by testing entries
+//   codec        (S4E) the frozen vectors src/tests/vectors/evm-eip712-v2.json,
+//                whose hashes ethers computed: for every vector the client
+//                codec rebuilds the same typed data, and its digest, the
+//                contract's struct hash, domain separator and digest all equal
+//                the frozen ones; the type strings equal ethers' encodeType;
+//                every negative vector is refused by each layer it names
+//                (client codec, generated JavaScript of the pure circuits);
+//                the descriptor derivations equal descriptors.ts; the no-blob
+//                classification of every signed member
 //
 // The independent check against ethers lives in evm-eip712-ethers.ts (ethers
 // is not a dependency of this package). Writes
@@ -32,6 +41,10 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { pureCircuits } from '../wallet/contract.js';
 import { padTag, evmAddressOf, evmChecksumAddress } from '../wallet/descriptors.js';
 import { blindMessageBytes } from '../wallet/blind.js';
+import {
+  EVM_EIP712_PRIMARY_TYPES, EVM_EIP712_DESCRIPTOR_TYPES, typedDataDigest, typeString, siteLabelText, toHex,
+} from '../wallet/evm-eip712-codec.js';
+import { typedDataOf, contractStructHash, NEGATIVES, descriptorInput, granteeInput, type VectorInput } from './evm-eip712-vectors.js';
 import {
   EvmEip712Device, SoftwareEvmWallet, enrolEvmBlind, highSTwin, parseEvmSignature, personalMessageDigest,
   recoverEvmPoint, restoreEvmDevices, serialiseEvmSignature, SECP256K1_ORDER,
@@ -242,7 +255,131 @@ console.log(`  ✓ blind: deterministic, == derive_blind == SHA-256, recovered p
 }
 console.log(`  ✓ roster: record round trip; restore finds index 0 (counter 3) and index 2 (counter 0) only; ${tally.roster.refused} bad records refused`);
 
-const report = { suite: 'evm-eip712-offline', step: 'S2E', seed: SEED, ranAt: new Date().toISOString(), tally, vectors, verdict: 'PASS' };
+// ── Codec: the frozen vectors (S4E) ──────────────────────────────────────────
+
+const FROZEN = JSON.parse(fs.readFileSync(new URL('./vectors/evm-eip712-v2.json', import.meta.url), 'utf8'));
+{
+  assert.match(FROZEN.hashesBy, /^ethers 6\./, 'the frozen hashes come from ethers');
+  const strip = (v: any) => { const { typedData, encodeType, domainSeparator, structHash, digest, ...input } = v; return input as VectorInput; };
+  const seen = new Set<string>();
+  for (const v of FROZEN.vectors) {
+    const input = strip(v);
+    const td = typedDataOf(input);
+    assert.deepEqual(JSON.parse(JSON.stringify(td)), v.typedData, `${v.name}: the codec rebuilds the frozen typed data`);
+    assert.equal(toHex(typedDataDigest(td)), v.digest, `${v.name}: client digest`);
+    const sh = contractStructHash(pc, input);
+    assert.equal(toHex(sh), v.structHash, `${v.name}: contract struct hash`);
+    const acct = Buffer.from(v.frame.account, 'hex');
+    assert.equal(toHex(pc.evm_eip712_domain_separator(acct)), v.domainSeparator, `${v.name}: contract domain separator`);
+    assert.equal(toHex(pc.evm_eip712_digest(acct, sh)), v.digest, `${v.name}: contract digest`);
+    assert.equal(v.typedData.domain.verifyingContract.toLowerCase(), '0x' + hex(pc.evm_eip712_verifying_contract(acct)), `${v.name}: verifyingContract`);
+    seen.add(v.typedData.primaryType + (Object.keys(v.typedData.types).find((t) => t in EVM_EIP712_DESCRIPTOR_TYPES) ?? ''));
+    ok('codec vectors');
+  }
+  // every primary type, and every descriptor-taking type with all five schemes
+  const expected = Object.keys(EVM_EIP712_PRIMARY_TYPES).flatMap((p) => {
+    const nested = EVM_EIP712_PRIMARY_TYPES[p].find(([, t]) => t.startsWith('<'));
+    if (!nested) return [p];
+    return Object.keys(EVM_EIP712_DESCRIPTOR_TYPES).filter((t) => t.endsWith(nested[1] === '<Device>' ? 'Device' : 'Grantee')).map((t) => p + t);
+  });
+  assert.deepEqual([...seen].sort(), expected.sort(), 'the vectors cover all 16 primary types and every descriptor scheme');
+  for (const [k, str] of Object.entries(FROZEN.typeStrings as Record<string, string>)) {
+    const [p, n] = k.split('/');
+    assert.equal(typeString(p, n), str, `${k}: type string == ethers encodeType`);
+    ok('type strings');
+  }
+  assert.equal(Object.keys(FROZEN.typeStrings).length, 32);
+  // dynamic members: entries with leading zero bytes and all-zero bytes
+  const dyn = FROZEN.vectors.filter((v: any) => /append_inbox|publish_recovery|as_grantee/.test(v.name));
+  assert.ok(dyn.some((v: any) => /^0x00/.test(v.typedData.message.entry ?? v.typedData.message.wrap ?? v.typedData.message.changeEntry ?? '')), 'a dynamic member with leading zero bytes');
+  assert.ok(dyn.some((v: any) => /^0x(00)+$/.test(v.typedData.message.entry ?? v.typedData.message.wrap ?? '')), 'an all-zero dynamic member');
+  ok('codec vectors', 2);
+}
+const negativeResults: { name: string; refusedBy: string[]; client?: string; runtime?: string }[] = [];
+for (const n of FROZEN.negatives) {
+  const r: any = { name: n.name, refusedBy: n.refusedBy };
+  if (n.refusedBy.includes('client')) {
+    assert.throws(() => typedDataOf(n.input), (e: any) => { r.client = String(e?.message ?? e); return true; }, `${n.name}: the client codec must refuse`);
+  }
+  if (n.refusedBy.includes('runtime')) {
+    assert.throws(() => contractStructHash(pc, n.input), (e: any) => { r.runtime = String(e?.message ?? e); return true; }, `${n.name}: the contract's pure circuit must refuse`);
+  }
+  negativeResults.push(r);
+  (tally['codec negatives'] ??= { pass: 0, refused: 0 }).refused++;
+}
+assert.equal(negativeResults.length, NEGATIVES.length);
+// The descriptor derivations of the codec module equal the shared module's
+// width-class circuits (S1 checked those against upstream and SHA-256). The
+// frozen keys are random bytes, so descriptors.ts's strict decoders are not
+// used here; those decoders are covered by wallet-arms-client-offline.
+{
+  for (const v of FROZEN.vectors.filter((x: any) => /^(add|remove)_device\//.test(x.name))) {
+    const d = descriptorInput(v.args.descriptor);
+    const A = { bytes: rnd(32) };
+    const s = v.args.descriptor.scheme;
+    for (const [e, c] of [[0n, 0n], [3n, 9n]] as [bigint, bigint][]) {
+      const want = s === 'evm_eip712' ? pc.derive_descriptor_entry_w52(d.tag, A, d.address, d.key2, e, c)
+        : s === 'k256' ? pc.derive_descriptor_entry_w65(d.tag, A, d.key, d.key2, d.envelope, e, c)
+        : s === 'p256' ? pc.derive_descriptor_entry_w117(d.tag, A, d.key, d.key2, d.rp_id_hash, d.origin, e, c)
+        : pc.derive_descriptor_entry_w64(d.tag, A, d.key, d.key2, e, c);
+      assert.ok(eq(pc.evm_eip712_descriptor_entry(A, d, e, c), want), `${v.name}: descriptor entry == the width-class circuit`);
+    }
+    if (s === 'evm_eip712') assert.ok(eq(pc.evm_eip712_descriptor_entry(A, d, 0n, 0n), pc.derive_device_entry_with_evm_eip712(A, d.address, d.key2, 0n, 0n)));
+    ok('descriptor derivations');
+  }
+  for (const v of FROZEN.vectors.filter((x: any) => /^(issue|revoke)_grant\//.test(x.name))) {
+    const g = granteeInput(v.args.grantee);
+    const A = { bytes: rnd(32) };
+    const oh = pc.evm_eip712_grantee_origin_hash(g);
+    const s = v.args.grantee.scheme;
+    if (s === 'evm_eip712' || s === 'sol_ed25519') assert.ok(eq(oh, pc.derive_grant_origin_hash_label(g.label)));
+    else if (s === 'p256') assert.ok(eq(oh, pc.derive_grant_origin_hash_origin(g.origin)));
+    else assert.ok(eq(oh, g.origin_hash));
+    const want = s === 'evm_eip712' ? pc.derive_descriptor_grant_id_w52(g.tag, A, g.address, g.key2, oh, g.slot)
+      : s === 'k256' ? pc.derive_descriptor_grant_id_w65(g.tag, A, g.key, g.key2, g.envelope, oh, g.slot)
+      : pc.derive_descriptor_grant_id_w64(g.tag, A, g.key, g.key2, oh, g.slot);
+    assert.ok(eq(pc.evm_eip712_grantee_grant_id(A, g), want), `${v.name}: grantee grant id == the width-class circuit`);
+    ok('descriptor derivations');
+  }
+  // the site label as shown == the contract's rendering
+  for (const t of ['Midnight Night Market', 'x', 'A'.repeat(32), 'a b c']) {
+    const l = new Uint8Array(32); l.set(new TextEncoder().encode(t));
+    assert.ok(eq(pc.evm_eip712_site_label_hash(l), keccak_256(new TextEncoder().encode(siteLabelText(l)))));
+    assert.equal(siteLabelText(l).length, 32);
+    ok('descriptor derivations');
+  }
+}
+// The no-blob classification (FR-004, SC-006): every signed member is a value
+// shown in full, and the only hash-like members are the four labelled ones.
+const CLASS: Record<string, string> = {
+  account: 'identifier', device: 'key', grantee: 'key', wallet: 'key', publicKey: 'key', x: 'key', y: 'key', recoveryKeyX: 'key', recoveryKeyY: 'key',
+  authNonce: 'value', issuedAt: 'value', grantNonce: 'value', slot: 'value', amount: 'value', color: 'identifier', recipient: 'identifier',
+  recipientContract: 'identifier', coinNonce: 'witness', coinValue: 'witness', coinMerkleIndex: 'witness', change: 'witness (derived)',
+  entry: 'ciphertext (full bytes) / Q20 literal entry', changeEntry: 'ciphertext (full bytes)', newKey: 'value', effect: 'circuit-fixed line',
+  newDevice: 'descriptor', target: 'descriptor', targetEpoch: 'value', targetCounter: 'value', scheme: 'circuit-fixed tag text', envelope: 'value',
+  origin: 'text', siteLabel: 'text', withdrawUnshielded: 'value', withdrawShielded: 'value', withdrawShieldedToContract: 'value', read: 'value',
+  recipientKind: 'value', maxCoinValue: 'value', perCallCap: 'value', cap: 'value', expiresAt: 'value', readKey: 'key (preimage of read_pk_hash)',
+  windowLength: 'value', windowCap: 'value', callerPinned: 'value', caller: 'identifier', sessionNonce: 'value', phi1: 'value', phi2: 'value',
+  phi3: 'value', phi4: 'value', phiLength: 'value', wrap: 'ciphertext (full bytes)', encryptionKey: 'key',
+  privacySalt: 'LABELLED (Q21: a target device\'s blind)', passkeyRpHash: 'LABELLED (Q21: the passkey RP hash)', siteLabelHash: 'LABELLED (Q17: a k256/jubjub grantee\'s origin_hash)',
+};
+{
+  const labelled = new Set<string>();
+  for (const [t, fields] of [...Object.entries(EVM_EIP712_PRIMARY_TYPES).map(([k, v]) => [k, v.map(([n]) => n)] as [string, string[]]),
+                            ...Object.entries(EVM_EIP712_DESCRIPTOR_TYPES).map(([k, v]) => [k, v.map((x) => x.name)] as [string, string[]])]) {
+    for (const n of fields) {
+      assert.ok(n in CLASS, `${t}.${n} has no no-blob classification`);
+      if (CLASS[n].startsWith('LABELLED')) labelled.add(n);
+      if (n === 'entry' && t === 'RemoveUnknownDevice') labelled.add('RemoveUnknownDevice.entry');
+    }
+  }
+  assert.deepEqual([...labelled].sort(), ['RemoveUnknownDevice.entry', 'passkeyRpHash', 'privacySalt', 'siteLabelHash'], 'exactly the four labelled values');
+  assert.equal(EVM_EIP712_PRIMARY_TYPES.RemoveUnknownDevice.find(([n]) => n === 'entry')![1], 'bytes32');
+  ok('no-blob review');
+}
+console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (contract == client == ethers), ${tally['type strings'].pass} type strings == ethers; ${tally['codec negatives'].refused} negatives refused by every named layer; descriptor derivations == the width-class circuits (${tally['descriptor derivations'].pass}); no-blob: only the four labelled values`);
+
+const report = { suite: 'evm-eip712-offline', step: 'S2E+S4E', seed: SEED, ranAt: new Date().toISOString(), tally, vectors, frozen: { file: 'src/tests/vectors/evm-eip712-v2.json', vectors: FROZEN.vectors.length, negatives: negativeResults, hashesBy: FROZEN.hashesBy }, noBlob: CLASS, verdict: 'PASS' };
 if (process.env.EVIDENCE_DIR) {
   const file = path.join(process.env.EVIDENCE_DIR, 'evm-eip712-offline.json');
   fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });
