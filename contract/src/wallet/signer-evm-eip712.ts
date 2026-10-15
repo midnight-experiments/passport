@@ -36,8 +36,9 @@ import {
   deriveBlind,
   sameCanonicalSignature,
 } from './blind.js';
-import { DESCRIPTOR_TAGS, checkDescriptor, evmAddressOf, evmChecksumAddress, padTag, parseEvmAddress, type Descriptor } from './descriptors.js';
-import { typedDataDigest, evmEip712Messages, type Eip712TypedData, type EvmEip712DescriptorInput } from './evm-eip712-codec.js';
+import { DESCRIPTOR_TAGS, checkDescriptor, evmAddressOf, evmChecksumAddress, grantOriginHash, padTag, parseEvmAddress, type Descriptor } from './descriptors.js';
+import { typedDataDigest, evmEip712Messages, type Eip712TypedData, type EvmEip712DescriptorInput, type EvmEip712GranteeInput, type IssueScope, type SpentCoin } from './evm-eip712-codec.js';
+import type { GrantOpening } from './signer.js';
 
 // ── Signatures ───────────────────────────────────────────────────────────────
 
@@ -199,10 +200,12 @@ export interface EvmEip712Authorisation {
   sig: EvmEcdsaSignature;
 }
 
-/** The authorising material an `evm_eip712` grantee twin consumes. The
- *  grantee's origin label (32-byte zero-padded ASCII) travels with it; the
- *  circuit derives `origin_hash` from it. Provisional until S8E freezes the
- *  grantee ABI. */
+/** The authorising material an `evm_eip712` grantee twin consumes (the
+ *  trailing `EvmEip712GrantAuth` plus the site label, which grantAuthArgs
+ *  places before the opening). The grantee's site label (32-byte
+ *  zero-padded ASCII) travels with it; the circuit derives `origin_hash`
+ *  from it, and the grant id from the address of `pk`, `blind`, that
+ *  origin hash and the slot. */
 export interface EvmEip712GrantAuthorisation {
   arm: 'evm_eip712';
   pk: Secp256k1Point;
@@ -573,3 +576,200 @@ export async function removeUnknownDeviceWithEvmEip712(account: EvmEip712Lifecyc
 
 /** This device as a descriptor (another device adds or removes it). */
 export const evmDeviceDescriptor = (d: EvmEip712Device): Descriptor => ({ scheme: 'evm_eip712', address: new Uint8Array(d.address), blind: new Uint8Array(d.blind) });
+
+// ── Scoped grants (S8E) ──────────────────────────────────────────────────────
+
+/** How a readable owner shows a grantee's site: an `evm_eip712` or
+ *  `sol_ed25519` grantee by its 32-byte site label (shown as text), a
+ *  passkey by its exact 21-byte origin (shown as text), a k256 or JubJub
+ *  grantee by its origin hash (shown under the fixed member
+ *  `siteLabelHash`, Q17: the client shows the client id beside it). */
+export type GranteeSite = { label: Uint8Array } | { origin: Uint8Array } | { originHash: Uint8Array; clientId?: string };
+
+/** The circuit's `EvmEip712GranteeDescriptor` for a grantee of any scheme
+ *  (its key as a readable descriptor, its site, its slot). */
+export function evmEip712GranteeInput(descriptor: Descriptor, site: GranteeSite, slot: bigint): EvmEip712GranteeInput {
+  if (!descriptor || !Object.hasOwn(DESCRIPTOR_TAGS['grant-id'], (descriptor as { scheme?: string }).scheme ?? '')) {
+    throw new Error('descriptor: not a registered grantee scheme');
+  }
+  if (slot < 0n || slot > 255n) throw new Error('descriptor: a grant slot is a Uint<8>');
+  const d = checkDescriptor(descriptor);
+  const base = { tag: padTag(DESCRIPTOR_TAGS['grant-id'][d.scheme]), key: ZERO32, key2: ZERO32, address: new Uint8Array(20), envelope: 0n,
+    origin: ZERO21, label: ZERO32, origin_hash: ZERO32, slot };
+  const need = (k: 'label' | 'origin' | 'originHash', n: number): Uint8Array => {
+    const v = (site as any)[k];
+    if (!(v instanceof Uint8Array) || v.length !== n) throw new Error(`descriptor: a ${d.scheme} grantee is shown by its ${k} (${n} bytes)`);
+    return new Uint8Array(v);
+  };
+  switch (d.scheme) {
+    case 'evm_eip712': return { ...base, address: new Uint8Array(d.address), key2: new Uint8Array(d.blind), label: need('label', 32) };
+    case 'sol_ed25519': return { ...base, key: new Uint8Array(d.key), key2: new Uint8Array(d.blind), label: need('label', 32) };
+    case 'jubjub': return { ...base, key: le32(d.x), key2: le32(d.y), origin_hash: need('originHash', 32) };
+    case 'k256': return { ...base, key: le32(d.x), key2: le32(d.y), envelope: BigInt(d.envelope), origin_hash: need('originHash', 32) };
+    case 'p256': return { ...base, key: le32(d.x), key2: le32(d.y), origin: need('origin', 21) };
+  }
+}
+
+/**
+ * An `evm_eip712` key as a GRANTEE of an account: its point, its blind (from
+ * the same `personal_sign` request as a device's, Q25), the 32-byte site
+ * label it is known by, and its slot. Its grant id is
+ * derive_grant_id_with_evm_eip712(account, address, blind,
+ * H(origin tag || label), slot). It signs one readable type per operation
+ * over the grant frame (the record's issuedAt and nonce, never auth_nonce).
+ */
+export class EvmEip712Grantee {
+  readonly arm = 'evm_eip712' as const;
+  readonly address: Uint8Array;
+
+  constructor(
+    readonly pk: Secp256k1Point,
+    readonly blind: Uint8Array,
+    readonly label: Uint8Array,
+    readonly slot: bigint,
+    readonly wallet?: EvmWallet,
+  ) {
+    if (blind.length !== 32) throw new Error('evm_eip712: a blind is 32 bytes');
+    if (label.length !== 32) throw new Error('evm_eip712: a site label is 32 bytes');
+    if (pk.x === 0n && pk.y === 0n) throw new Error('evm_eip712: the point at infinity is not a grantee key');
+    secp256k1.Point.fromAffine({ x: pk.x, y: pk.y }).assertValidity();
+    this.address = evmAddressOfPoint(pk);
+  }
+
+  /** A grantee for `wallet` at `accountIndex` on `network` (the blind request
+   *  signed twice, as for a device), known to the owner by `label` and `slot`. */
+  static async enrol(wallet: EvmWallet, network: string, accountIndex: bigint | number, label: Uint8Array, slot: bigint): Promise<EvmEip712Grantee> {
+    const e = await enrolEvmBlind(wallet, network, accountIndex);
+    return new EvmEip712Grantee(e.pk, e.blind, label, slot, wallet);
+  }
+
+  /** origin_hash of the site label (what the grant id binds). */
+  get originHash(): Uint8Array { return grantOriginHash(this.label); }
+
+  grantId(contractAddress: Uint8Array): Uint8Array {
+    return pureCircuits.derive_grant_id_with_evm_eip712({ bytes: contractAddress }, this.address, this.blind, this.originHash, this.slot);
+  }
+
+  /** This grantee as the owner shows it (IssueGrant, RevokeGrant). */
+  descriptor(): EvmEip712GranteeInput {
+    return evmEip712GranteeInput({ scheme: 'evm_eip712', address: this.address, blind: this.blind }, { label: this.label }, this.slot);
+  }
+
+  /** Signs `typedData` with the grantee's wallet; refuses a signature that
+   *  does not recover to this grantee's point. */
+  async authorise(typedData: Eip712TypedData): Promise<EvmEip712GrantAuthorisation> {
+    if (!this.wallet) throw new Error('evm_eip712: this grantee has no wallet');
+    const sig = parseEvmSignature(await this.wallet.signTypedData(typedData));
+    const pk = recoverEvmPoint(typedDataDigest(typedData), sig);
+    if (pk.x !== this.pk.x || pk.y !== this.pk.y) throw new Error('evm_eip712: the signature does not recover to this grantee');
+    return { arm: 'evm_eip712', pk: this.pk, blind: this.blind, label: this.label, sig: { r: sig.r, s: sig.s } };
+  }
+}
+
+/** The surface the grant calls use (CustodyAccount). */
+export interface EvmEip712GrantSurface extends EvmEip712LifecycleSurface {
+  heldCoin(color: Uint8Array): Promise<{ nonce: Uint8Array; color: Uint8Array; value: bigint; mt_index: bigint }>;
+  encKey(): Promise<Uint8Array>;
+  grantRecord(grantId: Uint8Array): Promise<{ issued_at: bigint; nonce: bigint } | null>;
+  withdrawUnshieldedWithGrantAuth(color: Uint8Array, amount: bigint, recipient: Uint8Array, opening: GrantOpening, a: EvmEip712GrantAuthorisation): Promise<{ txId: string }>;
+  withdrawShieldedWithGrantAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, changeEntry: Uint8Array, encPk: Uint8Array, opening: GrantOpening, a: EvmEip712GrantAuthorisation): Promise<{ txId: string; change: unknown }>;
+  withdrawShieldedToContractWithGrantAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, changeEntry: Uint8Array, encPk: Uint8Array, opening: GrantOpening, a: EvmEip712GrantAuthorisation): Promise<{ txId: string; sent: unknown; change: unknown }>;
+}
+
+/** The circuit arguments of issue_grant_with_evm_eip712 after the grantee
+ *  (the scope, the read key itself, the caller pin, the salt). */
+export function evmEip712IssueArgs(scope: IssueScope, scopeSalt: Uint8Array): unknown[] {
+  if (scopeSalt.length !== 32) throw new Error('evm_eip712: a scope salt is 32 bytes');
+  const caller = scope.caller
+    ? { is_some: true, value: { bytes: new Uint8Array(scope.caller) } }
+    : { is_some: false, value: { bytes: new Uint8Array(32) } };
+  return [scope.opWithdrawUnshielded, scope.opWithdrawShielded, scope.opWithdrawShieldedToContract, scope.read,
+    scope.color, scope.recipientKind, scope.recipient, scope.maxCoinValue, scope.perCallCap, scope.cap, scope.expiresAt,
+    scope.rpIdHash, scope.read ? scope.readPk : new Uint8Array(32), scope.windowLen, scope.windowCap, caller, scopeSalt];
+}
+
+/** issue_grant_with_evm_eip712: the IssueGrant message ("Lets this key use
+ *  this account within the limits below", the grantee, every scope field),
+ *  signed by the device's wallet, then the call. The record stores
+ *  SHA-256(read key) as read_pk_hash. */
+export async function issueGrantWithEvmEip712(
+  account: EvmEip712LifecycleSurface, device: EvmEip712Device, grantee: EvmEip712GranteeInput, scope: IssueScope, scopeSalt: Uint8Array,
+) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.issueGrant(frame, grantee, scope);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.issue_grant_with_evm_eip712(grantee, ...evmEip712IssueArgs(scope, scopeSalt), authArg(auth));
+  return { typedData, auth, txId: txIdOf(r) };
+}
+
+/** revoke_grant_with_evm_eip712: the grantee shown by its descriptor; the
+ *  circuit re-derives the grant id. */
+export async function revokeGrantWithEvmEip712(account: EvmEip712LifecycleSurface, device: EvmEip712Device, grantee: EvmEip712GranteeInput) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.revokeGrant(frame, grantee);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.revoke_grant_with_evm_eip712(grantee, authArg(auth));
+  return { typedData, auth, txId: txIdOf(r) };
+}
+
+/** revoke_all_grants_with_evm_eip712. */
+export async function revokeAllGrantsWithEvmEip712(account: EvmEip712LifecycleSurface, device: EvmEip712Device) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.revokeAllGrants(frame);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.revoke_all_grants_with_evm_eip712(authArg(auth));
+  return { typedData, auth, txId: txIdOf(r) };
+}
+
+/** The grantee frame of the next call under the grantee's grant. */
+async function granteeFrame(account: EvmEip712GrantSurface, g: EvmEip712Grantee) {
+  const rec = await account.grantRecord(g.grantId(account.addressBytes));
+  if (!rec) throw new Error('evm_eip712: no grant record for this grantee (not issued, or revoked by revoke_all)');
+  return { account: account.addressBytes, grantee: g.address, label: g.label, slot: g.slot, issuedAt: rec.issued_at, grantNonce: rec.nonce };
+}
+
+const openingFor = (g: EvmEip712Grantee, o: Omit<GrantOpening, 'originHash' | 'slot'>): GrantOpening => ({ ...o, originHash: g.originHash, slot: g.slot });
+
+/** withdraw_unshielded_with_grant_evm_eip712, signed by the grantee. */
+export async function withdrawUnshieldedAsEvmGrantee(
+  account: EvmEip712GrantSurface, g: EvmEip712Grantee, opening: Omit<GrantOpening, 'originHash' | 'slot'>,
+  color: Uint8Array, amount: bigint, recipient: Uint8Array,
+) {
+  const frame = await granteeFrame(account, g);
+  const typedData = evmEip712Messages.withdrawUnshieldedAsGrantee(frame, color, amount, recipient);
+  const auth = await g.authorise(typedData);
+  return { typedData, auth, ...(await account.withdrawUnshieldedWithGrantAuth(color, amount, recipient, openingFor(g, opening), auth)) };
+}
+
+async function grantCoin(account: EvmEip712GrantSurface, color: Uint8Array): Promise<SpentCoin> {
+  const c = await account.heldCoin(color);
+  if (!eq(c.color, color)) throw new Error('evm_eip712: the held coin is not of the withdrawn colour');
+  return { nonce: c.nonce, value: c.value, mtIndex: c.mt_index };
+}
+
+/** withdraw_shielded_with_grant_evm_eip712, signed by the grantee: the change
+ *  entry the grantee sealed to the account's live enc_key is shown with it. */
+export async function withdrawShieldedAsEvmGrantee(
+  account: EvmEip712GrantSurface, g: EvmEip712Grantee, opening: Omit<GrantOpening, 'originHash' | 'slot'>,
+  recipient: Uint8Array, color: Uint8Array, amount: bigint, changeEntry: Uint8Array, encPk?: Uint8Array,
+) {
+  const frame = await granteeFrame(account, g);
+  const enc = encPk ?? await account.encKey();
+  const coin = await grantCoin(account, color);
+  const typedData = evmEip712Messages.withdrawShieldedAsGrantee(frame, color, amount, recipient, changeEntry, enc, coin);
+  const auth = await g.authorise(typedData);
+  return { typedData, auth, coin, ...(await account.withdrawShieldedWithGrantAuth(recipient, color, amount, changeEntry, enc, openingFor(g, opening), auth)) };
+}
+
+/** withdraw_shielded_to_contract_with_grant_evm_eip712: typed data and
+ *  authorisation (a direct transfer is composed with the recipient's claim). */
+export async function authoriseWithdrawShieldedToContractAsEvmGrantee(
+  account: EvmEip712GrantSurface, g: EvmEip712Grantee, recipientContract: Uint8Array, color: Uint8Array, amount: bigint,
+  changeEntry: Uint8Array, encPk?: Uint8Array,
+) {
+  const frame = await granteeFrame(account, g);
+  const enc = encPk ?? await account.encKey();
+  const coin = await grantCoin(account, color);
+  const typedData = evmEip712Messages.withdrawShieldedToContractAsGrantee(frame, color, amount, recipientContract, changeEntry, enc, coin);
+  return { typedData, coin, encPk: enc, auth: await g.authorise(typedData) };
+}
