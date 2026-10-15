@@ -184,22 +184,44 @@ struct EvmEip712Auth {
 // or a nonce: an entry is matched, and a signature verified, only for the
 // address of the key that signed.
 //
+// Two entry points: require_authorised_with_evm_eip712 (one message type)
+// and require_authorised_with_evm_eip712_either (remove_device's two forms,
+// Q20: the message is the second type when `second`). Both derive the
+// address and build their frames themselves, then hand the address they
+// derived and the struct hash they built to evm_eip712_verify_and_roll,
+// which nothing else calls (the offline suite checks the call sites).
+//
 // The signature is verified against the EIP-712 digest. secp256k1EcdsaVerify
 // accepts both S forms (FIPS 186-5): the rolling entry, consumed by this call,
 // makes a malleated twin single-use, as on the k256 arm. r = 0 and s = 0 are
 // refused here explicitly (audit C14, R2-12): with s = 0 the stdlib's inverse
 // has no meaning, and r = 0 can only match the point at infinity.
 //
-// Returns the caller's post-roll entry (remove_device's S13 guard needs it).
+// Each returns the caller's post-roll entry (remove_device's S13 guard).
 circuit require_authorised_with_evm_eip712<T>(auth: EvmEip712Auth, type_hash: Bytes<32>, tail: T): Bytes<32> {
   const address = evm_eip712_address(auth.pk);
+  return evm_eip712_verify_and_roll(auth, address,
+    evm_eip712_device_struct<T>(type_hash, kernel.self().bytes, address, auth_nonce, tail));
+}
+
+circuit require_authorised_with_evm_eip712_either<T, U>(
+  auth: EvmEip712Auth, second: Boolean, type_1: Bytes<32>, tail_1: T, type_2: Bytes<32>, tail_2: U
+): Bytes<32> {
+  const address = evm_eip712_address(auth.pk);
+  const h1 = evm_eip712_device_struct<T>(type_1, kernel.self().bytes, address, auth_nonce, tail_1);
+  const h2 = evm_eip712_device_struct<U>(type_2, kernel.self().bytes, address, auth_nonce, tail_2);
+  return evm_eip712_verify_and_roll(auth, address, second ? h2 : h1);
+}
+
+// Internal to the two entry points above: `address` is the one they derived
+// from auth.pk, `struct_hash` the one they built from their own frame.
+circuit evm_eip712_verify_and_roll(auth: EvmEip712Auth, address: Bytes<20>, struct_hash: Bytes<32>): Bytes<32> {
   const entry = disclose(derive_device_entry_with_evm_eip712(
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
   assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
          "evm_eip712: signature scalar is zero");
-  const struct_hash = evm_eip712_device_struct<T>(type_hash, kernel.self().bytes, address, auth_nonce, tail);
   assert(secp256k1EcdsaVerify(evm_eip712_digest(kernel.self().bytes, struct_hash), auth.sig, auth.pk),
          "invalid signature");
   devices.remove(entry);
@@ -306,4 +328,58 @@ export circuit append_inbox_with_evm_eip712(entry: Bytes<192>, auth: EvmEip712Au
   const [t, tail] = evm_eip712_parts_append_inbox(entry);
   require_authorised_with_evm_eip712<Bytes<32>>(auth, t, tail);
   do_append_inbox(entry);
+}
+
+// ── Device lifecycle (MIP-0013 §6) ──────────────────────────────────────────
+//
+// The other key is a readable DESCRIPTOR (spec FR-005, Q11-D, Q28): the
+// target scheme's tag text and key payload (an EVM target by its address and
+// privacy salt, a Solana target by its 32-byte key and privacy salt, a k256
+// target by x, y and envelope, a passkey by x, y, its exact origin and the
+// RP hash, a JubJub target by its point). The approval shows exactly those
+// values, and the circuit derives the target's entry from them with the
+// target scheme's own recipe (modules/WalletArmDescriptors, by payload-width
+// class). An unregistered tag, or a registered tag of another recipe or
+// width, is refused (the S1 tightening of FR-005), so a descriptor can never
+// enrol an entry that no arm recognises by its tag.
+//
+// add_device derives at the CURRENT device_epoch and counter 0, never at a
+// caller-chosen epoch or counter (FR-005): this arm cannot plant an entry at
+// device_epoch + 1 (README erratum 7), whatever the descriptor says.
+
+// AddDevice(bytes32 account,address device,uint64 authNonce,string effect,<Scheme>Device newDevice)
+export circuit add_device_with_evm_eip712(new_device: EvmEip712Descriptor, auth: EvmEip712Auth): [] {
+  const [t, tail] = evm_eip712_parts_add_device(new_device);
+  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<32>]>(auth, t, tail);
+  do_add_device(evm_eip712_descriptor_entry(kernel.self(), new_device, device_epoch, 0 as Uint<64>));
+}
+
+// Two forms in one circuit (Q20):
+//   - the target's descriptor with its epoch and use counter (removal only
+//     reduces authority, so an explicit epoch is allowed: a device can evict
+//     an entry planted at device_epoch + 1 by an upstream arm's raw
+//     add_device), approved as
+//     RemoveDevice(bytes32 account,address device,uint64 authNonce,<Scheme>Device target,uint32 targetEpoch,uint64 targetCounter);
+//   - the revocation-only literal entry, for an entry the wallet cannot
+//     describe (`unknown_entry` present), approved as
+//     RemoveUnknownDevice(bytes32 account,address device,uint64 authNonce,string effect,bytes32 entry)
+//     under the fixed line "Removes a device this wallet cannot identify".
+//     The descriptor arguments are then unused (the client passes the zero
+//     descriptor under the evm tag).
+// Either way the caller's own post-roll entry can never be removed (AUTH-5,
+// S13: do_remove_device's guard), nor the last device.
+export circuit remove_device_with_evm_eip712(
+  target:         EvmEip712Descriptor,
+  target_epoch:   Uint<32>,
+  target_counter: Uint<64>,
+  unknown_entry:  Maybe<Bytes<32>>,
+  auth:           EvmEip712Auth,
+): [] {
+  assert(unknown_entry.is_some || unknown_entry.value == default<Bytes<32>>, "noncanonical absent entry");
+  const [t1, tail1] = evm_eip712_parts_remove_device(target, target_epoch, target_counter);
+  const [t2, tail2] = evm_eip712_parts_remove_unknown_device(unknown_entry.value);
+  const caller_entry = require_authorised_with_evm_eip712_either<[Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>], [Bytes<32>, Bytes<32>]>(
+    auth, unknown_entry.is_some, t1, tail1, t2, tail2);
+  const described = evm_eip712_descriptor_entry(kernel.self(), target, target_epoch, target_counter);
+  do_remove_device(unknown_entry.is_some ? unknown_entry.value : described, caller_entry);
 }
