@@ -306,6 +306,78 @@ export circuit withdraw_shielded_to_contract_with_sol_ed25519(
   return do_withdraw_shielded_to_contract(recipient, amount, coin);
 }
 
+// ── Device lifecycle (MIP-0013 §6) ──────────────────────────────────────────
+//
+// The other key is a readable DESCRIPTOR (spec FR-005, Q11-D): the target
+// scheme's registered tag and its key payload (an EVM target by its address
+// and privacy salt, a Solana target by its 32-byte key and privacy salt, a
+// k256 target by x, y and envelope, a passkey by x, y, its exact origin and
+// the RP hash, a JubJub target by its point). The message shows exactly those
+// values (coordinates in the order of Q29/Q33), and the circuit derives the
+// target's entry from them with the target scheme's own recipe
+// (modules/WalletArmDescriptors, by payload-width class). An unregistered tag
+// is refused (the S1 tightening of FR-005), so a descriptor never enrols an
+// entry that no arm recognises by its tag.
+
+// add_device derives at the CURRENT device_epoch and counter 0, never at a
+// caller-chosen epoch or counter (FR-005): this arm cannot plant an entry at
+// device_epoch + 1 (README erratum 7), whatever the descriptor says.
+export circuit add_device_with_sol_ed25519(
+  target:    SolTarget,
+  target_pk: Curve25519Point,
+  ts:        SolTargetShow,
+  show:   SolShow,
+  frame:  Vector<128, Uint<0..16>>,
+  hex:    Vector<232, Uint<0..16>>,
+  auth:   SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<24, 391, 705>(sol_title_add_device(), sol_body_add_device(target, ts, hex), show, frame, auth);
+  do_add_device(sol_device_entry(target, target_pk, kernel.self(), device_epoch, 0 as Uint<64>));
+}
+
+// Two forms in one circuit (Q20), selected by `literal`:
+//   - the target's descriptor with its use counter and epoch (removal only
+//     reduces authority, so an explicit epoch is allowed: a device can evict
+//     an entry an upstream arm's raw add_device planted at device_epoch + 1);
+//     `entry` is then zero;
+//   - the revocation-only literal entry, for an entry the wallet cannot
+//     describe, shown in full under the fixed line "Removes a device this
+//     wallet cannot identify"; the descriptor, counter and epoch are then
+//     zero.
+// The unused form's values are not shown, so each must be zero (one encoding
+// per call). Either way the caller's own post-roll entry can never be
+// removed (AUTH-5, S13: do_remove_device's guard, the entry derived here as
+// upstream's p256 arm derives it), nor the last device.
+export circuit remove_device_with_sol_ed25519(
+  literal:   Boolean,
+  target:    SolTarget,
+  target_pk: Curve25519Point,
+  counter:   Uint<64>,
+  epoch:   Uint<32>,
+  entry:   Bytes<32>,
+  ts:      SolTargetShow,
+  show:    SolShow,
+  frame:   Vector<128, Uint<0..16>>,
+  hex:     Vector<296, Uint<0..16>>,
+  auth:    SolEd25519Auth,
+): [] {
+  const caller_entry = require_authorised_with_sol_ed25519<27, 464, 781>(sol_title_remove_device(),
+    sol_body_remove_device(literal, target, counter, epoch, entry, ts, hex), show, frame, auth);
+  const self_addr = kernel.self();
+  if (literal) {
+    assert(target.tag == pad(32, "") && target.address == pad(20, "") && target.a == pad(32, "") && target.b == pad(32, "")
+             && target.c == pad(32, "") && target.origin == pad(21, "") && target.envelope == 0 && counter == 0 && epoch == 0
+             && (curve25519PointX(target_pk) as Bytes<32>) == pad(32, ""),
+           "remove_device: a literal removal carries no descriptor");
+  } else {
+    assert(entry == pad(32, ""), "remove_device: a descriptor removal carries no literal entry");
+  }
+  // One ledger operation for both forms (a branch around it would disclose
+  // the form); the descriptor's derivation and its checks apply only to the
+  // descriptor form.
+  do_remove_device(literal ? entry : sol_device_entry(target, target_pk, self_addr, epoch, counter), caller_entry);
+}
+
 // ── Signed messages, format sol v1 (spec FR-S02, FR-S03, FR-004, FR-023) ────
 //
 // A Solana wallet's `signMessage` signs the raw bytes it is given, so the

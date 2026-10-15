@@ -23,12 +23,12 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { curve25519FromProjective, isValidCurve25519Point, type Curve25519Point } from '@midnight-ntwrk/compact-runtime';
 
 import { pureCircuits } from './contract.js';
-import { base58Encode, parseSolanaPublicKey, solDescriptor, type SolDescriptor } from './descriptors.js';
-import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind } from './blind.js';
+import { DESCRIPTOR_TAGS, base58Encode, checkDescriptor, grantOriginHash, parseSolanaPublicKey, solDescriptor, type Descriptor, type SolDescriptor } from './descriptors.js';
+import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind, granteeBlindMessageBytes } from './blind.js';
 import {
   assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solFrameNibbles, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
   solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solTargetArg,
-  solTargetShow, type SolAmount, type SolDeviceOperation, type SolGranteeOperation,
+  solTargetShow, solTargetPointArg, SOL_UNUSED_POINT, type SolAmount, type SolDeviceOperation, type SolGranteeFields, type SolGranteeOperation, type SolTargetFields,
 } from './sol-ed25519-message.js';
 import type { GrantOpening } from './signer.js';
 
@@ -527,4 +527,73 @@ export async function authoriseWithdrawShieldedToContractSol(account: SolEd25519
   const coin = await solSpentCoin(account, amount.color);
   const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_shielded_to_contract', amount, recipient: recipientContract, coin });
   return { auth, coin };
+}
+
+// ── Device lifecycle (S7S) ────────────────────────────────────────────────
+//
+// add_device_with_sol_ed25519 and remove_device_with_sol_ed25519 take the
+// other key as a readable descriptor (FR-005), not an entry: the circuit
+// derives the entry from it with the target scheme's own recipe. Their ABI
+// differs from upstream's add/remove_device(entry), so CustodyAccount's
+// entry-typed helpers cannot reach them; these call the circuits directly.
+
+/** A CustodyAccount's call surface (the circuit handle's callTx). */
+export interface SolEd25519LifecycleSurface extends SolEd25519AccountSurface {
+  callTx: Record<string, (...args: unknown[]) => Promise<any>>;
+}
+
+const le32 = (v: bigint): Uint8Array => { const o = new Uint8Array(32); let x = v; for (let i = 0; i < 32; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
+const txIdOf = (r: any): string => {
+  const id = r?.public?.txId ?? r?.public?.transactionHash;
+  if (!id) throw new Error('sol_ed25519: the call returned no transaction id');
+  return id;
+};
+
+/** The message-level target of a readable descriptor (the circuit's
+ *  SolTarget): the target scheme's registered device tag and its key fields,
+ *  coordinates little-endian as the recipes bind them (the message shows
+ *  secp256k1 and P-256 big-endian, Q29). A passkey target needs its policy. */
+export function solTargetOf(d: Descriptor): SolTargetFields {
+  const tag = DESCRIPTOR_TAGS.device[d.scheme];
+  switch (d.scheme) {
+    case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y) };
+    case 'k256': return { tag, a: le32(d.x), b: le32(d.y), envelope: BigInt(d.envelope) };
+    case 'p256': {
+      if (!d.policy) throw new Error('sol_ed25519: a passkey target needs its policy (RP hash and origin)');
+      return { tag, a: le32(d.x), b: le32(d.y), c: new Uint8Array(d.policy.rpIdHash), origin: new Uint8Array(d.policy.origin) };
+    }
+    case 'evm_eip712': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind) };
+    case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind) };
+  }
+}
+
+/** add_device_with_sol_ed25519: the message ("gives this device FULL
+ *  control of this account" and the target's descriptor), signed, then the
+ *  call; the circuit enrols the target at the current epoch and counter 0. */
+export async function addDeviceWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, target: Descriptor) {
+  const t = solTargetOf(checkDescriptor(target));
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'add_device', target: t });
+  const r = await account.callTx.add_device_with_sol_ed25519(solTargetArg(t), solTargetPointArg(t), ...solEd25519AuthArgs(auth));
+  return { auth, target: t, txId: txIdOf(r) };
+}
+
+/** remove_device_with_sol_ed25519, descriptor form: the target's entry at
+ *  (epoch, counter); the epoch may be a future one (removal only reduces
+ *  authority). */
+export async function removeDeviceWithSolEd25519(
+  account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, target: Descriptor, epoch: bigint, counter: bigint,
+) {
+  const t = solTargetOf(checkDescriptor(target));
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'remove_device', literal: false, target: t, counter, epoch });
+  const r = await account.callTx.remove_device_with_sol_ed25519(false, solTargetArg(t), solTargetPointArg(t), counter, epoch, new Uint8Array(32), ...solEd25519AuthArgs(auth));
+  return { auth, target: t, txId: txIdOf(r) };
+}
+
+/** remove_device_with_sol_ed25519, literal form (Q20): an entry this wallet
+ *  cannot describe, under "Removes a device this wallet cannot identify". */
+export async function removeUnknownDeviceWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, entry: Uint8Array) {
+  if (!(entry instanceof Uint8Array) || entry.length !== 32) throw new Error('sol_ed25519: an entry is 32 bytes');
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'remove_device', literal: true, entry: new Uint8Array(entry) });
+  const r = await account.callTx.remove_device_with_sol_ed25519(true, solTargetArg({ tag: '' }), { ...SOL_UNUSED_POINT }, 0n, 0n, new Uint8Array(entry), ...solEd25519AuthArgs(auth));
+  return { auth, txId: txIdOf(r) };
 }

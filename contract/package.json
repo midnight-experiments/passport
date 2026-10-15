@@ -9,7 +9,7 @@
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
     "test:p256-offline": "tsx src/tests/p256-offline.ts",
-    "test:sol-ed25519-offline": "tsx src/tests/sol-ed25519-offline.ts && tsx src/tests/sol-ed25519-message-offline.ts && tsx src/tests/sol-ed25519-seam-offline.ts && tsx src/tests/sol-ed25519-custody-offline.ts",
+    "test:sol-ed25519-offline": "tsx src/tests/sol-ed25519-offline.ts && tsx src/tests/sol-ed25519-message-offline.ts && tsx src/tests/sol-ed25519-seam-offline.ts && tsx src/tests/sol-ed25519-custody-offline.ts && tsx src/tests/sol-ed25519-devices-offline.ts",
     "test:p256": "tsx src/tests/p256-conformance.ts",
     "test:p256-browser": "tsx src/tests/p256-browser.ts",
     "verify:p256-browser": "tsx src/tests/p256-browser-evidence.ts",
