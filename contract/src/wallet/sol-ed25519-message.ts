@@ -25,7 +25,10 @@
 //
 // Numbers are decimal, left-aligned and space-padded to their type's width
 // (Uint<8> 3, Uint<32> 10, Uint<64> 20, Uint<128> 39); bytes are lowercase
-// hex, in full. Platform-neutral (no node:crypto).
+// hex, in full. Curve coordinates follow Q29 (decision Q33 of AA 00067, the
+// base's COORDINATE_DISPLAY_ORDER): secp256k1 and P-256 big-endian, JubJub
+// little-endian; Field values little-endian. Platform-neutral (no
+// node:crypto).
 
 export const SOL_MESSAGE_FORMAT = 'sol v1';
 export const SOL_FIRST_LINE = 'Midnight Passport approval (sol v1)';
@@ -164,7 +167,7 @@ function deviceBlock(t: SolTargetFields): string {
   const a = t.a ?? Z32, b = t.b ?? Z32;
   switch (cls) {
     case 0: return padBlock(L('Ethereum address: 0x', hex(t.address ?? Z20, 20, 'the address')) + L('Device privacy salt: ', hex(a, 32, 'the blind')), 282);
-    case 1: return padBlock(L('JubJub key x: ', hex(reversed(a), 32, 'x')) + L('JubJub key y: ', hex(reversed(b), 32, 'y')), 282);
+    case 1: return padBlock(L('JubJub key x: ', hex(a, 32, 'x')) + L('JubJub key y: ', hex(b, 32, 'y')), 282);
     case 2: return padBlock(L('Solana key: ', hex(a, 32, 'the key')) + L('Device privacy salt: ', hex(b, 32, 'the blind')), 282);
     case 3: return padBlock(L('secp256k1 key x: ', hex(reversed(a), 32, 'x')) + L('secp256k1 key y: ', hex(reversed(b), 32, 'y'))
       + L('Signing envelope: ', decimal(t.envelope ?? 0n, 3)), 282);
@@ -182,7 +185,7 @@ function granteeBlock(t: SolGranteeFields): string {
   switch (cls) {
     case 0: return padBlock(L('Ethereum address: 0x', hex(t.address ?? Z20, 20, 'the address')) + L('Device privacy salt: ', hex(a, 32, 'the blind'))
       + L('Grantee label: ', lab()), 278);
-    case 1: return padBlock(L('JubJub key x: ', hex(reversed(a), 32, 'x')) + L('JubJub key y: ', hex(reversed(b), 32, 'y'))
+    case 1: return padBlock(L('JubJub key x: ', hex(a, 32, 'x')) + L('JubJub key y: ', hex(b, 32, 'y'))
       + L('Grantee site label (hash): ', hex(t.originHash ?? Z32, 32, 'the origin hash')), 278);
     case 2: return padBlock(L('Solana key: ', hex(a, 32, 'the key')) + L('Device privacy salt: ', hex(b, 32, 'the blind'))
       + L('Grantee label: ', lab()), 278);
@@ -219,8 +222,6 @@ export type SolGranteeOperation =
   | { op: 'withdraw_unshielded_with_grant'; amount: SolAmount; recipient: Uint8Array }
   | { op: 'withdraw_shielded_with_grant'; amount: SolAmount; recipient: Uint8Array; changeEntry: Uint8Array; encPk: Uint8Array; coin: SolCoin }
   | { op: 'withdraw_shielded_to_contract_with_grant'; amount: SolAmount; recipient: Uint8Array; changeEntry: Uint8Array; encPk: Uint8Array; coin: SolCoin };
-
-const be32 = (v: bigint) => { const o = new Uint8Array(32); let x = v; for (let i = 31; i >= 0; i--) { o[i] = Number(x & 0xffn); x >>= 8n; } if (x) throw new Error('sol message: value above 32 bytes'); return o; };
 
 /** The message of a device-role operation (text). */
 export function solDeviceMessageText(c: SolDeviceContext, o: SolDeviceOperation): string {
@@ -268,9 +269,9 @@ export function solDeviceMessageText(c: SolDeviceContext, o: SolDeviceOperation)
     case 'publish_recovery_session': {
       let s = head('Publish a recovery session', 'device', c)
         + L("Consequence: sets this account's recovery key; its holder can take over this account after the veto window.")
-        + L('Recovery key x: ', hex(be32(o.recoveryPk.x), 32, 'x')) + L('Recovery key y: ', hex(be32(o.recoveryPk.y), 32, 'y'))
+        + L('Recovery key x: ', hex(le32(o.recoveryPk.x), 32, 'x')) + L('Recovery key y: ', hex(le32(o.recoveryPk.y), 32, 'y'))
         + L('Session nonce: ', hex(o.sessionNonce, 32, 'the session nonce'));
-      o.phi.forEach((v, k) => { s += L(`Backup vector value ${k + 1} of 4: `, hex(be32(v), 32, 'a backup value')); });
+      o.phi.forEach((v, k) => { s += L(`Backup vector value ${k + 1} of 4: `, hex(le32(v), 32, 'a backup value')); });
       hex(o.wrap, 64, 'the key wrap');
       return s + L('Backup vector length: ', decimal(o.phiLen, 3)) + L('Key wrap part 1 of 2: ', hex(o.wrap.subarray(0, 32), 32, 'part 1'))
         + L('Key wrap part 2 of 2: ', hex(o.wrap.subarray(32), 32, 'part 2')) + deviceTail(c);

@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pureCircuits } from '../wallet/contract.js';
+import { COORDINATE_DISPLAY_ORDER, coordinateHex } from '../wallet/descriptors.js';
 import { solDeviceMessageCircuit, solGranteeMessageCircuit } from '../wallet/signer-sol-ed25519.js';
 import {
   SOL_PARSE_BOUND, assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solAmountShow, solCoinShow, solDeviceMessageText,
@@ -145,6 +146,50 @@ AMOUNTS.forEach((a, i) => {
     corpus.push({ name, op: o.op, text, circuit });
   });
   ok(G, `all ${corpus.length} calls byte-identical (15 layouts, both roles, 5 target classes, 5 grantee classes, edge values)`, n === corpus.length, `${n}/${corpus.length}`);
+}
+
+// ── 1b. Coordinates and Field values in the shared display order ───────────
+// Q29 (decision Q33): the approvals of every arm and the base's comparison
+// display (descriptors.ts, COORDINATE_DISPLAY_ORDER) show secp256k1 and P-256
+// coordinates big-endian, JubJub coordinates and Field values little-endian.
+// Every coordinate line of the contract's own bytes must equal the base's
+// rendering of the same value, so a key reads the same in every client.
+{
+  const G = '1b shared display order (Q29, Q33)';
+  const leInt = (b: Uint8Array) => b.reduceRight((acc, x) => (acc << 8n) | BigInt(x), 0n);
+  const SCHEME: Record<string, ['jubjub' | 'k256' | 'p256', string]> = {
+    'midnight:account:device:v1': ['jubjub', 'JubJub key'], 'midnight:account:grant:id:v1': ['jubjub', 'JubJub key'],
+    'midnight:account:device:k1:v2': ['k256', 'secp256k1 key'], 'midnight:account:grant:id:k1:v1': ['k256', 'secp256k1 key'],
+    'midnight:account:device:r1:v2': ['p256', 'Passkey key'], 'midnight:account:grant:id:r1:v1': ['p256', 'Passkey key'],
+  };
+  let checked = 0, bad = 0;
+  const seen = new Set<string>();
+  devOps.forEach(([name, o], i) => {
+    const lines = Buffer.from(corpus[i].circuit).toString('latin1').split('\n').map((l) => l.trimEnd());
+    const expect: string[] = [];
+    const key = (t: { tag: string; a?: Uint8Array; b?: Uint8Array }) => {
+      const s = SCHEME[t.tag];
+      if (!s) return;
+      seen.add(s[0]);
+      expect.push(`${s[1]} x: ${coordinateHex(s[0], leInt(t.a!)).slice(2)}`, `${s[1]} y: ${coordinateHex(s[0], leInt(t.b!)).slice(2)}`);
+    };
+    const op: any = o;
+    if (op.op === 'add_device' || (op.op === 'remove_device' && !op.literal)) key(op.target);
+    if (op.op === 'issue_grant' || op.op === 'revoke_grant') key(op.grantee);
+    if (op.op === 'publish_recovery_session') {
+      seen.add('field');
+      expect.push(`Recovery key x: ${coordinateHex('jubjub', op.recoveryPk.x).slice(2)}`, `Recovery key y: ${coordinateHex('jubjub', op.recoveryPk.y).slice(2)}`);
+      op.phi.forEach((v: bigint, k: number) => expect.push(`Backup vector value ${k + 1} of 4: ${hex(le32(v))}`));
+    }
+    for (const e of expect) {
+      checked++;
+      if (!lines.includes(e)) { bad++; ok(G, `${name}: ${e.slice(0, 24)}`, false, 'not shown in the shared display order'); }
+    }
+  });
+  ok(G, `every coordinate and Field value of the corpus equals the base's rendering (${checked} lines: ${[...seen].join(', ')})`,
+    bad === 0 && ['jubjub', 'k256', 'p256', 'field'].every((x) => seen.has(x)));
+  ok(G, 'the base display order is Q29 (JubJub little-endian; secp256k1 and P-256 big-endian)',
+    COORDINATE_DISPLAY_ORDER.jubjub === 'little-endian' && COORDINATE_DISPLAY_ORDER.k256 === 'big-endian' && COORDINATE_DISPLAY_ORDER.p256 === 'big-endian');
 }
 
 // ── 2. Lengths, parse safety, line starts ───────────────────────────────────

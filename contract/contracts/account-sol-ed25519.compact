@@ -631,7 +631,8 @@ circuit sol_grantee_message<#t, #b, #n>(self_addr: ContractAddress, key: Bytes<3
 }
 
 // The digits of a little-endian 32-byte value in big-endian order (the pairs
-// reversed; wiring only).
+// reversed; wiring only): secp256k1 and P-256 coordinates are shown
+// big-endian, as SEC1 and their wallets show them (Q29).
 circuit sol_be(h: Vector<64, Uint<8>>): Vector<64, Uint<8>> {
   return [h[62], h[63], h[60], h[61], h[58], h[59], h[56], h[57], h[54], h[55], h[52], h[53], h[50], h[51], h[48], h[49], h[46], h[47], h[44], h[45], h[42], h[43], h[40], h[41], h[38], h[39], h[36], h[37], h[34], h[35], h[32], h[33], h[30], h[31], h[28], h[29], h[26], h[27], h[24], h[25], h[22], h[23], h[20], h[21], h[18], h[19], h[16], h[17], h[14], h[15], h[12], h[13], h[10], h[11], h[8], h[9], h[6], h[7], h[4], h[5], h[2], h[3], h[0], h[1]];
 }
@@ -724,7 +725,9 @@ circuit sol_origin_chars(origin: Bytes<21>, v: Vector<21, Uint<8>>, passkey: Boo
 // The key lines of a target device (282 bytes, every class padded to the
 // longest with spaces before its last line break). Keys are shown in the form
 // their own wallets show (an EVM address, the 32-byte Solana key, a passkey
-// origin) or, for curve points, big-endian coordinates.
+// origin) or as coordinates in the order of Q29 (decision Q33): secp256k1 and
+// P-256 big-endian (SEC1), JubJub little-endian (Midnight's encoding, the
+// bytes the entry binds).
 circuit sol_device_block(t: SolTarget, ts: SolTargetShow, h_address: Vector<40, Uint<8>>, h_a: Vector<64, Uint<8>>,
                          h_b: Vector<64, Uint<8>>, h_c: Vector<64, Uint<8>>): Vector<282, Uint<8>> {
   const cls = sol_device_class(t.tag);
@@ -732,8 +735,8 @@ circuit sol_device_block(t: SolTarget, ts: SolTargetShow, h_address: Vector<40, 
   const yb = sol_be(h_b);
   const evm = [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
                ...pad(21, "Device privacy salt: "), ...h_a, ...sol_spaces<135>(), 10];
-  const jub = [...pad(14, "JubJub key x: "), ...xa, 10,
-               ...pad(14, "JubJub key y: "), ...yb, ...sol_spaces<124>(), 10];
+  const jub = [...pad(14, "JubJub key x: "), ...h_a, 10,
+               ...pad(14, "JubJub key y: "), ...h_b, ...sol_spaces<124>(), 10];
   const sol = [...pad(12, "Solana key: "), ...h_a, 10,
                ...pad(21, "Device privacy salt: "), ...h_b, ...sol_spaces<119>(), 10];
   const k1 = [...pad(17, "secp256k1 key x: "), ...xa, 10,
@@ -748,7 +751,8 @@ circuit sol_device_block(t: SolTarget, ts: SolTargetShow, h_address: Vector<40, 
              evm, jub, sol, k1, r1);
 }
 
-// The grantee's key and origin lines (278 bytes, padded as the device block).
+// The grantee's key and origin lines (278 bytes, padded as the device block;
+// coordinates in the same order).
 circuit sol_grantee_block(t: SolGrantee, gs: SolGranteeShow, h_address: Vector<40, Uint<8>>, h_a: Vector<64, Uint<8>>,
                           h_b: Vector<64, Uint<8>>, h_oh: Vector<64, Uint<8>>): Vector<278, Uint<8>> {
   const cls = sol_grantee_class(t.tag);
@@ -763,8 +767,8 @@ circuit sol_grantee_block(t: SolGrantee, gs: SolGranteeShow, h_address: Vector<4
   const evm = [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
                ...pad(21, "Device privacy salt: "), ...h_a, 10,
                ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<83>(), 10];
-  const jub = [...pad(14, "JubJub key x: "), ...xa, 10,
-               ...pad(14, "JubJub key y: "), ...yb, 10,
+  const jub = [...pad(14, "JubJub key x: "), ...h_a, 10,
+               ...pad(14, "JubJub key y: "), ...h_b, 10,
                ...pad(27, "Grantee site label (hash): "), ...h_oh, ...sol_spaces<28>(), 10];
   const sol = [...pad(12, "Solana key: "), ...h_a, 10,
                ...pad(21, "Device privacy salt: "), ...h_b, 10,
@@ -1100,25 +1104,25 @@ circuit sol_body_publish_recovery_session(new_recovery_pk: JubjubPoint, session_
   return [...pad(107, "Consequence: sets this account's recovery key; its holder can take over this account after the veto window."),
           10,
           ...pad(16, "Recovery key x: "),
-          ...sol_be(h_rx),
+          ...h_rx,
           10,
           ...pad(16, "Recovery key y: "),
-          ...sol_be(h_ry),
+          ...h_ry,
           10,
           ...pad(15, "Session nonce: "),
           ...h_session,
           10,
           ...pad(28, "Backup vector value 1 of 4: "),
-          ...sol_be(h_phi1),
+          ...h_phi1,
           10,
           ...pad(28, "Backup vector value 2 of 4: "),
-          ...sol_be(h_phi2),
+          ...h_phi2,
           10,
           ...pad(28, "Backup vector value 3 of 4: "),
-          ...sol_be(h_phi3),
+          ...h_phi3,
           10,
           ...pad(28, "Backup vector value 4 of 4: "),
-          ...sol_be(h_phi4),
+          ...h_phi4,
           10,
           ...pad(22, "Backup vector length: "),
           ...uint8_text(phi_len, phi_len_digits),
