@@ -468,6 +468,55 @@ export circuit revoke_all_grants_with_evm_eip712(auth: EvmEip712Auth): [] {
   do_revoke_all_grants();
 }
 
+// ── Recovery (recovery MIP §5, §6) ──────────────────────────────────────────
+//
+// The two device-gated recovery operations, over upstream's shared chips
+// (do_publish_recovery_session, do_recover_cancel) and the device seam. The
+// recovery gate itself (recover_submit) and finalisation (recover_finalise)
+// are arm-independent: gated by the recovery secret, not by a device.
+// Finalisation clears the device set before it installs the successor
+// (upstream #183), so every evm_eip712 entry is retired with the others,
+// including one an upstream arm's raw add_device planted at
+// device_epoch + 1 (README erratum 7).
+//
+// The session approval shows every operand in full under the circuit-fixed
+// line "Sets this account's recovery key" (FR-023): the new recovery key's
+// JubJub coordinates and the four phi values as the contract encodes them
+// (32 bytes little-endian each, Q29), the session identifier, phiLength, and
+// the 64-byte wrap as `bytes`. The material comes from the client's own
+// guardian ceremony; that it is the intended guardians' is not verifiable by
+// eye (a client obligation, the documented Q18 residual). The chip's
+// freshness and slot rules apply as on every arm.
+
+// PublishRecoverySession(bytes32 account,address device,uint64 authNonce,string effect,
+//                        bytes32 recoveryKeyX,bytes32 recoveryKeyY,bytes32 sessionNonce,
+//                        bytes32 phi1,bytes32 phi2,bytes32 phi3,bytes32 phi4,uint8 phiLength,bytes wrap)
+export circuit publish_recovery_session_with_evm_eip712(
+  new_recovery_pk: JubjubPoint,
+  session_nonce:   Bytes<32>,
+  phi_1:           Field,
+  phi_2:           Field,
+  phi_3:           Field,
+  phi_4:           Field,
+  phi_len:         Uint<8>,
+  wrap:            Bytes<64>,
+  auth:            EvmEip712Auth,
+): [] {
+  const [t, tail] = evm_eip712_parts_publish_recovery_session(new_recovery_pk, session_nonce,
+    phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                                      Bytes<31>, Bytes<1>, Bytes<32>]>(auth, t, tail);
+  do_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+}
+
+// The veto (recovery MIP §6 step 5): any live device clears a pending
+// recovery inside the window.
+// CancelRecovery(bytes32 account,address device,uint64 authNonce)
+export circuit recover_cancel_with_evm_eip712(auth: EvmEip712Auth): [] {
+  require_authorised_with_evm_eip712_bare(auth, evm_eip712_parts_cancel_recovery());
+  do_recover_cancel();
+}
+
 // ── The grant seam (grantee role) ───────────────────────────────────────────
 //
 // An evm_eip712 key as a GRANTEE: its grant id is
