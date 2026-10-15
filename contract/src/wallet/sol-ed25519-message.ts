@@ -30,6 +30,10 @@
 // little-endian; Field values little-endian. Platform-neutral (no
 // node:crypto).
 
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { DESCRIPTOR_TAGS, parseSolanaPublicKey } from './descriptors.js';
+import { ENUM_TEXT_WIDTH, k256EnvelopeLabel, recipientKindLabel } from './labels.js';
+
 export const SOL_MESSAGE_FORMAT = 'sol v1';
 export const SOL_FIRST_LINE = 'Midnight Passport approval (sol v1)';
 /** The smallest length at which a message starting "Midn" could parse as a
@@ -96,11 +100,10 @@ export function claimText(value: bigint, decimals: number, symbol: string): stri
 }
 
 const yesNo = (b: boolean) => (b ? 'yes' : 'no ');
-const KINDS = ['any recipient', 'unshielded address', 'shielded key', 'contract'];
-const kindWord = (k: bigint) => {
-  if (k < 0n || k > 3n) throw new Error('sol message: unknown recipient kind');
-  return KINDS[Number(k)].padEnd(18, ' ');
-};
+/** Enumerated values as their labels (24 bytes, the base's table in
+ *  labels.ts, which the circuits' rendering module selects from). */
+const envelopeLabel = (e: bigint) => k256EnvelopeLabel(e).padEnd(ENUM_TEXT_WIDTH, ' ');
+const kindWord = (k: bigint) => recipientKindLabel(k).padEnd(ENUM_TEXT_WIDTH, ' ');
 
 // ── Inputs ──────────────────────────────────────────────────────────────────
 
@@ -142,13 +145,15 @@ const entryLines = (entry: Uint8Array, word: string) => {
   return s;
 };
 
+// The class each registered tag selects (the circuits' sol_device_class and
+// sol_grantee_class), from the base's tag registry.
 const DEVICE_TAGS: Record<string, number> = {
-  'midnight:account:device:evm:v2': 0, 'midnight:account:device:v1': 1, 'midnight:account:device:sol:v1': 2,
-  'midnight:account:device:k1:v2': 3, 'midnight:account:device:r1:v2': 4,
+  [DESCRIPTOR_TAGS.device.evm_eip712]: 0, [DESCRIPTOR_TAGS.device.jubjub]: 1, [DESCRIPTOR_TAGS.device.sol_ed25519]: 2,
+  [DESCRIPTOR_TAGS.device.k256]: 3, [DESCRIPTOR_TAGS.device.p256]: 4,
 };
 const GRANT_TAGS: Record<string, number> = {
-  'midnight:account:grant:id:evm:v2': 0, 'midnight:account:grant:id:v1': 1, 'midnight:account:grant:id:sol:v1': 2,
-  'midnight:account:grant:id:k1:v1': 3, 'midnight:account:grant:id:r1:v1': 4,
+  [DESCRIPTOR_TAGS['grant-id'].evm_eip712]: 0, [DESCRIPTOR_TAGS['grant-id'].jubjub]: 1, [DESCRIPTOR_TAGS['grant-id'].sol_ed25519]: 2,
+  [DESCRIPTOR_TAGS['grant-id'].k256]: 3, [DESCRIPTOR_TAGS['grant-id'].p256]: 4,
 };
 const padBlock = (s: string, n: number) => {
   // spaces before the block's last line break
@@ -170,29 +175,29 @@ function deviceBlock(t: SolTargetFields): string {
     case 1: return padBlock(L('JubJub key x: ', hex(a, 32, 'x')) + L('JubJub key y: ', hex(b, 32, 'y')), 282);
     case 2: return padBlock(L('Solana key: ', hex(a, 32, 'the key')) + L('Device privacy salt: ', hex(b, 32, 'the blind')), 282);
     case 3: return padBlock(L('secp256k1 key x: ', hex(reversed(a), 32, 'x')) + L('secp256k1 key y: ', hex(reversed(b), 32, 'y'))
-      + L('Signing envelope: ', decimal(t.envelope ?? 0n, 3)), 282);
+      + L('Signing envelope: ', envelopeLabel(t.envelope ?? 0n)), 282);
     default: return padBlock(L('Passkey key x: ', hex(reversed(a), 32, 'x')) + L('Passkey key y: ', hex(reversed(b), 32, 'y'))
       + L('Passkey origin: ', visible(t.origin ?? Z21)) + L('Passkey RP (hash): ', hex(t.c ?? Z32, 32, 'the RP hash')), 282);
   }
 }
 
-/** The grantee's key and origin lines (278 bytes). */
+/** The grantee's key and origin lines (299 bytes). */
 function granteeBlock(t: SolGranteeFields): string {
   const cls = GRANT_TAGS[t.tag];
   if (cls === undefined) throw new Error('sol message: unregistered grant-id tag');
   const a = t.a ?? Z32, b = t.b ?? Z32;
   const lab = () => labelText(labelBytes(t.label ?? ''));
   switch (cls) {
-    case 0: return padBlock(L('Ethereum address: 0x', hex(t.address ?? Z20, 20, 'the address')) + L('Device privacy salt: ', hex(a, 32, 'the blind'))
-      + L('Grantee label: ', lab()), 278);
+    case 0: return padBlock(L('Ethereum address: 0x', hex(t.address ?? Z20, 20, 'the address')) + L('Grantee privacy salt: ', hex(a, 32, 'the blind'))
+      + L('Grantee label: ', lab()), 299);
     case 1: return padBlock(L('JubJub key x: ', hex(a, 32, 'x')) + L('JubJub key y: ', hex(b, 32, 'y'))
-      + L('Grantee site label (hash): ', hex(t.originHash ?? Z32, 32, 'the origin hash')), 278);
-    case 2: return padBlock(L('Solana key: ', hex(a, 32, 'the key')) + L('Device privacy salt: ', hex(b, 32, 'the blind'))
-      + L('Grantee label: ', lab()), 278);
+      + L('Grantee site label (hash): ', hex(t.originHash ?? Z32, 32, 'the origin hash')), 299);
+    case 2: return padBlock(L('Solana key: ', hex(a, 32, 'the key')) + L('Grantee privacy salt: ', hex(b, 32, 'the blind'))
+      + L('Grantee label: ', lab()), 299);
     case 3: return padBlock(L('secp256k1 key x: ', hex(reversed(a), 32, 'x')) + L('secp256k1 key y: ', hex(reversed(b), 32, 'y'))
-      + L('Signing envelope: ', decimal(t.envelope ?? 0n, 3)) + L('Grantee site label (hash): ', hex(t.originHash ?? Z32, 32, 'the origin hash')), 278);
+      + L('Signing envelope: ', envelopeLabel(t.envelope ?? 0n)) + L('Grantee site label (hash): ', hex(t.originHash ?? Z32, 32, 'the origin hash')), 299);
     default: return padBlock(L('Passkey key x: ', hex(reversed(a), 32, 'x')) + L('Passkey key y: ', hex(reversed(b), 32, 'y'))
-      + L('Passkey origin: ', visible(t.origin ?? Z21)), 278);
+      + L('Passkey origin: ', visible(t.origin ?? Z21)), 299);
   }
 }
 const granteeLines = (g: SolGranteeFields) => L('Grantee scheme: ', labelText(labelBytes(g.tag))) + granteeBlock(g) + L('Grantee slot: ', decimal(g.slot, 3));
@@ -343,10 +348,10 @@ export const solCoinShow = (coin: SolCoin, amount: bigint) => ({
 });
 /** SolTargetShow / SolGranteeShow / SolScopeShow. */
 export const solTargetShow = (t: SolTargetFields, counter = 0n, epoch = 0n) => ({
-  envelope: digitsOf(t.envelope ?? 0n, 3), counter: digitsOf(counter, 20), epoch: digitsOf(epoch, 10), origin: chars(t.origin ?? new Uint8Array(21)),
+  counter: digitsOf(counter, 20), epoch: digitsOf(epoch, 10), origin: chars(t.origin ?? new Uint8Array(21)),
 });
 export const solGranteeShow = (g: SolGranteeFields) => ({
-  envelope: digitsOf(g.envelope ?? 0n, 3), slot: digitsOf(g.slot, 3),
+  slot: digitsOf(g.slot, 3),
   label: chars(g.label !== undefined ? labelBytes(g.label) : new Uint8Array(32)), origin: chars(g.origin ?? new Uint8Array(21)),
 });
 export const solScopeShow = (o: { maxCoinValue: bigint; perCallCap: bigint; cap: bigint; expiresAt: bigint; windowLen: bigint; windowCap: bigint }) => ({
@@ -397,6 +402,20 @@ export function solGranteeHexValues(o: SolGranteeOperation): Uint8Array[] {
   if (o.op === 'withdraw_unshielded_with_grant') return [o.amount.color, o.recipient];
   return [o.amount.color, o.recipient, o.changeEntry, o.encPk, o.coin.nonce];
 }
+
+/** The unused point of a non-Solana target: the identity (x = 0). */
+export const SOL_UNUSED_POINT = Object.freeze({ x: 0n, y: 1n });
+const SOL_POINT_TAGS = new Set([DESCRIPTOR_TAGS.device.sol_ed25519, DESCRIPTOR_TAGS['grant-id'].sol_ed25519]);
+/** A Solana target's point (AA 00067 Q37): the 32 bytes decoded strictly
+ *  (canonical, on the curve, prime-order subgroup, not the identity); the
+ *  circuit derives the bytes back from it and requires them to equal `a`. */
+export function solTargetPoint(key: Uint8Array): { x: bigint; y: bigint } {
+  const p = ed25519.Point.fromBytes(parseSolanaPublicKey(key), false).toAffine();
+  return { x: p.x, y: p.y };
+}
+/** The point argument beside a target or grantee struct: a Solana key's
+ *  point, the identity for every other class. */
+export const solTargetPointArg = (t: { tag: string; a?: Uint8Array }) => (SOL_POINT_TAGS.has(t.tag) ? solTargetPoint(t.a ?? new Uint8Array(32)) : { ...SOL_UNUSED_POINT });
 
 /** The circuit's SolTarget for a device target (unused fields zero). */
 export function solTargetArg(t: SolTargetFields) {

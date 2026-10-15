@@ -17,6 +17,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { pureCircuits } from '../wallet/contract.js';
 import { COORDINATE_DISPLAY_ORDER, coordinateHex } from '../wallet/descriptors.js';
 import { solDeviceMessageCircuit, solGranteeMessageCircuit } from '../wallet/signer-sol-ed25519.js';
@@ -39,7 +40,9 @@ const ok = (group: string, name: string, cond: boolean, detail?: string, layer?:
 };
 const refused = (group: string, name: string, layer: string, re: RegExp, fn: () => unknown) => {
   try { fn(); ok(group, name, false, 'accepted (expected a refusal)', layer); } catch (e: any) {
-    const m = String(e?.message ?? e); ok(group, name, re.test(m), m.slice(0, 160), layer);
+    // Source positions name the checkout path, so strip them before cutting
+    // the text (the frozen negatives must not depend on where the clone is).
+    const m = String(e?.message ?? e); ok(group, name, re.test(m), m.replace(/ at [\w./-]+\.compact line \d+ char \d+/g, '').slice(0, 160), layer);
   }
 };
 
@@ -64,16 +67,16 @@ const AMOUNTS: SolAmount[] = [
 const coinFor = (a: SolAmount, extra: bigint, idx: bigint): SolCoin => ({ nonce: det(`n${extra}`, 32), color: a.color, value: a.amount + extra > MAX128 ? MAX128 : a.amount + extra, mt_index: idx });
 
 const TARGETS: SolTargetFields[] = [
-  { tag: 'midnight:account:device:evm:v2', address: det('evm', 20), a: det('blind-e', 32) },
+  { tag: 'midnight:account:device:evm:v1', address: det('evm', 20), a: det('blind-e', 32) },
   { tag: 'midnight:account:device:v1', a: det('jx', 32), b: det('jy', 32) },
-  { tag: 'midnight:account:device:sol:v1', a: det('sk', 32), b: det('blind-s', 32) },
+  { tag: 'midnight:account:device:sol:v1', a: ed25519.getPublicKey(det('sk', 32)), b: det('blind-s', 32) }, // a real key (Q37: a point)
   { tag: 'midnight:account:device:k1:v2', a: det('kx', 32), b: det('ky', 32), envelope: 1n },
   { tag: 'midnight:account:device:r1:v2', a: det('rx', 32), b: det('ry', 32), c: det('rp', 32), origin: new TextEncoder().encode('https://a.example.com') },
 ];
 const GRANTEES: SolGranteeFields[] = [
-  { tag: 'midnight:account:grant:id:evm:v2', address: det('gevm', 20), a: det('gblind-e', 32), label: 'Example dApp', slot: 0n },
+  { tag: 'midnight:account:grant:id:evm:v1', address: det('gevm', 20), a: det('gblind-e', 32), label: 'Example dApp', slot: 0n },
   { tag: 'midnight:account:grant:id:v1', a: det('gjx', 32), b: det('gjy', 32), originHash: det('goh-j', 32), slot: 7n },
-  { tag: 'midnight:account:grant:id:sol:v1', a: det('gsk', 32), b: det('gblind-s', 32), label: 'x'.repeat(32), slot: 255n },
+  { tag: 'midnight:account:grant:id:sol:v1', a: ed25519.getPublicKey(det('gsk', 32)), b: det('gblind-s', 32), label: 'x'.repeat(32), slot: 255n },
   { tag: 'midnight:account:grant:id:k1:v1', a: det('gkx', 32), b: det('gky', 32), envelope: 0n, originHash: det('goh-k', 32), slot: 1n },
   { tag: 'midnight:account:grant:id:r1:v1', a: det('grx', 32), b: det('gry', 32), origin: new TextEncoder().encode('https://b.example.org'), slot: 2n },
 ];
@@ -197,7 +200,7 @@ const LINE_STARTS = [
   'Midnight Passport approval (sol v1)', 'Operation: ', 'Site: ', 'Role: ', 'Account: ', 'Signing key: ', 'New encryption key: ', 'Consequence: ',
   'Device nonce: ', 'Inbox entry ', 'Token: ', 'Amount (base units): ', 'This site labels it: ', 'To unshielded address: ', 'To shielded key: ',
   'To contract: ', 'Spent coin value: ', 'Spent coin nonce: ', 'Spent coin index: ', 'Change back to this account: ', 'Device scheme: ',
-  'Ethereum address: 0x', 'Device privacy salt: ', 'JubJub key x: ', 'JubJub key y: ', 'Solana key: ', 'secp256k1 key x: ', 'secp256k1 key y: ',
+  'Ethereum address: 0x', 'Device privacy salt: ', 'Grantee privacy salt: ', 'JubJub key x: ', 'JubJub key y: ', 'Solana key: ', 'secp256k1 key x: ', 'secp256k1 key y: ',
   'Signing envelope: ', 'Passkey key x: ', 'Passkey key y: ', 'Passkey origin: ', 'Passkey RP (hash): ', 'Device use counter: ', 'Device epoch: ',
   'Removes a device this wallet cannot identify', 'Device entry: ', 'Grantee scheme: ', 'Grantee label: ', 'Grantee site label (hash): ',
   'Grantee slot: ', 'May withdraw unshielded: ', 'May withdraw shielded: ', 'May withdraw shielded to a contract: ', 'May read the inbox: ',

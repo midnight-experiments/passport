@@ -29,69 +29,43 @@
 //                      || key(32) || blind(32))
 //   grant id = SHA-256(pad32("midnight:account:grant:id:sol:v1") || account
 //                      || key(32) || blind(32) || origin_hash || le1(slot))
-// These are the shared module's width-64 recipes
+// These are the shared module's ed25519-class recipes
 // (modules/WalletArmDescriptors), so a device of any readable arm derives
-// exactly the same entry for a `sol_ed25519` target from its descriptor.
+// exactly the same entry for a `sol_ed25519` target from its point.
 //
 // KEY ADMISSIBILITY (spec FR-012; the arm document's acceptance policy).
 //   - canonical y < p, on the curve: the client decodes the wallet's 32 bytes
 //     strictly before they become a point; the circuit never sees bytes;
 //   - prime-order subgroup (small-order and mixed-order keys): the point type
 //     (runtime type check; ZKIR FromCoordinates at the prover);
-//   - A != O: `require_live_sol_ed25519_key` below (the identity is the only
-//     prime-order point whose x-coordinate is zero); `ed25519Verify` asserts
-//     the same on every verification.
+//   - A != O: the descriptor module's ed25519 class asserts it on every
+//     derivation (the identity is the only prime-order point whose
+//     x-coordinate is zero); `ed25519Verify` asserts the same on every
+//     verification.
 // ---------------------------------------------------------------------------
 
 import "modules/WalletArmDescriptors";
 import "modules/WalletArmRendering";
 
-// ── The 32-byte key ─────────────────────────────────────────────────────────
-
-// Whether a Curve25519 base field element is odd: the low bit of its
-// canonical little-endian encoding's first byte (as the standard library's
-// curve25519BaseIsOdd, which the library does not export).
-circuit sol_ed25519_base_is_odd(x: Curve25519Base): Boolean {
-  const b = (x as Bytes<32> as Vector<32, Uint<8>>)[0];
-  const b6 = b  >= 128 ? b  - 128 : b;
-  const b5 = b6 >= 64  ? b6 - 64  : b6;
-  const b4 = b5 >= 32  ? b5 - 32  : b5;
-  const b3 = b4 >= 16  ? b4 - 16  : b4;
-  const b2 = b3 >= 8   ? b3 - 8   : b3;
-  const b1 = b2 >= 4   ? b2 - 4   : b2;
-  return (b1 >= 2 ? b1 - 2 : b1) == 1;
-}
-
-// The RFC 8032 section 5.1.2 encoding of a point, as the standard library's
-// ed25519Encode (not exported) computes it: y below p < 2^255 leaves bit 255
-// clear, and x's parity goes there. For a point of the prime-order subgroup
-// this is the one canonical encoding a strict decoder accepts, so the map from
-// admissible keys to their 32 bytes is one-to-one.
-export pure circuit encode_public_key_with_sol_ed25519(pk: Curve25519Point): Bytes<32> {
-  const y = curve25519PointY(pk) as Bytes<32> as Vector<32, Uint<8>>;
-  const sign = sol_ed25519_base_is_odd(curve25519PointX(pk)) ? 128 : 0;
-  return Bytes[y[0],  y[1],  y[2],  y[3],  y[4],  y[5],  y[6],  y[7],
-               y[8],  y[9],  y[10], y[11], y[12], y[13], y[14], y[15],
-               y[16], y[17], y[18], y[19], y[20], y[21], y[22], y[23],
-               y[24], y[25], y[26], y[27], y[28], y[29], y[30],
-               (y[31] + sign) as Uint<8>];
-}
-
-// Refuses the identity as a key. Every other point a Curve25519Point can hold
-// lies in the prime-order subgroup, so this is the whole in-circuit key guard.
-circuit require_live_sol_ed25519_key(pk: Curve25519Point): [] {
-  assert((curve25519PointX(pk) as Bytes<32>) != pad(32, ""), "device key is the identity");
-}
-
-// ── Derivations (the shared module's width-64 recipes) ──────────────────────
+// ── The 32-byte key and the derivations (the descriptor module's ed25519
+//    class, AA 00067 Q37) ──────────────────────────────────────────────────
+//
+// The key's 32-byte RFC 8032 encoding is the descriptor module's one shared
+// function, encode_public_key_with_sol_ed25519 (y little-endian, x's parity
+// in bit 255; for a point of the prime-order subgroup the one canonical
+// encoding a strict decoder accepts). Every derivation of this arm, the
+// seam's included, goes through the module's ed25519 class, which takes the
+// key as its point, asserts A != O, encodes it, and returns the key with the
+// derived value: enrolment, removal, grants and signing use one encoding of
+// one key. Exported for clients.
+export { encode_public_key_with_sol_ed25519 };
 
 export pure circuit derive_boot_commitment_with_sol_ed25519(
   salt:  Bytes<32>,
   pk:    Curve25519Point,
   blind: Bytes<32>,
 ): Bytes<32> {
-  return derive_descriptor_boot_w64(boot_tag_sol_ed25519(), salt,
-    encode_public_key_with_sol_ed25519(pk), blind);
+  return derive_descriptor_boot_ed25519(boot_tag_sol_ed25519(), salt, pk, blind)[1];
 }
 
 export pure circuit derive_device_entry_with_sol_ed25519(
@@ -101,8 +75,7 @@ export pure circuit derive_device_entry_with_sol_ed25519(
   epoch:     Uint<32>,
   counter:   Uint<64>,
 ): Bytes<32> {
-  return derive_descriptor_entry_w64(device_tag_sol_ed25519(), self_addr,
-    encode_public_key_with_sol_ed25519(pk), blind, epoch, counter);
+  return derive_descriptor_entry_ed25519(device_tag_sol_ed25519(), self_addr, pk, blind, epoch, counter)[1];
 }
 
 export pure circuit derive_grant_id_with_sol_ed25519(
@@ -112,8 +85,7 @@ export pure circuit derive_grant_id_with_sol_ed25519(
   origin_hash: Bytes<32>,
   slot:        Uint<8>,
 ): Bytes<32> {
-  return derive_descriptor_grant_id_w64(grant_id_tag_sol_ed25519(), self_addr,
-    encode_public_key_with_sol_ed25519(pk), blind, origin_hash, slot);
+  return derive_descriptor_grant_id_ed25519(grant_id_tag_sol_ed25519(), self_addr, pk, blind, origin_hash, slot)[1];
 }
 
 // The blind from the wallet's raw 64-byte signature over the request message
@@ -169,7 +141,6 @@ export circuit activate_initial_device_with_sol_ed25519(
   blind: Bytes<32>,
 ): [] {
   assert(!booted, "already activated");
-  require_live_sol_ed25519_key(pk);
   assert(derive_boot_commitment_with_sol_ed25519(salt, pk, blind) == boot, "boot commitment mismatch");
   do_activate_initial_device(derive_device_entry_with_sol_ed25519(
     kernel.self(), pk, blind, device_epoch, 0 as Uint<64>
@@ -188,8 +159,9 @@ struct SolEd25519Auth {
 }
 
 // The seam owns everything that identifies the signer and the call's
-// freshness (G1E-1): it derives the 32-byte key from the point the signature
-// is verified under, and renders the message's common frame itself — the
+// freshness (G1E-1): it derives the 32-byte key (and the current and next
+// entries, from one encoding: the module's derive_signer_entries_ed25519,
+// which asserts A != O) from the point the signature is verified under, and renders the message's common frame itself — the
 // first line, the account (kernel.self()), the signing key, and the
 // auth_nonce line — around the title and body the gated circuit supplies. No
 // gated circuit passes a key, an account, a nonce or a frame of its own.
@@ -201,26 +173,27 @@ struct SolEd25519Auth {
 // k = SHA-512(R || A || msg) mod L; it refuses A = O; s < L and the
 // prime-order subgroup for A and R hold by type) — the entry rolled to its
 // successor, auth_nonce advanced, round bumped. Any failed assert aborts the
-// whole call.
+// whole call. Returns the caller's post-roll entry (remove_device's S13
+// guard).
 circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
   title: Vector<t, Uint<8>>,
   body:  Vector<b, Uint<8>>,
   show:  SolShow,
   frame: Vector<128, Uint<0..16>>,
   auth:  SolEd25519Auth,
-): [] {
-  const key = encode_public_key_with_sol_ed25519(auth.pk);
+): Bytes<32> {
+  const [key, current, successor] = derive_signer_entries_ed25519(kernel.self(), auth.pk, auth.blind, device_epoch, auth.use_counter);
   const msg = sol_device_message<t, b, n>(kernel.self(), key, auth_nonce, title, body, show, frame);
-  const entry = disclose(derive_descriptor_entry_w64(device_tag_sol_ed25519(), kernel.self(), key, auth.blind,
-    device_epoch, auth.use_counter));
+  const entry = disclose(current);
   assert(devices.member(entry), "unknown device entry");
   assert((curve25519PointX(auth.sig.r) as Bytes<32>) != pad(32, ""), "R is the identity");
   assert(ed25519Verify<n>(msg, auth.sig, auth.pk), "invalid signature");
   devices.remove(entry);
-  devices.insert(disclose(derive_descriptor_entry_w64(device_tag_sol_ed25519(), kernel.self(), key, auth.blind,
-    device_epoch, (auth.use_counter + 1) as Uint<64>)));
+  const next = disclose(successor);
+  devices.insert(next);
   auth_nonce = (auth_nonce + 1) as Uint<64>;
   bump_round();
+  return next;
 }
 
 // ── Gated circuits ──────────────────────────────────────────────────────────
@@ -365,8 +338,10 @@ export circuit withdraw_shielded_to_contract_with_sol_ed25519(
 // both are checked for shape, and neither can move value. The only hash-like
 // values ever shown are the four listed and labelled in the spec (FR-004): a
 // k256/jubjub grantee's origin hash ("Grantee site label (hash)"), a
-// passkey's RP hash ("Passkey RP (hash)"), a target's blind ("Device privacy
-// salt"), and the literal entry of a revocation-only removal.
+// passkey's RP hash ("Passkey RP (hash)"), a target's or a grantee's blind
+// ("Device privacy salt", "Grantee privacy salt"), and the literal entry of a
+// revocation-only removal. Enumerated values (a recipient kind, a k256
+// envelope) are shown as the rendering module's fixed labels.
 //
 // DISPLAY INPUTS. Compact has no division and turning bytes into characters
 // is expensive in-circuit, so the caller supplies every text the circuit
@@ -418,10 +393,15 @@ export struct SolCoinShow {
 // A readable target (add_device, remove_device): the registered device tag
 // and the key payload of its width class.
 //   w52  evm_eip712   address (20), a = blind
-//   w64  jubjub       a = x_le, b = y_le         sol_ed25519  a = key, b = blind
+//   w64  jubjub       a = x_le, b = y_le         sol_ed25519  pk, a = key, b = blind
 //   w65  k256         a = x_le, b = y_le, envelope
 //   w117 p256         a = x_le, b = y_le, c = rp_id_hash, origin (21)
-// Fields a class does not use must be zero, so each target has one encoding.
+// A Solana target is also a POINT (AA 00067 Q37), passed beside the
+// struct to the gated circuits: `a` must be its 32-byte encoding, derived
+// in-circuit with A != O by the same function the seam uses for the signing
+// key, so the key enrolled is a key that can sign; any other class passes the
+// identity. Fields a class does not use must be zero, so each target has one
+// encoding.
 export struct SolTarget {
   tag:      Bytes<32>;
   address:  Bytes<20>;
@@ -432,10 +412,10 @@ export struct SolTarget {
   envelope: Uint<8>;
 }
 
-// A target's display inputs: the digits of its envelope, the removal's use
-// counter and epoch, and the characters of a passkey origin.
+// A target's display inputs: the digits of the removal's use counter and
+// epoch, and the characters of a passkey origin. (A k256 envelope is shown as
+// a circuit-fixed label, AA 00067 Q35.)
 export struct SolTargetShow {
-  envelope: Vector<3, Uint<8>>;
   counter:  Vector<20, Uint<8>>;
   epoch:    Vector<10, Uint<8>>;
   origin:   Vector<21, Uint<8>>;
@@ -443,10 +423,10 @@ export struct SolTargetShow {
 
 // A grantee (issue_grant, revoke_grant): its scheme's grant-id recipe binds
 // (key, origin_hash, slot). Classes: 0 evm_eip712 (w52), 1 jubjub (w64),
-// 2 sol_ed25519 (w64), 3 k256 (w65), 4 p256 (w64, key only; its RP is a scope
-// field). origin_hash: a readable grantee's 32-byte label (shown as text), a
-// passkey's 21-byte origin (shown as text), or, for k256/jubjub grantees,
-// the labelled hash itself (spec Q17).
+// 2 sol_ed25519 (w64; with its point, as a target), 3 k256 (w65), 4 p256 (w64, key
+// only; its RP is a scope field). origin_hash: a readable grantee's 32-byte
+// label (shown as text), a passkey's 21-byte origin (shown as text), or, for
+// k256/jubjub grantees, the labelled hash itself (spec Q17).
 export struct SolGrantee {
   tag:         Bytes<32>;
   address:     Bytes<20>;
@@ -459,10 +439,9 @@ export struct SolGrantee {
   slot:        Uint<8>;
 }
 
-// A grantee's display inputs: the digits of its envelope and slot, the
-// characters of its label and of a passkey origin.
+// A grantee's display inputs: the digits of its slot, the characters of its
+// label and of a passkey origin.
 export struct SolGranteeShow {
-  envelope: Vector<3, Uint<8>>;
   slot:     Vector<3, Uint<8>>;
   label:    Vector<32, Uint<8>>;
   origin:   Vector<21, Uint<8>>;
@@ -562,17 +541,6 @@ circuit sol_yes_no(b: Boolean): Vector<3, Uint<8>> {
              pad(3, "yes") as Vector<3, Uint<8>>, pad(3, "no") as Vector<3, Uint<8>>);
 }
 
-// The recipient kind as a word (18 bytes): 0 any, 1 unshielded address,
-// 2 shielded key, 3 contract. Other kinds are refused (a grant with one
-// could never spend).
-circuit sol_recipient_kind(kind: Uint<8>): Vector<18, Uint<8>> {
-  assert(kind <= 3, "display: unknown recipient kind");
-  return map((a: Uint<8>, u: Uint<8>, s: Uint<8>, c: Uint<8>): Uint<8> =>
-               (kind == 0 ? (a == 0 ? 32 : a) : kind == 1 ? (u == 0 ? 32 : u) : kind == 2 ? (s == 0 ? 32 : s) : (c == 0 ? 32 : c)) as Uint<8>,
-             pad(18, "any recipient") as Vector<18, Uint<8>>, pad(18, "unshielded address") as Vector<18, Uint<8>>,
-             pad(18, "shielded key") as Vector<18, Uint<8>>, pad(18, "contract") as Vector<18, Uint<8>>);
-}
-
 // Characters checked against bytes (a passkey origin, a grant label).
 circuit sol_chars21(b: Bytes<21>, v: Vector<21, Uint<8>>): Vector<21, Uint<8>> {
   assert(Bytes[...v] == b, "display: characters do not match the value");
@@ -608,14 +576,24 @@ circuit sol_require_canonical_device(t: SolTarget, cls: Uint<8>): [] {
 }
 
 // The entry of a target device at (epoch, counter), by its class.
-circuit sol_device_entry(t: SolTarget, self_addr: ContractAddress, epoch: Uint<32>, counter: Uint<64>): Bytes<32> {
+// A Solana target is its point (`pk`): the module's ed25519 class derives
+// the entry from it (A != O) and returns the key it encoded, which must be
+// the key the message shows (`t.a`). Any other class carries the identity as
+// its unused point (x = 0).
+circuit sol_device_entry(t: SolTarget, pk: Curve25519Point, self_addr: ContractAddress, epoch: Uint<32>, counter: Uint<64>): Bytes<32> {
   const cls = sol_device_class(t.tag);
   sol_require_canonical_device(t, cls);
+  assert(cls == 2 || (curve25519PointX(pk) as Bytes<32>) == pad(32, ""), "descriptor: unused point must be the identity");
   if (cls == 0) {
     return derive_descriptor_entry_w52(t.tag, self_addr, t.address, t.a, epoch, counter);
   }
-  if (cls == 1 || cls == 2) {
+  if (cls == 1) {
     return derive_descriptor_entry_w64(t.tag, self_addr, t.a, t.b, epoch, counter);
+  }
+  if (cls == 2) {
+    const [key, entry] = derive_descriptor_entry_ed25519(t.tag, self_addr, pk, t.b, epoch, counter);
+    assert(key == t.a, "descriptor: the Solana key is not the point's encoding");
+    return entry;
   }
   if (cls == 3) {
     return derive_descriptor_entry_w65(t.tag, self_addr, t.a, t.b, t.envelope, epoch, counter);
@@ -651,7 +629,14 @@ circuit sol_grantee_origin_hash(t: SolGrantee, cls: Uint<8>): Bytes<32> {
   return t.origin_hash;
 }
 
-circuit sol_grantee_id(t: SolGrantee, cls: Uint<8>, self_addr: ContractAddress, origin_hash: Bytes<32>): Bytes<32> {
+// A Solana grantee is its point, as a Solana target is (see sol_device_entry).
+circuit sol_grantee_id(t: SolGrantee, pk: Curve25519Point, cls: Uint<8>, self_addr: ContractAddress, origin_hash: Bytes<32>): Bytes<32> {
+  assert(cls == 2 || (curve25519PointX(pk) as Bytes<32>) == pad(32, ""), "descriptor: unused point must be the identity");
+  if (cls == 2) {
+    const [key, id] = derive_descriptor_grant_id_ed25519(t.tag, self_addr, pk, t.b, origin_hash, t.slot);
+    assert(key == t.a, "descriptor: the Solana key is not the point's encoding");
+    return id;
+  }
   if (cls == 0) {
     return derive_descriptor_grant_id_w52(t.tag, self_addr, t.address, t.a, origin_hash, t.slot);
   }
@@ -839,7 +824,7 @@ circuit sol_device_block(t: SolTarget, ts: SolTargetShow, h_address: Vector<40, 
                ...pad(21, "Device privacy salt: "), ...h_b, ...sol_spaces<119>(), 10];
   const k1 = [...pad(17, "secp256k1 key x: "), ...xa, 10,
               ...pad(17, "secp256k1 key y: "), ...yb, 10,
-              ...pad(18, "Signing envelope: "), ...uint8_text(t.envelope, ts.envelope), ...sol_spaces<96>(), 10];
+              ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), ...sol_spaces<75>(), 10];
   const r1 = [...pad(15, "Passkey key x: "), ...xa, 10,
               ...pad(15, "Passkey key y: "), ...yb, 10,
               ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, ts.origin, cls == 4), 10,
@@ -849,10 +834,10 @@ circuit sol_device_block(t: SolTarget, ts: SolTargetShow, h_address: Vector<40, 
              evm, jub, sol, k1, r1);
 }
 
-// The grantee's key and origin lines (278 bytes, padded as the device block;
+// The grantee's key and origin lines (299 bytes, padded as the device block;
 // coordinates in the same order).
 circuit sol_grantee_block(t: SolGrantee, gs: SolGranteeShow, h_address: Vector<40, Uint<8>>, h_a: Vector<64, Uint<8>>,
-                          h_b: Vector<64, Uint<8>>, h_oh: Vector<64, Uint<8>>): Vector<278, Uint<8>> {
+                          h_b: Vector<64, Uint<8>>, h_oh: Vector<64, Uint<8>>): Vector<299, Uint<8>> {
   const cls = sol_grantee_class(t.tag);
   const xa = sol_be(h_a);
   const yb = sol_be(h_b);
@@ -863,21 +848,21 @@ circuit sol_grantee_block(t: SolGrantee, gs: SolGranteeShow, h_address: Vector<4
   const lab = sol_label_chars(readable ? chars : [45, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   const evm = [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
-               ...pad(21, "Device privacy salt: "), ...h_a, 10,
-               ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<83>(), 10];
+               ...pad(22, "Grantee privacy salt: "), ...h_a, 10,
+               ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<103>(), 10];
   const jub = [...pad(14, "JubJub key x: "), ...h_a, 10,
                ...pad(14, "JubJub key y: "), ...h_b, 10,
-               ...pad(27, "Grantee site label (hash): "), ...h_oh, ...sol_spaces<28>(), 10];
+               ...pad(27, "Grantee site label (hash): "), ...h_oh, ...sol_spaces<49>(), 10];
   const sol = [...pad(12, "Solana key: "), ...h_a, 10,
-               ...pad(21, "Device privacy salt: "), ...h_b, 10,
-               ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<67>(), 10];
+               ...pad(22, "Grantee privacy salt: "), ...h_b, 10,
+               ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<87>(), 10];
   const k1 = [...pad(17, "secp256k1 key x: "), ...xa, 10,
               ...pad(17, "secp256k1 key y: "), ...yb, 10,
-              ...pad(18, "Signing envelope: "), ...uint8_text(t.envelope, gs.envelope), 10,
+              ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), 10,
               ...pad(27, "Grantee site label (hash): "), ...h_oh, 10];
   const r1 = [...pad(15, "Passkey key x: "), ...xa, 10,
               ...pad(15, "Passkey key y: "), ...yb, 10,
-              ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, gs.origin, cls == 4), ...sol_spaces<80>(), 10];
+              ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, gs.origin, cls == 4), ...sol_spaces<101>(), 10];
   return map((e: Uint<8>, j: Uint<8>, s: Uint<8>, k: Uint<8>, p: Uint<8>): Uint<8> =>
                cls == 0 ? e : cls == 1 ? j : cls == 2 ? s : cls == 3 ? k : p,
              evm, jub, sol, k1, r1);
@@ -1063,8 +1048,8 @@ export pure circuit sol_message_remove_device(
   return sol_device_message<27, 464, 781>(self_addr, key, nonce_value, sol_title_remove_device(), sol_body_remove_device(literal, target, counter, epoch, entry, ts, hex), show, frame);
 }
 
-// Issue a scoped grant (device role): the body, 1324 bytes; 552 body nibbles.
-circuit sol_body_issue_grant(grantee: SolGrantee, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, hex: Vector<552, Uint<0..16>>): Vector<1324, Uint<8>> {
+// Issue a scoped grant (device role): the body, 1351 bytes; 552 body nibbles.
+circuit sol_body_issue_grant(grantee: SolGrantee, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, hex: Vector<552, Uint<0..16>>): Vector<1351, Uint<8>> {
   const h_g_address = sol_hex20(grantee.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
   const h_g_a = sol_hex32(grantee.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
   const h_g_b = sol_hex32(grantee.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
@@ -1099,7 +1084,7 @@ circuit sol_body_issue_grant(grantee: SolGrantee, op_withdraw_unshielded: Boolea
           ...h_color,
           10,
           ...pad(16, "Recipient kind: "),
-          ...sol_recipient_kind(recipient_kind),
+          ...recipient_kind_text(recipient_kind),
           10,
           ...pad(11, "Recipient: "),
           ...h_recipient,
@@ -1139,15 +1124,15 @@ circuit sol_title_issue_grant(): Vector<32, Uint<8>> {
   return [...pad(31, "Operation: Issue a scoped grant"), 10];
 }
 
-// Issue a scoped grant (device role): 1646 bytes.
+// Issue a scoped grant (device role): 1673 bytes.
 export pure circuit sol_message_issue_grant(
   self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<552, Uint<0..16>>
-): Bytes<1646> {
-  return sol_device_message<32, 1324, 1646>(self_addr, key, nonce_value, sol_title_issue_grant(), sol_body_issue_grant(grantee, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk, window_len, window_cap, caller, gs, ss, hex), show, frame);
+): Bytes<1673> {
+  return sol_device_message<32, 1351, 1673>(self_addr, key, nonce_value, sol_title_issue_grant(), sol_body_issue_grant(grantee, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk, window_len, window_cap, caller, gs, ss, hex), show, frame);
 }
 
-// Revoke a scoped grant (device role): the body, 406 bytes; 232 body nibbles.
-circuit sol_body_revoke_grant(grantee: SolGrantee, gs: SolGranteeShow, hex: Vector<232, Uint<0..16>>): Vector<406, Uint<8>> {
+// Revoke a scoped grant (device role): the body, 427 bytes; 232 body nibbles.
+circuit sol_body_revoke_grant(grantee: SolGrantee, gs: SolGranteeShow, hex: Vector<232, Uint<0..16>>): Vector<427, Uint<8>> {
   const h_g_address = sol_hex20(grantee.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
   const h_g_a = sol_hex32(grantee.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
   const h_g_b = sol_hex32(grantee.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
@@ -1166,11 +1151,11 @@ circuit sol_title_revoke_grant(): Vector<33, Uint<8>> {
   return [...pad(32, "Operation: Revoke a scoped grant"), 10];
 }
 
-// Revoke a scoped grant (device role): 729 bytes.
+// Revoke a scoped grant (device role): 750 bytes.
 export pure circuit sol_message_revoke_grant(
   self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, gs: SolGranteeShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<232, Uint<0..16>>
-): Bytes<729> {
-  return sol_device_message<33, 406, 729>(self_addr, key, nonce_value, sol_title_revoke_grant(), sol_body_revoke_grant(grantee, gs, hex), show, frame);
+): Bytes<750> {
+  return sol_device_message<33, 427, 750>(self_addr, key, nonce_value, sol_title_revoke_grant(), sol_body_revoke_grant(grantee, gs, hex), show, frame);
 }
 
 // Revoke all scoped grants (device role): the body, 63 bytes; 0 body nibbles.

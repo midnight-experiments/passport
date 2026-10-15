@@ -335,11 +335,14 @@ async function simCall(sim: Sim, circuit: string, ...args: unknown[]) {
     !before.booted && after.booted && after.device_count === 1n && after.devices.member(device.entryAt(sim.addressBytes, after.device_epoch, 0n))
     && after.round > before.round && eq(after.boot, new Uint8Array(32)));
   await refused(G, 'second activation refused', 'runtime', /already activated/, () => simCall(sim, 'activate_initial_device_with_sol_ed25519', ...device.activationArgs(salt)));
-  // The identity key: a boot commitment for O exists, the assert refuses it.
+  // The identity key: its boot commitment by the spec recipe (the contract's
+  // own derivation refuses O, A != O); the activation's derivation refuses it.
   const O = { x: 0n, y: 1n };
   const blind = rnd(32);
-  const simO = await deploySim(pureCircuits.derive_boot_commitment_with_sol_ed25519(salt, O, blind));
-  await refused(G, 'identity key refused (device key is the identity)', 'runtime', /device key is the identity/, () => simCall(simO, 'activate_initial_device_with_sol_ed25519', O, salt, blind));
+  await refused(G, "the identity key's boot commitment: the contract's derivation refuses it", 'runtime', /the Ed25519 key is the identity/, () => pureCircuits.derive_boot_commitment_with_sol_ed25519(salt, O, blind));
+  const idKey = new Uint8Array(32); idKey[0] = 1;
+  const simO = await deploySim(sha256(padTag('midnight:account:boot:sol:v1'), salt, idKey, blind));
+  await refused(G, 'identity key refused at activation (A != O in the module\'s ed25519 class)', 'runtime', /the Ed25519 key is the identity/, () => simCall(simO, 'activate_initial_device_with_sol_ed25519', O, salt, blind));
 }
 
 // ── report ───────────────────────────────────────────────────────────────────
