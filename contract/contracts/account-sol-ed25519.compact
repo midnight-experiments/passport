@@ -1,0 +1,177 @@
+// ---------------------------------------------------------------------------
+// Arm `sol_ed25519`: a Solana wallet as a device and as a grantee, included by
+// account.compact. All custody, grant-scope and recovery mutations use the
+// existing shared chips.
+//
+// SCHEME. RFC 8032 PureEdDSA over edwards25519 (Ed25519), the scheme of a
+// Solana wallet's `signMessage` (Phantom and others): the wallet signs the raw
+// bytes it is given, with no prefix. Verification is the standard library's
+// `ed25519Verify<#n>` plus an explicit `R != O` assert (the seam, added with
+// the gated circuits).
+//
+// IDENTITY. The device is the wallet's public key A. The circuit takes A as a
+// `Curve25519Point`, whose type admits only points of the prime-order
+// subgroup (ZKIR `FromCoordinates` is unsatisfiable outside it, and the
+// runtime refuses such points at the type boundary), and relates it in-circuit
+// to the 32-byte RFC 8032 encoding the wallet exports (section 5.1.2: y
+// little-endian, the low bit of x in bit 255). Entries, boot commitments and
+// grant ids bind those 32 bytes, never the point's internal form, so the
+// identity a person compares with the wallet is exactly the one hashed.
+//
+// BLIND (spec FR-013). The 32 bytes are public (they are the Solana address),
+// so every entry and grant id also binds the account's blind, a per-account
+// secret the client re-derives from the wallet's signature over a readable,
+// non-authorising request message (src/wallet/blind.ts):
+//   blind    = SHA-256(pad32("midnight:account:blind:sol:v1") || signature(64))
+//   entry    = SHA-256(pad32("midnight:account:device:sol:v1") || account
+//                      || key(32) || blind(32) || le4(epoch) || le8(counter))
+//   boot     = SHA-256(pad32("midnight:account:boot:sol:v1") || salt
+//                      || key(32) || blind(32))
+//   grant id = SHA-256(pad32("midnight:account:grant:id:sol:v1") || account
+//                      || key(32) || blind(32) || origin_hash || le1(slot))
+// These are the shared module's width-64 recipes
+// (modules/WalletArmDescriptors), so a device of any readable arm derives
+// exactly the same entry for a `sol_ed25519` target from its descriptor.
+//
+// KEY ADMISSIBILITY (spec FR-012; the arm document's acceptance policy).
+//   - canonical y < p, on the curve: the client decodes the wallet's 32 bytes
+//     strictly before they become a point; the circuit never sees bytes;
+//   - prime-order subgroup (small-order and mixed-order keys): the point type
+//     (runtime type check; ZKIR FromCoordinates at the prover);
+//   - A != O: `require_live_sol_ed25519_key` below (the identity is the only
+//     prime-order point whose x-coordinate is zero); `ed25519Verify` asserts
+//     the same on every verification.
+// ---------------------------------------------------------------------------
+
+import "modules/WalletArmDescriptors";
+import "modules/WalletArmRendering";
+
+// ── The 32-byte key ─────────────────────────────────────────────────────────
+
+// Whether a Curve25519 base field element is odd: the low bit of its
+// canonical little-endian encoding's first byte (as the standard library's
+// curve25519BaseIsOdd, which the library does not export).
+circuit sol_ed25519_base_is_odd(x: Curve25519Base): Boolean {
+  const b = (x as Bytes<32> as Vector<32, Uint<8>>)[0];
+  const b6 = b  >= 128 ? b  - 128 : b;
+  const b5 = b6 >= 64  ? b6 - 64  : b6;
+  const b4 = b5 >= 32  ? b5 - 32  : b5;
+  const b3 = b4 >= 16  ? b4 - 16  : b4;
+  const b2 = b3 >= 8   ? b3 - 8   : b3;
+  const b1 = b2 >= 4   ? b2 - 4   : b2;
+  return (b1 >= 2 ? b1 - 2 : b1) == 1;
+}
+
+// The RFC 8032 section 5.1.2 encoding of a point, as the standard library's
+// ed25519Encode (not exported) computes it: y below p < 2^255 leaves bit 255
+// clear, and x's parity goes there. For a point of the prime-order subgroup
+// this is the one canonical encoding a strict decoder accepts, so the map from
+// admissible keys to their 32 bytes is one-to-one.
+export pure circuit encode_public_key_with_sol_ed25519(pk: Curve25519Point): Bytes<32> {
+  const y = curve25519PointY(pk) as Bytes<32> as Vector<32, Uint<8>>;
+  const sign = sol_ed25519_base_is_odd(curve25519PointX(pk)) ? 128 : 0;
+  return Bytes[y[0],  y[1],  y[2],  y[3],  y[4],  y[5],  y[6],  y[7],
+               y[8],  y[9],  y[10], y[11], y[12], y[13], y[14], y[15],
+               y[16], y[17], y[18], y[19], y[20], y[21], y[22], y[23],
+               y[24], y[25], y[26], y[27], y[28], y[29], y[30],
+               (y[31] + sign) as Uint<8>];
+}
+
+// Refuses the identity as a key. Every other point a Curve25519Point can hold
+// lies in the prime-order subgroup, so this is the whole in-circuit key guard.
+circuit require_live_sol_ed25519_key(pk: Curve25519Point): [] {
+  assert((curve25519PointX(pk) as Bytes<32>) != pad(32, ""), "device key is the identity");
+}
+
+// ── Derivations (the shared module's width-64 recipes) ──────────────────────
+
+export pure circuit derive_boot_commitment_with_sol_ed25519(
+  salt:  Bytes<32>,
+  pk:    Curve25519Point,
+  blind: Bytes<32>,
+): Bytes<32> {
+  return derive_descriptor_boot_w64(boot_tag_sol_ed25519(), salt,
+    encode_public_key_with_sol_ed25519(pk), blind);
+}
+
+export pure circuit derive_device_entry_with_sol_ed25519(
+  self_addr: ContractAddress,
+  pk:        Curve25519Point,
+  blind:     Bytes<32>,
+  epoch:     Uint<32>,
+  counter:   Uint<64>,
+): Bytes<32> {
+  return derive_descriptor_entry_w64(device_tag_sol_ed25519(), self_addr,
+    encode_public_key_with_sol_ed25519(pk), blind, epoch, counter);
+}
+
+export pure circuit derive_grant_id_with_sol_ed25519(
+  self_addr:   ContractAddress,
+  pk:          Curve25519Point,
+  blind:       Bytes<32>,
+  origin_hash: Bytes<32>,
+  slot:        Uint<8>,
+): Bytes<32> {
+  return derive_descriptor_grant_id_w64(grant_id_tag_sol_ed25519(), self_addr,
+    encode_public_key_with_sol_ed25519(pk), blind, origin_hash, slot);
+}
+
+// The blind from the wallet's raw 64-byte signature over the request message
+// (src/wallet/blind.ts). Computed by the client, before an account exists;
+// exported so that every implementation reproduces it with the contract's
+// own toolchain. No circuit accepts the request message as an authorisation.
+export pure circuit derive_blind_with_sol_ed25519(signature: Bytes<64>): Bytes<32> {
+  return derive_blind(blind_tag_sol_ed25519(), signature);
+}
+
+// ── Key derivation from a seed (spec Q8) ────────────────────────────────────
+//
+// RFC 8032 section 5.1.5: h = SHA-512(seed); s = h[0..32] with bits 0, 1, 2
+// and 255 cleared and bit 254 set ("clamped"), read little-endian; A = [s]B.
+// Returns A and its 32-byte encoding, so a software signer obtains exactly the
+// point and the bytes the arm's circuits use. Pure: no proving key, nothing on
+// chain. There is deliberately no raw-scalar helper: a Solana secret key is a
+// seed, and a seed passed as a scalar gives another key.
+//
+// The clamped s lies in [2^254, 2^255), above the group order L; the cast to
+// Curve25519Scalar reduces it mod L (ZKIR FromBytes32 on a foreign field), and
+// [s mod L]B = [s]B because B has order L.
+export pure circuit compute_public_key_with_sol_ed25519(seed: Bytes<32>): [Curve25519Point, Bytes<32>] {
+  const h = slice<32>(sha512<Bytes<32>>(seed), 0) as Vector<32, Uint<8>>;
+  // Clear bits 0..2 of the first byte: subtract its value mod 8.
+  const f = h[0];
+  const f6 = f  >= 128 ? f  - 128 : f;
+  const f5 = f6 >= 64  ? f6 - 64  : f6;
+  const f4 = f5 >= 32  ? f5 - 32  : f5;
+  const f3 = f4 >= 16  ? f4 - 16  : f4;
+  const low = f3 >= 8 ? f3 - 8 : f3;
+  // Clear bit 7 and set bit 6 of the last byte.
+  const t = h[31];
+  const t7 = t >= 128 ? t - 128 : t;
+  const top = t7 >= 64 ? t7 : t7 + 64;
+  const s = Bytes[(f - low) as Uint<8>, h[1],  h[2],  h[3],  h[4],  h[5],  h[6],  h[7],
+                  h[8],  h[9],  h[10], h[11], h[12], h[13], h[14], h[15],
+                  h[16], h[17], h[18], h[19], h[20], h[21], h[22], h[23],
+                  h[24], h[25], h[26], h[27], h[28], h[29], h[30],
+                  top as Uint<8>] as Curve25519Scalar;
+  const pk = ecMulGenerator(s);
+  return [pk, encode_public_key_with_sol_ed25519(pk)];
+}
+
+// ── Bootstrap ───────────────────────────────────────────────────────────────
+
+// Permissionless, as every arm's activation: the boot commitment binds the
+// key and the blind, so only the committed device can be activated, and the
+// caller learns nothing it did not already hold.
+export circuit activate_initial_device_with_sol_ed25519(
+  pk:    Curve25519Point,
+  salt:  Bytes<32>,
+  blind: Bytes<32>,
+): [] {
+  assert(!booted, "already activated");
+  require_live_sol_ed25519_key(pk);
+  assert(derive_boot_commitment_with_sol_ed25519(salt, pk, blind) == boot, "boot commitment mismatch");
+  do_activate_initial_device(derive_device_entry_with_sol_ed25519(
+    kernel.self(), pk, blind, device_epoch, 0 as Uint<64>
+  ));
+}
