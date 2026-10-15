@@ -92,10 +92,15 @@ export function decodeSolSignature(signature: Uint8Array): SolSignatureArg {
 
 /**
  * The client's pre-check (the arm document's acceptance policy, FR-012):
- * strict decoding of A and of the signature, then cofactorless RFC 8032
- * verification without ZIP-215 relaxations. Throws with a reason; a wallet
- * that signed other bytes, with another key, or in a wrapped format (a
- * Ledger's off-chain envelope) fails here before any proof.
+ * strict decoding of A and of the signature (canonical encodings, A and R
+ * in the prime-order subgroup and not the identity, s < L), THEN noble's
+ * verification with `{ zip215: false }`. That verification is cofactored
+ * ([8][s]B = [8]R + [8][k]A) and on its own accepts signatures under a
+ * mixed-order key that the circuit refuses; only together with the torsion
+ * checks before it does it equal the circuit's cofactorless rule. Never
+ * reduce this to the noble call alone. Throws with a reason; a wallet that
+ * signed other bytes, with another key, or in a wrapped format (a Ledger's
+ * off-chain envelope) fails here before any proof.
  */
 export function verifySolSignature(message: Uint8Array, signature: Uint8Array, key: Uint8Array | string): SolSignatureArg {
   const A = parseSolanaPublicKey(key);
