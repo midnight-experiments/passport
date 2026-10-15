@@ -677,6 +677,56 @@ export async function revokeAllGrantsWithSolEd25519(account: SolEd25519Lifecycle
   return { auth, txId: txIdOf(r) };
 }
 
+// ── Recovery (S9S): the session and the veto through the device seam ──────
+
+/** One recovery session's artefacts (recovery MIP section 5): the new
+ *  recovery public key P = s·G, a fresh session identifier, 1..4 backup
+ *  vector values, and the 64-byte key wrap. */
+export interface SolRecoveryArtefacts {
+  recoveryPk: { x: bigint; y: bigint };
+  sessionNonce: Uint8Array;
+  phi: bigint[];
+  wrap: Uint8Array;
+}
+
+/** The message-level session (slots padded with zeros, the length), with the
+ *  shared chip's client-side refusals applied before any signature. */
+export function solRecoverySession(a: SolRecoveryArtefacts) {
+  if (a.phi.length < 1 || a.phi.length > 4) throw new Error(`sol_ed25519: phi carries ${a.phi.length} entries; the slot bound admits 1..4`);
+  if (!(a.sessionNonce instanceof Uint8Array) || a.sessionNonce.length !== 32 || a.sessionNonce.every((b) => b === 0)) {
+    throw new Error('sol_ed25519: a session identifier is 32 non-zero bytes (REC-4)');
+  }
+  if (!(a.wrap instanceof Uint8Array) || a.wrap.length !== 64) throw new Error('sol_ed25519: the recovery wrap is 64 bytes');
+  const R = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001n;
+  for (const v of [...a.phi, a.recoveryPk.x, a.recoveryPk.y]) {
+    if (v < 0n || v >= R) throw new Error('sol_ed25519: a backup vector value or key coordinate is not a canonical field element');
+  }
+  const phi: [bigint, bigint, bigint, bigint] = [0n, 0n, 0n, 0n];
+  a.phi.forEach((p, i) => { phi[i] = p; });
+  return { op: 'publish_recovery_session' as const, recoveryPk: { x: a.recoveryPk.x, y: a.recoveryPk.y }, sessionNonce: new Uint8Array(a.sessionNonce),
+    phi, phiLen: BigInt(a.phi.length), wrap: new Uint8Array(a.wrap) };
+}
+
+/** publish_recovery_session_with_sol_ed25519: the message ("sets this
+ *  account's recovery key", the key's coordinates, the session identifier,
+ *  the four backup vector values, the length and the wrap, all in full),
+ *  signed by the device's wallet, then the call. */
+export async function publishRecoverySessionWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, artefacts: SolRecoveryArtefacts) {
+  const session = solRecoverySession(artefacts);
+  const auth = await authoriseSolDeviceOn(account, device, site, session);
+  const r = await account.callTx.publish_recovery_session_with_sol_ed25519(
+    session.recoveryPk, session.sessionNonce, ...session.phi, session.phiLen, session.wrap, ...solEd25519AuthArgs(auth));
+  return { auth, session, txId: txIdOf(r) };
+}
+
+/** recover_cancel_with_sol_ed25519: the frame and the consequence line,
+ *  signed, then the call; vetoes the pending recovery. */
+export async function recoverCancelWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'recover_cancel' });
+  const r = await account.callTx.recover_cancel_with_sol_ed25519(...solEd25519AuthArgs(auth));
+  return { auth, txId: txIdOf(r) };
+}
+
 // ── The grantee (S8S, Q39) ─────────────────────────────────────────────────
 //
 // A Solana key acting under a grant. Its blind is NOT its device blind: the
