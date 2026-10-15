@@ -49,8 +49,7 @@ import {
 } from '../wallet/signer.js';
 import {
   SoftwareEvmWallet, EvmEip712Device, EvmEip712Grantee, evmEip712GranteeInput, evmEip712IssueArgs, parseEvmSignature,
-  type EvmEip712GrantAuthorisation,
-} from '../wallet/signer-evm-eip712.js';
+  type EvmEip712GrantAuthorisation, solArg} from '../wallet/signer-evm-eip712.js';
 import { evmEip712Messages, typedDataDigest, type IssueScope, type EvmEip712GranteeInput } from '../wallet/evm-eip712-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
 
@@ -123,7 +122,9 @@ interface Grantee {
   evm?: { pk: any; blind: Uint8Array; address: Uint8Array; label: Uint8Array; wallet: SoftwareEvmWallet };
 }
 const BANK = 'https://bank.example';
-async function makeGrantee(arm: GranteeArm): Promise<Grantee> {
+/** A grantee key of `arm`; an evm_eip712 grantee derives its blind for the
+ *  issuing account (the grantee request, Q39). */
+async function makeGrantee(arm: GranteeArm, issuingAccount: Uint8Array): Promise<Grantee> {
   if (arm === 'k256') {
     const k = K256Grantee.generate();
     const origin = originHash(BANK);
@@ -148,7 +149,7 @@ async function makeGrantee(arm: GranteeArm): Promise<Grantee> {
   }
   const label = grantLabel('bank.example');
   const wallet = SoftwareEvmWallet.generate();
-  const base = await EvmEip712Grantee.enrol(wallet, 'undeployed', 0, label, 0n);
+  const base = await EvmEip712Grantee.enrol(wallet, 'undeployed', issuingAccount, label, 0n);
   const at = (slot: bigint) => new EvmEip712Grantee(base.pk, base.blind, label, slot, wallet);
   return { arm, origin: base.originHash, grantId: (a, slot) => at(slot).grantId(a),
     descriptor: (slot) => at(slot).descriptor(),
@@ -231,7 +232,7 @@ async function openAccount(ownerArm: OwnerArm): Promise<Account> {
       const auth = await evmAuth(evmEip712Messages.issueGrant(evmFrame(), gin, s));
       const args = evmEip712IssueArgs(executed, scopeSalt);
       if (opts.rawReadPk) args[12] = opts.rawReadPk;
-      await call('issue_grant_with_evm_eip712', [gin, ...args, auth]);
+      await call('issue_grant_with_evm_eip712', [gin, solArg(gin), ...args, auth]);
     } else {
       const id = g.grantId(address, slot);
       const hashed = { ...plain(s), ...opts.plain };
@@ -245,7 +246,7 @@ async function openAccount(ownerArm: OwnerArm): Promise<Account> {
   async function revoke(g: Grantee, slot: bigint) {
     if (evmOwner) {
       const gin = g.descriptor(slot);
-      await call('revoke_grant_with_evm_eip712', [gin, await evmAuth(evmEip712Messages.revokeGrant(evmFrame(), gin))]);
+      await call('revoke_grant_with_evm_eip712', [gin, solArg(gin), await evmAuth(evmEip712Messages.revokeGrant(evmFrame(), gin))]);
     } else {
       const id = g.grantId(address, slot);
       const a = jub ? jub.sign(jubjubChallenges.revokeGrant(ctx(), jub.pk, id), counter) : k1!.sign(k256Challenges.revokeGrant(ctx(), k1!.pk, id), counter);
@@ -294,7 +295,7 @@ async function scenario(ownerArm: OwnerArm, granteeArm: GranteeArm) {
   const tag = `[owner ${ownerArm} / grantee ${granteeArm}]`;
   const acc = await openAccount(ownerArm);
   const L = () => acc.L();
-  const g = await makeGrantee(granteeArm);
+  const g = await makeGrantee(granteeArm, acc.address);
   const slot = 0n;
   const salt = rnd(), color = rnd(), recipient = rnd();
   const scope = spendScope({ opWithdrawUnshielded: true, color, cap: 450n, perCallCap: 300n, maxCoinValue: 300n,
@@ -372,7 +373,7 @@ async function scenario(ownerArm: OwnerArm, granteeArm: GranteeArm) {
   await expectAbort(`${tag} wrong recipient under the pin`, () => spend(acc, g, slot, color, 100n, rnd(), opening), 'recipient not admitted by pin');
   await expectAbort(`${tag} recipient-kind mismatch`, () => spend(acc, g, slot, color, 100n, recipient, { ...opening, recipientKind: RECIPIENT_ZSWAP_COIN_PUBLIC_KEY }), 'scope object mismatch');
   await expectAbort(`${tag} wrong scope_salt`, () => spend(acc, g, slot, color, 100n, recipient, { ...opening, scopeSalt: rnd() }), 'scope object mismatch');
-  await expectAbort(`${tag} a foreign key (no record)`, async () => { const f = await makeGrantee(granteeArm); return spend(acc, f, slot, color, 100n, recipient, opening); }, 'unknown grant');
+  await expectAbort(`${tag} a foreign key (no record)`, async () => { const f = await makeGrantee(granteeArm, acc.address); return spend(acc, f, slot, color, 100n, recipient, opening); }, 'unknown grant');
   await expectAbort(`${tag} out-of-scope operation (a shielded-only grant used unshielded)`, async () => {
     const sh = spendScope({ opWithdrawShielded: true, read: true, readPk: rnd(), color, cap: 450n, perCallCap: 300n, maxCoinValue: 300n, recipientKind: RECIPIENT_USER_ADDRESS, recipient });
     const s2 = rnd();
@@ -431,7 +432,7 @@ async function scenario(ownerArm: OwnerArm, granteeArm: GranteeArm) {
 async function callerMatrix(ownerArm: OwnerArm) {
   const tag = `[caller pin, owner ${ownerArm} / grantee evm_eip712]`;
   const acc = await openAccount(ownerArm);
-  const g = await makeGrantee('evm_eip712');
+  const g = await makeGrantee('evm_eip712', acc.address);
   const hexOf = (b: Uint8Array) => Buffer.from(b).toString('hex');
   const pinned = rnd(), wrong = rnd();
   const contractCaller = (b: Uint8Array): PublicAddress => ({ tag: 'contract', address: hexOf(b) } as PublicAddress);

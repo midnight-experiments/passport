@@ -17,18 +17,18 @@
 //                refused, per-index and per-network separation
 //   roster       record round trip; a record whose address is not its point's
 //                refused; restore finds accounts by testing entries
-//   codec        (S4E) the frozen vectors src/tests/vectors/evm-eip712-v2.json,
-//                whose hashes ethers computed: for every vector the client
+//   codec        (S4E) the frozen vectors src/tests/vectors/evm-eip712-v1.json,
+//                whose hashes viem computed: for every vector the client
 //                codec rebuilds the same typed data, and its digest, the
 //                contract's struct hash, domain separator and digest all equal
-//                the frozen ones; the type strings equal ethers' encodeType;
+//                the frozen ones; the type strings equal viem's encodeType;
 //                every negative vector is refused by each layer it names
 //                (client codec, generated JavaScript of the pure circuits);
 //                the descriptor derivations equal descriptors.ts; the no-blob
 //                classification of every signed member
 //
-// The independent check against ethers lives in evm-eip712-ethers.ts (ethers
-// is not a dependency of this package). Writes
+// The independent check against viem lives in evm-eip712-viem.ts (viem is
+// not a dependency of this package). Writes
 // $EVIDENCE_DIR/evm-eip712-offline.json when EVIDENCE_DIR is set; never writes
 // into the repository.
 
@@ -44,9 +44,9 @@ import { blindMessageBytes } from '../wallet/blind.js';
 import {
   EVM_EIP712_PRIMARY_TYPES, EVM_EIP712_DESCRIPTOR_TYPES, typedDataDigest, typeString, siteLabelText, toHex,
 } from '../wallet/evm-eip712-codec.js';
-import { typedDataOf, contractStructHash, NEGATIVES, descriptorInput, granteeInput, type VectorInput } from './evm-eip712-vectors.js';
+import { typedDataOf, contractStructHash, NEGATIVES, descriptorInput, granteeInput, VECTOR_FILE, type VectorInput } from './evm-eip712-vectors.js';
 import {
-  EvmEip712Device, SoftwareEvmWallet, enrolEvmBlind, highSTwin, parseEvmSignature, personalMessageDigest,
+  EvmEip712Device, EvmEip712Grantee, SoftwareEvmWallet, enrolEvmBlind, enrolEvmGranteeBlind, solArg, highSTwin, parseEvmSignature, personalMessageDigest,
   recoverEvmPoint, restoreEvmDevices, serialiseEvmSignature, SECP256K1_ORDER,
   type EvmWallet,
 } from '../wallet/signer-evm-eip712.js';
@@ -81,12 +81,12 @@ const vectors: Record<string, unknown[]> = {};
 
 // ── Recipes ──────────────────────────────────────────────────────────────────
 
-const DEVICE_TAG = padTag('midnight:account:device:evm:v2');
-const BOOT_TAG = padTag('midnight:account:boot:evm:v2');
-const GRANT_ID_TAG = padTag('midnight:account:grant:id:evm:v2');
-const BLIND_TAG = padTag('midnight:account:blind:evm:v2');
+const DEVICE_TAG = padTag('midnight:account:device:evm:v1');
+const BOOT_TAG = padTag('midnight:account:boot:evm:v1');
+const GRANT_ID_TAG = padTag('midnight:account:grant:id:evm:v1');
+const BLIND_TAG = padTag('midnight:account:blind:evm:v1');
 assert.ok(eq(pc.device_tag_evm_eip712(), DEVICE_TAG) && eq(pc.boot_tag_evm_eip712(), BOOT_TAG)
-  && eq(pc.grant_id_tag_evm_eip712(), GRANT_ID_TAG) && eq(pc.blind_tag_evm_eip712(), BLIND_TAG), 'the arm hashes the registered evm:v2 tags');
+  && eq(pc.grant_id_tag_evm_eip712(), GRANT_ID_TAG) && eq(pc.blind_tag_evm_eip712(), BLIND_TAG), 'the arm hashes the registered evm:v1 tags');
 ok('tags', 4);
 
 const EDGE_EPOCHS = [0n, 1n, 0xffffffffn];
@@ -220,8 +220,20 @@ vectors.blind = [];
   await refusedAsync('blind', () => enrolEvmBlind(liar, 'undeployed', 0), /does not recover to the wallet address/, 'a wallet whose signature is not its address');
   await refusedAsync('blind', () => enrolEvmBlind(w, 'Undeployed', 0), /network name/, 'an upper-case network name');
   await refusedAsync('blind', () => enrolEvmBlind(w, 'undeployed', -1), /0 to 4294967295/, 'a negative account index');
+  // (Q39) as a grantee the wallet derives its blind from the grantee request
+  // for the issuing account: never one of its device blinds, one per issuer
+  const deviceBlinds = await Promise.all([0, 1, 2, 3].map(async (i) => hex((await enrolEvmBlind(w, 'undeployed', i)).blind)));
+  const issuers = [rnd(32), rnd(32)];
+  const granteeBlinds = await Promise.all(issuers.map(async (a) => hex((await enrolEvmGranteeBlind(w, 'undeployed', a)).blind)));
+  assert.ok(granteeBlinds.every((b) => !deviceBlinds.includes(b)), 'a grantee blind is never a device blind');
+  assert.notEqual(granteeBlinds[0], granteeBlinds[1], 'two issuing accounts give two grantee blinds');
+  const g0 = await EvmEip712Grantee.enrol(w, 'undeployed', issuers[0], new Uint8Array(32).fill(0x41), 0n);
+  assert.equal(hex(g0.blind), granteeBlinds[0], 'EvmEip712Grantee.enrol uses the grantee request');
+  assert.equal(hex((await enrolEvmGranteeBlind(w, 'preview', issuers[0])).blind) === granteeBlinds[0], false, 'and names the network');
+  ok('blind', 4);
+  await refusedAsync('blind', () => enrolEvmGranteeBlind(w, 'undeployed', new Uint8Array(32)), /issuing account address is not zero/, 'a grantee request for the zero account');
 }
-console.log(`  ✓ blind: deterministic, == derive_blind == SHA-256, recovered point == the wallet key, per index and network; ${tally.blind.refused} bad enrolments refused`);
+console.log(`  ✓ blind: deterministic, == derive_blind == SHA-256, recovered point == the wallet key, per index and network; grantee blinds per issuing account, never a device blind (Q39); ${tally.blind.refused} bad enrolments refused`);
 
 // ── Roster and restore ───────────────────────────────────────────────────────
 
@@ -257,9 +269,9 @@ console.log(`  ✓ roster: record round trip; restore finds index 0 (counter 3) 
 
 // ── Codec: the frozen vectors (S4E) ──────────────────────────────────────────
 
-const FROZEN = JSON.parse(fs.readFileSync(new URL('./vectors/evm-eip712-v2.json', import.meta.url), 'utf8'));
+const FROZEN = JSON.parse(fs.readFileSync(new URL(`./vectors/${VECTOR_FILE}`, import.meta.url), 'utf8'));
 {
-  assert.match(FROZEN.hashesBy, /^ethers 6\./, 'the frozen hashes come from ethers');
+  assert.match(FROZEN.hashesBy, /^viem 2\./, 'the frozen hashes come from viem');
   const strip = (v: any) => { const { typedData, encodeType, domainSeparator, structHash, digest, ...input } = v; return input as VectorInput; };
   const seen = new Set<string>();
   for (const v of FROZEN.vectors) {
@@ -285,7 +297,7 @@ const FROZEN = JSON.parse(fs.readFileSync(new URL('./vectors/evm-eip712-v2.json'
   assert.deepEqual([...seen].sort(), expected.sort(), 'the vectors cover all 16 primary types and every descriptor scheme');
   for (const [k, str] of Object.entries(FROZEN.typeStrings as Record<string, string>)) {
     const [p, n] = k.split('/');
-    assert.equal(typeString(p, n), str, `${k}: type string == ethers encodeType`);
+    assert.equal(typeString(p, n), str, `${k}: type string == viem encodeType`);
     ok('type strings');
   }
   assert.equal(Object.keys(FROZEN.typeStrings).length, 32);
@@ -317,14 +329,19 @@ assert.equal(negativeResults.length, NEGATIVES.length);
     const d = descriptorInput(v.args.descriptor);
     const A = { bytes: rnd(32) };
     const s = v.args.descriptor.scheme;
+    const pt = solArg(d);
     for (const [e, c] of [[0n, 0n], [3n, 9n]] as [bigint, bigint][]) {
+      const [sk, se] = pc.evm_eip712_sol_device_target(A, d, pt, e, c);
       const want = s === 'evm_eip712' ? pc.derive_descriptor_entry_w52(d.tag, A, d.address, d.key2, e, c)
         : s === 'k256' ? pc.derive_descriptor_entry_w65(d.tag, A, d.key, d.key2, d.envelope, e, c)
         : s === 'p256' ? pc.derive_descriptor_entry_w117(d.tag, A, d.key, d.key2, d.rp_id_hash, d.origin, e, c)
+        : s === 'sol_ed25519' ? pc.derive_descriptor_entry_ed25519(d.tag, A, pt, d.key2, e, c)[1]
         : pc.derive_descriptor_entry_w64(d.tag, A, d.key, d.key2, e, c);
-      assert.ok(eq(pc.evm_eip712_descriptor_entry(A, d, e, c), want), `${v.name}: descriptor entry == the width-class circuit`);
+      assert.ok(eq(pc.evm_eip712_descriptor_entry(A, d, se, e, c), want), `${v.name}: descriptor entry == the class circuit`);
+      // (Q37) a Solana target's shown key is the key the ed25519 class derived from the point
+      if (s === 'sol_ed25519') assert.ok(eq(sk, d.key) && eq(sk, pc.encode_public_key_with_sol_ed25519(pt)), `${v.name}: the shown Solana key is the point's encoding`);
     }
-    if (s === 'evm_eip712') assert.ok(eq(pc.evm_eip712_descriptor_entry(A, d, 0n, 0n), pc.derive_device_entry_with_evm_eip712(A, d.address, d.key2, 0n, 0n)));
+    if (s === 'evm_eip712') assert.ok(eq(pc.evm_eip712_descriptor_entry(A, d, new Uint8Array(32), 0n, 0n), pc.derive_device_entry_with_evm_eip712(A, d.address, d.key2, 0n, 0n)));
     ok('descriptor derivations');
   }
   for (const v of FROZEN.vectors.filter((x: any) => /^(issue|revoke)_grant\//.test(x.name))) {
@@ -335,10 +352,14 @@ assert.equal(negativeResults.length, NEGATIVES.length);
     if (s === 'evm_eip712' || s === 'sol_ed25519') assert.ok(eq(oh, pc.derive_grant_origin_hash_label(g.label)));
     else if (s === 'p256') assert.ok(eq(oh, pc.derive_grant_origin_hash_origin(g.origin)));
     else assert.ok(eq(oh, g.origin_hash));
+    const gpt = solArg(g);
+    const [gsk, gsi] = pc.evm_eip712_sol_grantee_target(A, g, oh, gpt);
     const want = s === 'evm_eip712' ? pc.derive_descriptor_grant_id_w52(g.tag, A, g.address, g.key2, oh, g.slot)
       : s === 'k256' ? pc.derive_descriptor_grant_id_w65(g.tag, A, g.key, g.key2, g.envelope, oh, g.slot)
+      : s === 'sol_ed25519' ? pc.derive_descriptor_grant_id_ed25519(g.tag, A, gpt, g.key2, oh, g.slot)[1]
       : pc.derive_descriptor_grant_id_w64(g.tag, A, g.key, g.key2, oh, g.slot);
-    assert.ok(eq(pc.evm_eip712_grantee_grant_id(A, g), want), `${v.name}: grantee grant id == the width-class circuit`);
+    assert.ok(eq(pc.evm_eip712_grantee_grant_id(A, g, oh, gsi), want), `${v.name}: grantee grant id == the class circuit`);
+    if (s === 'sol_ed25519') assert.ok(eq(gsk, g.key), `${v.name}: the shown Solana grantee key is the point's encoding`);
     ok('descriptor derivations');
   }
   // the site label as shown == the contract's rendering
@@ -356,9 +377,9 @@ const CLASS: Record<string, string> = {
   authNonce: 'value', issuedAt: 'value', grantNonce: 'value', slot: 'value', amount: 'value', color: 'identifier', recipient: 'identifier',
   recipientContract: 'identifier', coinNonce: 'witness', coinValue: 'witness', coinMerkleIndex: 'witness', change: 'witness (derived)',
   entry: 'ciphertext (full bytes) / Q20 literal entry', changeEntry: 'ciphertext (full bytes)', newKey: 'value', effect: 'circuit-fixed line',
-  newDevice: 'descriptor', target: 'descriptor', targetEpoch: 'value', targetCounter: 'value', scheme: 'circuit-fixed tag text', envelope: 'value',
+  newDevice: 'descriptor', target: 'descriptor', targetEpoch: 'value', targetCounter: 'value', scheme: 'circuit-fixed tag text', envelope: 'text label (a circuit constant selected by the value, Q35)',
   origin: 'text', siteLabel: 'text', withdrawUnshielded: 'value', withdrawShielded: 'value', withdrawShieldedToContract: 'value', read: 'value',
-  recipientKind: 'value', maxCoinValue: 'value', perCallCap: 'value', cap: 'value', expiresAt: 'value', readKey: 'key (preimage of read_pk_hash)',
+  recipientKind: 'text label (a circuit constant selected by the value, Q35)', maxCoinValue: 'value', perCallCap: 'value', cap: 'value', expiresAt: 'value', readKey: 'key (preimage of read_pk_hash)',
   windowLength: 'value', windowCap: 'value', callerPinned: 'value', caller: 'identifier', sessionNonce: 'value', phi1: 'value', phi2: 'value',
   phi3: 'value', phi4: 'value', phiLength: 'value', wrap: 'ciphertext (full bytes)', encryptionKey: 'key',
   privacySalt: 'LABELLED (Q21: a target device\'s blind)', passkeyRpHash: 'LABELLED (Q21: the passkey RP hash)', siteLabelHash: 'LABELLED (Q17: a k256/jubjub grantee\'s origin_hash)',
@@ -377,7 +398,7 @@ const CLASS: Record<string, string> = {
   assert.equal(EVM_EIP712_PRIMARY_TYPES.RemoveUnknownDevice.find(([n]) => n === 'entry')![1], 'bytes32');
   ok('no-blob review');
 }
-console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (contract == client == ethers), ${tally['type strings'].pass} type strings == ethers; ${tally['codec negatives'].refused} negatives refused by every named layer; descriptor derivations == the width-class circuits (${tally['descriptor derivations'].pass}); no-blob: only the four labelled values`);
+console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (contract == client == viem-frozen), ${tally['type strings'].pass} type strings == viem; ${tally['codec negatives'].refused} negatives refused by every named layer; descriptor derivations == the width-class circuits (${tally['descriptor derivations'].pass}); no-blob: only the four labelled values`);
 
 // ── G2E-2: the seam's call sites (a static check of the arm's source) ─────
 //
@@ -480,7 +501,7 @@ console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (c
   console.log(`  ✓ seam call sites: the core called only by the 3 device entry points (each derives the address first; frame = kernel.self(), the derived address, auth_nonce); frames built only by the seams; 15 gated exports, each through exactly one seam; the 3 grantee twins hand the seam the signed colour, amount and recipient`);
 }
 
-const report = { suite: 'evm-eip712-offline', step: 'S2E+S4E', seed: SEED, ranAt: new Date().toISOString(), tally, vectors, frozen: { file: 'src/tests/vectors/evm-eip712-v2.json', vectors: FROZEN.vectors.length, negatives: negativeResults, hashesBy: FROZEN.hashesBy }, noBlob: CLASS, verdict: 'PASS' };
+const report = { suite: 'evm-eip712-offline', step: 'S2E+S4E', seed: SEED, ranAt: new Date().toISOString(), tally, vectors, frozen: { file: `src/tests/vectors/${VECTOR_FILE}`, vectors: FROZEN.vectors.length, negatives: negativeResults, hashesBy: FROZEN.hashesBy }, noBlob: CLASS, verdict: 'PASS' };
 if (process.env.EVIDENCE_DIR) {
   const file = path.join(process.env.EVIDENCE_DIR, 'evm-eip712-offline.json');
   fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });

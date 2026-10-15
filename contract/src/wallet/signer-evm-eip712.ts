@@ -12,7 +12,7 @@
 //      signatures must have the same canonical form (low-S r || s): RFC 6979
 //      makes an honest wallet deterministic, and a hedged or MPC wallet,
 //      whose blind could never be re-derived, is refused here.
-//   3. blind = SHA-256(pad32("midnight:account:blind:evm:v2") || r || s).
+//   3. blind = SHA-256(pad32("midnight:account:blind:evm:v1") || r || s).
 //   4. The device's public point is RECOVERED from that same signature (a
 //      wallet never exposes it), and its address must be the wallet's own.
 //
@@ -21,6 +21,13 @@
 // blind_0, blind_1, ... from the wallet and finds its accounts by testing
 // entries (`entryAt`) against each account's device set.
 //
+// As a GRANTEE the wallet derives its blind from a different request (blind.ts
+// `granteeBlindMessage`, Q39): it names the role, the network, the wallet and
+// the issuing account, and has no account index. The issuer must know a
+// grantee's blind (it derives the grant id and is shown in the issuer's
+// approvals), so a grantee never uses a device blind, and every issuer gets a
+// blind of its own.
+//
 // Every derivation goes through the contract's own exported pure circuits
 // (`derive_*_with_evm_eip712`), so the client and the circuit can never
 // disagree. Signing the readable EIP-712 approvals is added with the arm's
@@ -28,15 +35,17 @@
 
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
 
 import { pureCircuits, type Secp256k1Point } from './contract.js';
 import {
   blindMessageBytes,
+  granteeBlindMessageBytes,
   canonicalEvmSignature,
   deriveBlind,
   sameCanonicalSignature,
 } from './blind.js';
-import { DESCRIPTOR_TAGS, checkDescriptor, evmAddressOf, evmChecksumAddress, grantOriginHash, padTag, parseEvmAddress, type Descriptor } from './descriptors.js';
+import { DESCRIPTOR_TAGS, checkDescriptor, evmAddressOf, evmChecksumAddress, grantOriginHash, padTag, parseEvmAddress, solanaKeyPoint, type Descriptor } from './descriptors.js';
 import { typedDataDigest, evmEip712Messages, type Eip712TypedData, type EvmEip712DescriptorInput, type EvmEip712GranteeInput, type IssueScope, type SpentCoin } from './evm-eip712-codec.js';
 import type { GrantOpening } from './signer.js';
 
@@ -233,7 +242,24 @@ export async function enrolEvmBlind(
 ): Promise<EvmBlindEnrolment> {
   const address = await wallet.address();
   if (address.length !== 20) throw new Error('blind: the wallet address is 20 bytes');
-  const message = blindMessageBytes({ scheme: 'evm_eip712', network, identity: address, accountIndex });
+  return enrolWithRequest(wallet, address, blindMessageBytes({ scheme: 'evm_eip712', network, identity: address, accountIndex }));
+}
+
+/**
+ * The same steps for the wallet as a GRANTEE of `issuingAccount` (Q39): the
+ * base's grantee request names the role, the network, the wallet and the
+ * issuing account's address, and has no account index, so the blind the
+ * issuer learns is never a device blind and is different for every issuer.
+ */
+export async function enrolEvmGranteeBlind(
+  wallet: EvmWallet, network: string, issuingAccount: Uint8Array,
+): Promise<EvmBlindEnrolment> {
+  const address = await wallet.address();
+  if (address.length !== 20) throw new Error('blind: the wallet address is 20 bytes');
+  return enrolWithRequest(wallet, address, granteeBlindMessageBytes({ scheme: 'evm_eip712', network, identity: address, issuingAccount }));
+}
+
+async function enrolWithRequest(wallet: EvmWallet, address: Uint8Array, message: Uint8Array): Promise<EvmBlindEnrolment> {
   const first = await wallet.personalSign(message);
   const second = await wallet.personalSign(message);
   if (!sameCanonicalSignature('evm_eip712', first, second)) {
@@ -519,6 +545,27 @@ export function evmEip712DescriptorInput(descriptor: Descriptor): EvmEip712Descr
   }
 }
 
+/** The point the four descriptor circuits take beside a descriptor (Q37): a
+ *  Solana target's key as its Curve25519Point. A circuit computes every
+ *  descriptor class, so for any other target the client passes a fixed
+ *  non-identity point (the Ed25519 base point), whose results the circuit
+ *  discards. */
+export const EVM_EIP712_SOL_FILLER_POINT: { x: bigint; y: bigint } = (() => {
+  const { x, y } = ed25519.Point.BASE.toAffine();
+  return { x, y };
+})();
+const SOL_TAGS = new Set([DESCRIPTOR_TAGS.device.sol_ed25519, DESCRIPTOR_TAGS['grant-id'].sol_ed25519]);
+const tagTextOf = (tag: Uint8Array) => new TextDecoder().decode(tag.subarray(0, tag.indexOf(0) < 0 ? 32 : tag.indexOf(0)));
+/** The point argument for a descriptor input: a Solana target's key (its
+ *  32-byte encoding in `key`) as a point, the filler point otherwise. */
+export function solArg(input: EvmEip712DescriptorInput | EvmEip712GranteeInput): { x: bigint; y: bigint } {
+  return SOL_TAGS.has(tagTextOf(input.tag)) ? solanaKeyPoint(input.key) : EVM_EIP712_SOL_FILLER_POINT;
+}
+/** The key the struct-hash oracles show for a Solana target (zero otherwise). */
+export function solKeyOf(input: EvmEip712DescriptorInput | EvmEip712GranteeInput): Uint8Array {
+  return SOL_TAGS.has(tagTextOf(input.tag)) ? new Uint8Array(input.key) : new Uint8Array(32);
+}
+
 /** The descriptor the literal form (Q20) passes: unused by the circuit. */
 export const EVM_EIP712_UNUSED_DESCRIPTOR: EvmEip712DescriptorInput = {
   tag: padTag(DESCRIPTOR_TAGS.device.evm_eip712), key: ZERO32, key2: ZERO32, address: new Uint8Array(20), envelope: 0n, rp_id_hash: ZERO32, origin: ZERO21,
@@ -545,7 +592,7 @@ export async function addDeviceWithEvmEip712(account: EvmEip712LifecycleSurface,
   const input = evmEip712DescriptorInput(target);
   const typedData = evmEip712Messages.addDevice(frame, input);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.add_device_with_evm_eip712(input, authArg(auth));
+  const r = await account.callTx.add_device_with_evm_eip712(input, solArg(input), authArg(auth));
   return { typedData, auth, input, txId: txIdOf(r) };
 }
 
@@ -559,7 +606,7 @@ export async function removeDeviceWithEvmEip712(
   const input = evmEip712DescriptorInput(target);
   const typedData = evmEip712Messages.removeDevice(frame, input, targetEpoch, targetCounter);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.remove_device_with_evm_eip712(input, targetEpoch, targetCounter, { is_some: false, value: ZERO32 }, authArg(auth));
+  const r = await account.callTx.remove_device_with_evm_eip712(input, solArg(input), targetEpoch, targetCounter, { is_some: false, value: ZERO32 }, authArg(auth));
   return { typedData, auth, input, txId: txIdOf(r) };
 }
 
@@ -570,7 +617,7 @@ export async function removeUnknownDeviceWithEvmEip712(account: EvmEip712Lifecyc
   const { frame, counter } = await deviceFrame(account, device);
   const typedData = evmEip712Messages.removeUnknownDevice(frame, entry);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.remove_device_with_evm_eip712(EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: new Uint8Array(entry) }, authArg(auth));
+  const r = await account.callTx.remove_device_with_evm_eip712(EVM_EIP712_UNUSED_DESCRIPTOR, EVM_EIP712_SOL_FILLER_POINT, 0n, 0n, { is_some: true, value: new Uint8Array(entry) }, authArg(auth));
   return { typedData, auth, txId: txIdOf(r) };
 }
 
@@ -636,10 +683,11 @@ export class EvmEip712Grantee {
     this.address = evmAddressOfPoint(pk);
   }
 
-  /** A grantee for `wallet` at `accountIndex` on `network` (the blind request
-   *  signed twice, as for a device), known to the owner by `label` and `slot`. */
-  static async enrol(wallet: EvmWallet, network: string, accountIndex: bigint | number, label: Uint8Array, slot: bigint): Promise<EvmEip712Grantee> {
-    const e = await enrolEvmBlind(wallet, network, accountIndex);
+  /** A grantee for `wallet` of the account `issuingAccount` on `network` (the
+   *  grantee blind request signed twice, Q39), known to the owner by `label`
+   *  and `slot`. */
+  static async enrol(wallet: EvmWallet, network: string, issuingAccount: Uint8Array, label: Uint8Array, slot: bigint): Promise<EvmEip712Grantee> {
+    const e = await enrolEvmGranteeBlind(wallet, network, issuingAccount);
     return new EvmEip712Grantee(e.pk, e.blind, label, slot, wallet);
   }
 
@@ -698,7 +746,7 @@ export async function issueGrantWithEvmEip712(
   const { frame, counter } = await deviceFrame(account, device);
   const typedData = evmEip712Messages.issueGrant(frame, grantee, scope);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.issue_grant_with_evm_eip712(grantee, ...evmEip712IssueArgs(scope, scopeSalt), authArg(auth));
+  const r = await account.callTx.issue_grant_with_evm_eip712(grantee, solArg(grantee), ...evmEip712IssueArgs(scope, scopeSalt), authArg(auth));
   return { typedData, auth, txId: txIdOf(r) };
 }
 
@@ -708,7 +756,7 @@ export async function revokeGrantWithEvmEip712(account: EvmEip712LifecycleSurfac
   const { frame, counter } = await deviceFrame(account, device);
   const typedData = evmEip712Messages.revokeGrant(frame, grantee);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.revoke_grant_with_evm_eip712(grantee, authArg(auth));
+  const r = await account.callTx.revoke_grant_with_evm_eip712(grantee, solArg(grantee), authArg(auth));
   return { typedData, auth, txId: txIdOf(r) };
 }
 

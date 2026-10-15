@@ -40,8 +40,7 @@ import { hexToBytes } from '../wallet/hex.js';
 import { makeWitnesses, emptyCoinStore, type CoinStorePrivateState } from '../wallet/witnesses.js';
 import { JubjubDevice, jubjubChallenges, authArgs } from '../wallet/signer.js';
 import {
-  SoftwareEvmWallet, EvmEip712Device, evmEip712DescriptorInput, evmDeviceDescriptor, evmEip712RecoverySession,
-} from '../wallet/signer-evm-eip712.js';
+  SoftwareEvmWallet, EvmEip712Device, evmEip712DescriptorInput, evmDeviceDescriptor, evmEip712RecoverySession, solArg} from '../wallet/signer-evm-eip712.js';
 import { evmEip712Messages, typedDataDigest, typeString, fieldLE, type Eip712TypedData, type RecoverySession } from '../wallet/evm-eip712-codec.js';
 import {
   recoveryKey, signRecoverSubmit, recoverSubmitArgs, recoverSubmitChallenge, readArtefactSet, matchesRecoveryPk, eqPoint,
@@ -303,9 +302,9 @@ await section('unauthorised keys', async () => {
 
 await section('more devices: a second evm device and a JubJub device, and the upstream plant at device_epoch + 1', async () => {
   const e2In = evmEip712DescriptorInput(evmDeviceDescriptor(E2));
-  await call('add_device_with_evm_eip712', [e2In, await authOf(E, evmEip712Messages.addDevice(frame(E), e2In))]);
+  await call('add_device_with_evm_eip712', [e2In, solArg(e2In), await authOf(E, evmEip712Messages.addDevice(frame(E), e2In))]);
   const jIn = evmEip712DescriptorInput({ scheme: 'jubjub', x: J.pk.x, y: J.pk.y });
-  await call('add_device_with_evm_eip712', [jIn, await authOf(E, evmEip712Messages.addDevice(frame(E), jIn))]);
+  await call('add_device_with_evm_eip712', [jIn, solArg(jIn), await authOf(E, evmEip712Messages.addDevice(frame(E), jIn))]);
   ok(counterOf(E2) === 0n && jCounter(J) === 0n && L().device_count === 3n, 'E2 (evm_eip712) and J (jubjub) enrolled at epoch 0, counter 0');
   // README erratum 7: an upstream arm's raw add_device takes any entry; J
   // enrols W's evm_eip712 entry at device_epoch + 1, counter 0

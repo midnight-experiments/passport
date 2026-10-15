@@ -12,17 +12,18 @@
 // The contract computes the same digest word by word from the values it
 // executes (its exported `evm_eip712_struct_*` and `evm_eip712_digest` pure
 // circuits). The offline suite checks that both agree on every frozen vector,
-// and evm-eip712-ethers.ts checks the JSON against ethers' TypedDataEncoder.
+// and evm-eip712-viem.ts checks the JSON against viem's hashTypedData.
 //
 // Platform-neutral: no node: imports, so a browser page can use it.
 
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { evmChecksumAddress } from './descriptors.js';
+import { recipientKindLabel, k256EnvelopeLabel } from './labels.js';
 
-// ── The frozen type set (version "2") ────────────────────────────────────────
+// ── The frozen type set (version "1") ────────────────────────────────────────
 
 export const EVM_EIP712_DOMAIN_NAME = 'Midnight Passport Account';
-export const EVM_EIP712_DOMAIN_VERSION = '2';
+export const EVM_EIP712_DOMAIN_VERSION = '1';
 
 export interface TypedField { name: string; type: string }
 export type TypeSet = Record<string, TypedField[]>;
@@ -33,7 +34,7 @@ const GFRAME: [string, string][] = [['account', 'bytes32'], ['grantee', 'address
 const COIN: [string, string][] = [['coinNonce', 'bytes32'], ['coinValue', 'uint128'], ['coinMerkleIndex', 'uint64'], ['change', 'uint128']];
 const SCOPE: [string, string][] = [
   ['withdrawUnshielded', 'bool'], ['withdrawShielded', 'bool'], ['withdrawShieldedToContract', 'bool'], ['read', 'bool'],
-  ['color', 'bytes32'], ['recipientKind', 'uint8'], ['recipient', 'bytes32'], ['maxCoinValue', 'uint128'], ['perCallCap', 'uint128'],
+  ['color', 'bytes32'], ['recipientKind', 'string'], ['recipient', 'bytes32'], ['maxCoinValue', 'uint128'], ['perCallCap', 'uint128'],
   ['cap', 'uint128'], ['expiresAt', 'uint64'], ['passkeyRpHash', 'bytes32'], ['readKey', 'bytes32'], ['windowLength', 'uint64'],
   ['windowCap', 'uint128'], ['callerPinned', 'bool'], ['caller', 'bytes32'],
 ];
@@ -43,12 +44,12 @@ export const EVM_EIP712_DESCRIPTOR_TYPES: TypeSet = {
   EvmDevice: f([['scheme', 'string'], ['wallet', 'address'], ['privacySalt', 'bytes32']]),
   SolanaDevice: f([['scheme', 'string'], ['publicKey', 'bytes32'], ['privacySalt', 'bytes32']]),
   JubjubDevice: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32']]),
-  K256Device: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'uint8']]),
+  K256Device: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'string']]),
   PasskeyDevice: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['origin', 'string'], ['passkeyRpHash', 'bytes32']]),
   EvmGrantee: f([['scheme', 'string'], ['wallet', 'address'], ['privacySalt', 'bytes32'], ['siteLabel', 'string'], ['slot', 'uint8']]),
   SolanaGrantee: f([['scheme', 'string'], ['publicKey', 'bytes32'], ['privacySalt', 'bytes32'], ['siteLabel', 'string'], ['slot', 'uint8']]),
   JubjubGrantee: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['siteLabelHash', 'bytes32'], ['slot', 'uint8']]),
-  K256Grantee: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'uint8'], ['siteLabelHash', 'bytes32'], ['slot', 'uint8']]),
+  K256Grantee: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'string'], ['siteLabelHash', 'bytes32'], ['slot', 'uint8']]),
   PasskeyGrantee: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['origin', 'string'], ['slot', 'uint8']]),
 };
 
@@ -188,7 +189,7 @@ export const evmEip712Domain = (account: Uint8Array): Eip712Domain => ({
 });
 
 /** The type set of one message: the primary type, its nested type if any, and
- *  EIP712Domain (ethers refuses unused types, so nothing else). */
+ *  EIP712Domain (viem and ethers refuse unused types, so nothing else). */
 export function typesFor(primary: string, nested?: string): TypeSet {
   const spec = EVM_EIP712_PRIMARY_TYPES[primary];
   if (!spec) throw new Error(`eip712: unknown operation ${primary}`);
@@ -240,13 +241,20 @@ export interface EvmEip712GranteeInput {
 }
 
 const DEVICE_TAGS: Record<string, string> = {
-  'midnight:account:device:evm:v2': 'EvmDevice', 'midnight:account:device:sol:v1': 'SolanaDevice',
+  'midnight:account:device:evm:v1': 'EvmDevice', 'midnight:account:device:sol:v1': 'SolanaDevice',
   'midnight:account:device:v1': 'JubjubDevice', 'midnight:account:device:k1:v2': 'K256Device', 'midnight:account:device:r1:v2': 'PasskeyDevice',
 };
 const GRANTEE_TAGS: Record<string, string> = {
-  'midnight:account:grant:id:evm:v2': 'EvmGrantee', 'midnight:account:grant:id:sol:v1': 'SolanaGrantee',
+  'midnight:account:grant:id:evm:v1': 'EvmGrantee', 'midnight:account:grant:id:sol:v1': 'SolanaGrantee',
   'midnight:account:grant:id:v1': 'JubjubGrantee', 'midnight:account:grant:id:k1:v1': 'K256Grantee', 'midnight:account:grant:id:r1:v1': 'PasskeyGrantee',
 };
+/** The enumerated members' text labels (Q35) are the base's shared texts
+ *  (labels.ts): the circuit hashes the same constant, selected by the value,
+ *  and refuses a value with no label. */
+export function labelOf(member: 'recipientKind' | 'envelope', v: bigint): string {
+  if (typeof v !== 'bigint') throw new Error(`eip712: ${member} is a bigint`);
+  return member === 'recipientKind' ? recipientKindLabel(v) : k256EnvelopeLabel(v);
+}
 const isZeroPadded = (tag: Uint8Array, text: string) => tag.length === 32 && tag.every((c, i) => c === (i < text.length ? text.charCodeAt(i) : 0));
 
 /** The nested type and member values of a device descriptor. Refuses an
@@ -259,7 +267,7 @@ export function deviceMember(d: EvmEip712DescriptorInput): { type: string; value
     case 'EvmDevice': return { type, value: { scheme, wallet: evmChecksumAddress(d.address), privacySalt: toHex(d.key2) } };
     case 'SolanaDevice': return { type, value: { scheme, publicKey: toHex(d.key), privacySalt: toHex(d.key2) } };
     case 'JubjubDevice': return { type, value: { scheme, x: toHex(d.key), y: toHex(d.key2) } };
-    case 'K256Device': return { type, value: { scheme, x: toHex(rev(d.key)), y: toHex(rev(d.key2)), envelope: u8(d.envelope, 'envelope') } };
+    case 'K256Device': return { type, value: { scheme, x: toHex(rev(d.key)), y: toHex(rev(d.key2)), envelope: labelOf('envelope', d.envelope) } };
     default: return { type, value: { scheme, x: toHex(rev(d.key)), y: toHex(rev(d.key2)), origin: visibleText(d.origin), passkeyRpHash: toHex(d.rp_id_hash) } };
   }
 }
@@ -274,7 +282,7 @@ export function granteeMember(g: EvmEip712GranteeInput): { type: string; value: 
     case 'EvmGrantee': return { type, value: { scheme, wallet: evmChecksumAddress(g.address), privacySalt: toHex(g.key2), siteLabel: siteLabelText(g.label), slot } };
     case 'SolanaGrantee': return { type, value: { scheme, publicKey: toHex(g.key), privacySalt: toHex(g.key2), siteLabel: siteLabelText(g.label), slot } };
     case 'JubjubGrantee': return { type, value: { scheme, x: toHex(g.key), y: toHex(g.key2), siteLabelHash: toHex(g.origin_hash), slot } };
-    case 'K256Grantee': return { type, value: { scheme, x: toHex(rev(g.key)), y: toHex(rev(g.key2)), envelope: u8(g.envelope, 'envelope'), siteLabelHash: toHex(g.origin_hash), slot } };
+    case 'K256Grantee': return { type, value: { scheme, x: toHex(rev(g.key)), y: toHex(rev(g.key2)), envelope: labelOf('envelope', g.envelope), siteLabelHash: toHex(g.origin_hash), slot } };
     default: return { type, value: { scheme, x: toHex(rev(g.key)), y: toHex(rev(g.key2)), origin: visibleText(g.origin), slot } };
   }
 }
@@ -340,7 +348,7 @@ export const evmEip712Messages = {
       ...frame(c), effect: EVM_EIP712_EFFECTS.IssueGrant, grantee: m.value,
       withdrawUnshielded: s.opWithdrawUnshielded, withdrawShielded: s.opWithdrawShielded,
       withdrawShieldedToContract: s.opWithdrawShieldedToContract, read: s.read,
-      color: b32(s.color, 'color'), recipientKind: u8(s.recipientKind, 'recipientKind'), recipient: b32(s.recipient, 'recipient'),
+      color: b32(s.color, 'color'), recipientKind: labelOf('recipientKind', s.recipientKind), recipient: b32(s.recipient, 'recipient'),
       maxCoinValue: u128(s.maxCoinValue, 'maxCoinValue'), perCallCap: u128(s.perCallCap, 'perCallCap'), cap: u128(s.cap, 'cap'),
       expiresAt: u64(s.expiresAt, 'expiresAt'), passkeyRpHash: b32(s.rpIdHash, 'passkeyRpHash'), readKey: b32(s.read ? s.readPk : new Uint8Array(32), 'readKey'),
       windowLength: u64(s.windowLen, 'windowLength'), windowCap: u128(s.windowCap, 'windowCap'),
