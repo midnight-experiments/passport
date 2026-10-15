@@ -155,3 +155,64 @@ export circuit activate_initial_device_with_evm_eip712(
     kernel.self(), address, blind, device_epoch, 0 as Uint<64>
   ));
 }
+
+// ── The authorisation seam (device role) ────────────────────────────────────
+//
+// The authorising material of every device-gated circuit, its trailing
+// argument (kept internal, as P256Auth is). `pk` is the device's point: the
+// export derives the address from it with evm_eip712_address (FR-011) and uses
+// that address both in the signed message (`device`) and in the entry, so a
+// caller can never present an address it holds no key for. `use_counter` and
+// `blind` are the ledger-pinned openings of the device's rolling entry: the
+// membership assert checks them, and they are never shown.
+struct EvmEip712Auth {
+  pk:          Secp256k1Point;
+  use_counter: Uint<64>;
+  blind:       Bytes<32>;
+  sig:         Secp256k1EcdsaSignature;
+}
+
+// Upstream p256's order (MIP-0013 §4, spec FR-007): membership of the
+// single-use entry at the active epoch, verification, the entry rolled to its
+// successor, auth_nonce advanced, round bumped; any failure aborts the whole
+// call. `address` is evm_eip712_address(auth.pk), computed by the caller (the
+// gated exports below, the only call sites) because the struct hash needs it
+// first; `struct_hash` is the operation's EIP-712 hashStruct, built from the
+// values the export executes, and the digest binds it to this account's
+// domain.
+//
+// The signature is verified against the EIP-712 digest. secp256k1EcdsaVerify
+// accepts both S forms (FIPS 186-5): the rolling entry, consumed by this call,
+// makes a malleated twin single-use, as on the k256 arm. r = 0 and s = 0 are
+// refused here explicitly (audit C14, R2-12): with s = 0 the stdlib's inverse
+// has no meaning, and r = 0 can only match the point at infinity.
+circuit require_authorised_with_evm_eip712(
+  auth:        EvmEip712Auth,
+  address:     Bytes<20>,
+  struct_hash: Bytes<32>,
+): [] {
+  const entry = disclose(derive_device_entry_with_evm_eip712(
+    kernel.self(), address, auth.blind, device_epoch, auth.use_counter
+  ));
+  assert(devices.member(entry), "unknown device entry");
+  assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
+         "evm_eip712: signature scalar is zero");
+  assert(secp256k1EcdsaVerify(evm_eip712_digest(kernel.self().bytes, struct_hash), auth.sig, auth.pk),
+         "invalid signature");
+  devices.remove(entry);
+  devices.insert(disclose(derive_device_entry_with_evm_eip712(
+    kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64>
+  )));
+  auth_nonce = (auth_nonce + 1) as Uint<64>;
+  bump_round();
+}
+
+// ── Custody: the encryption key ─────────────────────────────────────────────
+
+// RotateEncKey(bytes32 account,address device,uint64 authNonce,string effect,bytes32 newKey)
+export circuit rotate_enc_key_with_evm_eip712(new_key: Bytes<32>, auth: EvmEip712Auth): [] {
+  const address = evm_eip712_address(auth.pk);
+  require_authorised_with_evm_eip712(auth, address,
+    evm_eip712_struct_rotate_enc_key(kernel.self().bytes, address, auth_nonce, new_key));
+  do_rotate_enc_key(new_key);
+}
