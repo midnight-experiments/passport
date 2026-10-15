@@ -62,7 +62,8 @@
 //               arm under a VALID signature (pending, the phi length and
 //               slots, the session identifier, the commitment, the identity
 //               key; nothing to cancel); the seam's asserts on both circuits
-//               (an unenrolled key, r = 0); and, after a finalised recovery,
+//               (an unenrolled key, r = 0, the forged-address frame mutant);
+//               and, after a finalised recovery,
 //               the old evm_eip712 devices and an entry planted at
 //               device_epoch + 1 before it (#183 clears the set);
 //   witness     (S6E) withdraw_shielded and withdraw_shielded_to_contract on
@@ -947,6 +948,29 @@ if (SECTIONS.includes('recovery')) {
   const AC = (await execute(Original.Contract, AP, CANCEL, await cancelArgs(AP, e2))).after;
   const landedCancel = await cancelArgs(AP, e2);
   await negative('recovery', 'cancel replay: the landed cancel replayed (entry consumed, nonce advanced, nothing pending)', AC, CANCEL, landedCancel, UNKNOWN, [UNKNOWN, INVALID, NOPENDING]);
+
+  // the seam owns the frame on both new circuits (G1E-1): the forged-address
+  // mutant derives the victim's address from the attacker's point, so the
+  // victim's entry matches and the attacker's signature verifies locally;
+  // the proof must refuse it
+  {
+    const attacker = new SoftwareEvmWallet(0xbad5eedn);
+    const forging = await loadPatched([], FORGE_ADDRESS_OVERRIDES);
+    const fired = () => (forgery.fired > 0 ? undefined : 'the forgery never fired (the mutant missed its target)');
+    const asAttacker = (t: Eip712TypedData, counter: bigint) => { const p = parseEvmSignature(attacker.signDigest(typedDataDigest(t))); return { pk: attacker.pk, use_counter: counter, blind: device.blind, sig: { r: p.r, s: p.s } }; };
+    const tdP = evmEip712Messages.publishRecoverySession(frame(A1), S2);
+    forgery.set({ pk: attacker.pk, address: device.address });
+    await negative('recovery', 'publish: the attacker\'s key with the victim\'s address forged into the derivation (frame mutant)', A1, PUBLISH,
+      [...sArgs(S2), asAttacker(tdP, 1n)], UNKNOWN, [], '', { module: forging, mutant: 'forged-address mutant (keccak256 override: the copy derives the victim address from the attacker point)',
+        check: fired, control: { a: A1, args: await pubArgs(A1, S2) } });
+    const cDev = counterIn(AP, device);
+    const tdC = evmEip712Messages.cancelRecovery(frame(AP));
+    forgery.set({ pk: attacker.pk, address: device.address });
+    await negative('recovery', 'cancel: the attacker\'s key with the victim\'s address forged into the derivation (frame mutant)', AP, CANCEL,
+      [asAttacker(tdC, cDev)], UNKNOWN, [], '', { module: forging, mutant: 'forged-address mutant (keccak256 override: the copy derives the victim address from the attacker point)',
+        check: fired, control: { a: AP, args: await cancelArgs(AP, device) } });
+    forgery.set(undefined);
+  }
 
   // finalised (AF): resubmit, wait out the window (0 s + the 2 s bound), finalise
   const AP2 = (await execute(Original.Contract, AC, 'recover_submit', submitArgs(AC, 0x5e55n, Q, recoveryKey(QR).pk, now() + 2n))).after;
