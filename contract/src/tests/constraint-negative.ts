@@ -18,7 +18,8 @@
 //      runtime directly), so local execution completes.
 //   3. recordingProofProvider sends it to the proof server through a proving
 //      provider that records every /check and /prove request with its status
-//      and body, without retries.
+//      and body, without retries, each over its own connection (a reused
+//      keep-alive connection can break a large prover-key upload).
 //   4. expectRefusal classifies the layer that refused the call:
 //        client    a strict client decoder (messages "descriptor: ...",
 //                  "blind: ...") before any contract code runs;
@@ -211,8 +212,34 @@ export class ProofServerRefusal extends Error {
   }
 }
 
+/** fetch's own global dispatcher (Node's bundled undici) lives here. */
+const FETCH_DISPATCHER = Symbol.for('undici.globalDispatcher.1');
+
+/**
+ * A dispatcher for ONE proof-server request: a new connection, never one from
+ * fetch's shared pool. fetch keeps idle keep-alive connections, and the proof
+ * server (or a forwarder in front of it) may already have closed the one it
+ * picks; an upload of a large prover key (hundreds of MB) on such a
+ * connection then fails with EPIPE before the proof server sees the request,
+ * a transport error with nothing to classify. The same requests on a fresh
+ * connection each went through (AA 00067 lane E, S6E). The dispatcher is an
+ * instance of the class of fetch's own dispatcher, so no dependency is added,
+ * with keep-alive off; the caller destroys it once the answer has been read.
+ * Requests, answers and verdicts are unchanged; only connection reuse is.
+ */
+async function freshConnection(): Promise<{ destroy(): Promise<void> }> {
+  // Node creates fetch's dispatcher on first use; a data: URL needs no network.
+  if (!(globalThis as any)[FETCH_DISPATCHER]) await fetch('data:,');
+  const Dispatcher = (globalThis as any)[FETCH_DISPATCHER]?.constructor;
+  if (typeof Dispatcher !== 'function') {
+    throw new Error('constraint-negative: cannot reach the class of fetch\'s dispatcher for a fresh connection (not a verdict)');
+  }
+  return new Dispatcher({ keepAliveTimeout: 1, keepAliveMaxTimeout: 1 });
+}
+
 /** A ledger ProvingProvider over a proof server: no retries; every request
- *  and its answer are appended to `log`. */
+ *  goes over its own connection (freshConnection), and every request and its
+ *  answer are appended to `log`. */
 export function recordingProvingProvider(
   url: string, zkConfigProvider: any, log: ProofServerRequest[], timeoutMs = 600_000,
 ): ProvingProvider {
@@ -225,31 +252,36 @@ export function recordingProvingProvider(
   const post = async (endpoint: '/check' | '/prove', keyLocation: string, payload: Uint8Array): Promise<Uint8Array> => {
     const rec: ProofServerRequest = { endpoint, keyLocation, startedAt: new Date().toISOString(), ms: 0, status: null, ok: false };
     const t0 = Date.now();
-    let res: Response;
+    const connection = await freshConnection();
     try {
-      res = await fetch(endpointUrl(endpoint), {
-        method: 'POST', body: new Uint8Array(payload), headers: { 'Content-Type': 'application/octet-stream' },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch (e: any) {
+      let res: Response;
+      try {
+        res = await fetch(endpointUrl(endpoint), {
+          method: 'POST', body: new Uint8Array(payload), headers: { 'Content-Type': 'application/octet-stream' },
+          signal: AbortSignal.timeout(timeoutMs), dispatcher: connection,
+        } as RequestInit);
+      } catch (e: any) {
+        rec.ms = Date.now() - t0;
+        rec.error = String(e?.cause?.code ?? e?.message ?? e);
+        log.push(rec);
+        throw e;
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
       rec.ms = Date.now() - t0;
-      rec.error = String(e?.cause?.code ?? e?.message ?? e);
+      rec.status = res.status;
+      rec.ok = res.ok;
+      if (!res.ok) {
+        const text = new TextDecoder().decode(bytes);
+        rec.body = text.slice(0, BODY_LIMIT);
+        if (text.length > BODY_LIMIT) rec.bodyTruncated = true;
+        log.push(rec);
+        throw new ProofServerRefusal(endpoint, keyLocation, res.status, rec.body);
+      }
       log.push(rec);
-      throw e;
+      return bytes;
+    } finally {
+      await connection.destroy().catch(() => undefined);
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    rec.ms = Date.now() - t0;
-    rec.status = res.status;
-    rec.ok = res.ok;
-    if (!res.ok) {
-      const text = new TextDecoder().decode(bytes);
-      rec.body = text.slice(0, BODY_LIMIT);
-      if (text.length > BODY_LIMIT) rec.bodyTruncated = true;
-      log.push(rec);
-      throw new ProofServerRefusal(endpoint, keyLocation, res.status, rec.body);
-    }
-    log.push(rec);
-    return bytes;
   };
   return {
     async check(serializedPreimage, keyLocation) {

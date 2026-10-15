@@ -23,7 +23,8 @@
 //   - End to end through the real proving path (the ledger's proving loop and
 //     the recording provider) against the fake server: 404, 401 and 429 are
 //     ERROR; a decoding payload is `decoding`; "Failed direct assertion" is
-//     `prover`.
+//     `prover`; and every request arrives on its own connection (no reused
+//     keep-alive connection, which can break a large prover-key upload).
 //   - expectRefusal is fail-closed: a call that goes through is a FAIL, a
 //     refusal at another layer is a FAIL, a bypassed assert that never fired
 //     is a FAIL, a call that misses the patched copy is a FAIL, and an
@@ -253,7 +254,12 @@ const deploy: any = await createUnprovenDeployTxFromVerifierKeys(zk as any, coin
 
 let answer = { status: 404, body: '' };
 const hits: string[] = [];
+// Requests per TCP connection: the recording provider must open a new
+// connection for every request (a reused keep-alive connection can break a
+// large prover-key upload with EPIPE).
+const requestsPerConnection = new Map<object, number>();
 const server = createServer((rq, rs) => {
+  requestsPerConnection.set(rq.socket, (requestsPerConnection.get(rq.socket) ?? 0) + 1);
   rq.resume();
   rq.on('end', () => { hits.push(`${rq.method} ${rq.url}`); rs.writeHead(answer.status, { 'content-type': 'text/plain' }); rs.end(answer.body); });
 });
@@ -270,6 +276,7 @@ const prove = async (C: any, tag: Uint8Array) => {
   return fakeProver.proveTx({ version: 'v9', tx: call.private.unprovenTx } as any);
 };
 const e2e: Record<string, { verdict: string; layer: string; reason: string; status?: number | null; rule?: string }> = {};
+let transport: { requests: number; connections: number; maxRequestsPerConnection: number } | undefined;
 const negativeVia = async (name: string, status: number, body: string, expectedLayer: 'prover' | 'decoding', withLog = true) => {
   answer = { status, body };
   const r = await expectRefusal({
@@ -368,6 +375,14 @@ try {
   assert.equal((await expectRefusal({ name: 'control without log', expectedLayer: 'prover', bypassed: fresh, positiveControl: provedLocally(fresh.Contract), attempt: () => prove(fresh.Contract, BAD_TAG) })).verdict, 'ERROR');
   assert.equal((await expectRefusal({ name: 'control without copy', expectedLayer: 'prover', proofLog: log, positiveControl: provedLocally(fresh.Contract), attempt: () => prove(fresh.Contract, BAD_TAG) })).verdict, 'ERROR');
   console.log('  ✓ positive controls (F-A8): an overridden copy without a control is ERROR before its negative runs; a control through another module, a dishonest one, an unproved one, or one refused by the prover is ERROR; a control proved through the copy (by positiveControl or expectSuccess with through) lets the negative PASS; a plain copy needs one only when required; a call that misses its copy FAILs; a copy made elsewhere is ERROR');
+
+  // ── Transport: one connection per request ─────────────────────────────────
+  const perConnection = [...requestsPerConnection.values()];
+  transport = { requests: hits.length, connections: perConnection.length, maxRequestsPerConnection: Math.max(0, ...perConnection) };
+  assert.ok(hits.length >= 10, 'the fake server answered the requests above');
+  assert.equal(perConnection.reduce((a, b) => a + b, 0), hits.length);
+  assert.equal(perConnection.length, hits.length, `every request opened its own connection (${hits.length} requests on ${perConnection.length} connections)`);
+  console.log(`  ✓ transport: ${hits.length} proof-server requests on ${perConnection.length} connections (none reused)`);
 } finally {
   server.close();
 }
@@ -410,7 +425,7 @@ if (process.env.EVIDENCE_DIR) {
     rejections: PROOF_SERVER_REJECTIONS.map((r) => ({ ...r, pattern: String(r.pattern) })),
     recordedBodies: Object.fromEntries(Object.entries(BODY).map(([key, body]) => [key, { body, recognised: recogniseRejection({ status: 400, body }) }])),
     classifyCases: cases.map(([name, , requests, layer]) => ({ name, requests: requests?.map((r) => `${r.endpoint} ${r.status ?? r.error}`) ?? null, layer })),
-    endToEnd: e2e, verdict: 'PASS',
+    endToEnd: e2e, transport, verdict: 'PASS',
   }, null, 2) + '\n');
   console.log(`\n■ evidence → ${file}`);
 }
