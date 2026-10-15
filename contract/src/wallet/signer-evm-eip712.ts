@@ -36,8 +36,8 @@ import {
   deriveBlind,
   sameCanonicalSignature,
 } from './blind.js';
-import { evmAddressOf, evmChecksumAddress, parseEvmAddress } from './descriptors.js';
-import { typedDataDigest, evmEip712Messages, type Eip712TypedData } from './evm-eip712-codec.js';
+import { DESCRIPTOR_TAGS, checkDescriptor, evmAddressOf, evmChecksumAddress, padTag, parseEvmAddress, type Descriptor } from './descriptors.js';
+import { typedDataDigest, evmEip712Messages, type Eip712TypedData, type EvmEip712DescriptorInput } from './evm-eip712-codec.js';
 
 // ── Signatures ───────────────────────────────────────────────────────────────
 
@@ -478,3 +478,98 @@ export async function authoriseWithdrawShieldedToContract(
   const typedData = evmEip712Messages.withdrawShieldedToContract(frame, color, amount, recipientContract, coin);
   return { typedData, coin, auth: await device.authorise(typedData, counter) };
 }
+
+// ── Device lifecycle (S7E) ───────────────────────────────────────────────────
+//
+// add_device_with_evm_eip712 and remove_device_with_evm_eip712 take the other
+// key as a readable descriptor (FR-005, Q28), not an entry: the circuit
+// derives the entry from it with the target scheme's own recipe. Their ABI
+// differs from upstream's add/remove_device(entry), so CustodyAccount's
+// entry-typed helpers cannot reach them; these call the circuits directly.
+
+const le32 = (v: bigint): Uint8Array => { const o = new Uint8Array(32); let x = v; for (let i = 0; i < 32; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
+const ZERO32 = new Uint8Array(32);
+const ZERO21 = new Uint8Array(21);
+
+/** The circuit's `EvmEip712Descriptor` for a readable descriptor: the target
+ *  scheme's device tag and its fields (an EVM target's address and privacy
+ *  salt; a Solana target's 32-byte key and privacy salt; JubJub, k256 and
+ *  P-256 coordinates little-endian, as the recipes bind them; a k256
+ *  envelope; a passkey's RP hash and exact origin). The other fields are
+ *  zero: no recipe hashes them and no approval shows them. The descriptor is
+ *  checked by the strict client decoders first. */
+export function evmEip712DescriptorInput(descriptor: Descriptor): EvmEip712DescriptorInput {
+  if (!descriptor || !Object.hasOwn(DESCRIPTOR_TAGS.device, (descriptor as { scheme?: string }).scheme ?? '')) {
+    throw new Error('descriptor: not a registered device scheme');
+  }
+  const d = checkDescriptor(descriptor);
+  const base = { tag: padTag(DESCRIPTOR_TAGS.device[d.scheme]), key: ZERO32, key2: ZERO32, address: new Uint8Array(20), envelope: 0n, rp_id_hash: ZERO32, origin: ZERO21 };
+  switch (d.scheme) {
+    case 'evm_eip712': return { ...base, address: new Uint8Array(d.address), key2: new Uint8Array(d.blind) };
+    case 'sol_ed25519': return { ...base, key: new Uint8Array(d.key), key2: new Uint8Array(d.blind) };
+    case 'jubjub': return { ...base, key: le32(d.x), key2: le32(d.y) };
+    case 'k256': return { ...base, key: le32(d.x), key2: le32(d.y), envelope: BigInt(d.envelope) };
+    case 'p256': {
+      if (!d.policy) throw new Error('descriptor: a passkey device needs its policy (RP hash and origin)');
+      return { ...base, key: le32(d.x), key2: le32(d.y), rp_id_hash: new Uint8Array(d.policy.rpIdHash), origin: new Uint8Array(d.policy.origin) };
+    }
+  }
+}
+
+/** The descriptor the literal form (Q20) passes: unused by the circuit. */
+export const EVM_EIP712_UNUSED_DESCRIPTOR: EvmEip712DescriptorInput = {
+  tag: padTag(DESCRIPTOR_TAGS.device.evm_eip712), key: ZERO32, key2: ZERO32, address: new Uint8Array(20), envelope: 0n, rp_id_hash: ZERO32, origin: ZERO21,
+};
+
+/** The surface the device-lifecycle calls use: CustodyAccount's raw call-tx
+ *  interface. */
+export interface EvmEip712LifecycleSurface extends EvmEip712AccountSurface {
+  callTx: Record<string, (...args: unknown[]) => Promise<any>>;
+}
+
+const txIdOf = (r: any): string => {
+  const id = r?.public?.txId ?? r?.public?.transactionHash;
+  if (!id) throw new Error('evm_eip712: the call returned no transaction id');
+  return id;
+};
+const authArg = (a: EvmEip712Authorisation) => { const { arm, ...auth } = a; return auth; };
+
+/** add_device_with_evm_eip712: the AddDevice message ("Gives this key FULL
+ *  control of this account" and the target's descriptor), signed, then the
+ *  call; the circuit enrols the target at the current epoch and counter 0. */
+export async function addDeviceWithEvmEip712(account: EvmEip712LifecycleSurface, device: EvmEip712Device, target: Descriptor) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const input = evmEip712DescriptorInput(target);
+  const typedData = evmEip712Messages.addDevice(frame, input);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.add_device_with_evm_eip712(input, authArg(auth));
+  return { typedData, auth, input, txId: txIdOf(r) };
+}
+
+/** remove_device_with_evm_eip712, descriptor form: the target's entry at
+ *  (targetEpoch, targetCounter); the epoch may be a future one (removal only
+ *  reduces authority). */
+export async function removeDeviceWithEvmEip712(
+  account: EvmEip712LifecycleSurface, device: EvmEip712Device, target: Descriptor, targetEpoch: bigint, targetCounter: bigint,
+) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const input = evmEip712DescriptorInput(target);
+  const typedData = evmEip712Messages.removeDevice(frame, input, targetEpoch, targetCounter);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.remove_device_with_evm_eip712(input, targetEpoch, targetCounter, { is_some: false, value: ZERO32 }, authArg(auth));
+  return { typedData, auth, input, txId: txIdOf(r) };
+}
+
+/** remove_device_with_evm_eip712, literal form (Q20): an entry this wallet
+ *  cannot describe, under "Removes a device this wallet cannot identify". */
+export async function removeUnknownDeviceWithEvmEip712(account: EvmEip712LifecycleSurface, device: EvmEip712Device, entry: Uint8Array) {
+  if (entry.length !== 32) throw new Error('evm_eip712: an entry is 32 bytes');
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.removeUnknownDevice(frame, entry);
+  const auth = await device.authorise(typedData, counter);
+  const r = await account.callTx.remove_device_with_evm_eip712(EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: new Uint8Array(entry) }, authArg(auth));
+  return { typedData, auth, txId: txIdOf(r) };
+}
+
+/** This device as a descriptor (another device adds or removes it). */
+export const evmDeviceDescriptor = (d: EvmEip712Device): Descriptor => ({ scheme: 'evm_eip712', address: new Uint8Array(d.address), blind: new Uint8Array(d.blind) });
