@@ -335,10 +335,16 @@ export class EvmEip712Device {
   }
 }
 
+/** How far a client scans use counters for a device's live entry: the
+ *  counter resolver and restore use the same bound (audit G1E-7). */
+export const EVM_EIP712_COUNTER_SCAN = 4096n;
+
 /**
  * Restore (FR-013): the account indexes 0..maxIndex of `wallet` on `network`,
  * each with its blind re-derived from the wallet, tested against candidate
- * accounts' device sets at counters 0..maxCounter. Returns every match.
+ * accounts' device sets at counters below maxCounter (default: the resolver's
+ * bound). Returns every match. The wallet is asked for 2 x (maxIndex + 1)
+ * `personal_sign` approvals (two per index: the sign-twice check).
  */
 export async function restoreEvmDevices(
   wallet: EvmWallet,
@@ -348,11 +354,11 @@ export async function restoreEvmDevices(
 ): Promise<{ accountIndex: bigint; account: Uint8Array; counter: bigint; device: EvmEip712Device }[]> {
   const found: { accountIndex: bigint; account: Uint8Array; counter: bigint; device: EvmEip712Device }[] = [];
   const maxIndex = opts.maxIndex ?? 4;
-  const maxCounter = opts.maxCounter ?? 256n;
+  const maxCounter = opts.maxCounter ?? EVM_EIP712_COUNTER_SCAN;
   for (let i = 0; i <= maxIndex; i++) {
     const device = await EvmEip712Device.enrol(wallet, network, i);
     for (const a of accounts) {
-      for (let k = 0n; k <= maxCounter; k++) {
+      for (let k = 0n; k < maxCounter; k++) {
         if (a.isMember(device.entryAt(a.address, a.epoch, k))) {
           found.push({ accountIndex: BigInt(i), account: a.address, counter: k, device });
           break;
@@ -380,7 +386,7 @@ export interface EvmEip712AccountSurface {
 
 /** The device's current use counter: the first counter whose entry is live at
  *  the current epoch (MIP-0013 S11 rescan). */
-export async function resolveEvmEip712Counter(account: EvmEip712AccountSurface, device: EvmEip712Device, limit = 4096n): Promise<bigint> {
+export async function resolveEvmEip712Counter(account: EvmEip712AccountSurface, device: EvmEip712Device, limit = EVM_EIP712_COUNTER_SCAN): Promise<bigint> {
   const l = await account.ledgerState();
   for (let k = 0n; k < limit; k++) {
     if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k))) return k;
@@ -396,4 +402,79 @@ export async function rotateEncKeyWithEvmEip712(account: EvmEip712AccountSurface
   const typedData = evmEip712Messages.rotateEncKey({ account: account.addressBytes, device: device.address, authNonce: l.auth_nonce }, newKey);
   const auth = await device.authorise(typedData, counter);
   return { typedData, auth, ...(await account.rotateEncKeyWithAuth(newKey, auth)) };
+}
+
+// ── Custody (S6E) ────────────────────────────────────────────────────────────
+
+/** The surface of a CustodyAccount the custody helpers use (CustodyAccount
+ *  routes each `*WithAuth` call to `<operation>_with_evm_eip712` through the
+ *  registered authArgs branch). */
+export interface EvmEip712CustodySurface extends EvmEip712AccountSurface {
+  appendInboxWithAuth(entry: Uint8Array, a: EvmEip712Authorisation): Promise<{ txId: string }>;
+  withdrawUnshieldedWithAuth(color: Uint8Array, amount: bigint, recipient: Uint8Array, a: EvmEip712Authorisation): Promise<{ txId: string }>;
+  withdrawShieldedWithAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, a: EvmEip712Authorisation): Promise<{ txId: string; change: unknown }>;
+  withdrawShieldedToContractWithAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, a: EvmEip712Authorisation): Promise<{ txId: string; sent: unknown; change: unknown }>;
+  /** The coin the held_coin witness will return for `color` (the store). */
+  heldCoin(color: Uint8Array): Promise<{ nonce: Uint8Array; color: Uint8Array; value: bigint; mt_index: bigint }>;
+}
+
+/** The device frame of the next call and the device's counter. */
+async function deviceFrame(account: EvmEip712AccountSurface, device: EvmEip712Device) {
+  const l = await account.ledgerState();
+  const counter = await resolveEvmEip712Counter(account, device);
+  return { frame: { account: account.addressBytes, device: device.address, authNonce: l.auth_nonce }, counter };
+}
+
+/** The coin a shielded spend will consume, as the approval shows it.
+ *  Refuses a stored coin of another colour at the client (FR-010; the
+ *  circuit asserts it too). */
+async function spentCoin(account: EvmEip712CustodySurface, color: Uint8Array) {
+  const c = await account.heldCoin(color);
+  if (!eq(c.color, color)) throw new Error('evm_eip712: the held coin is not of the withdrawn colour');
+  return { nonce: c.nonce, value: c.value, mtIndex: c.mt_index };
+}
+
+/** append_inbox_with_evm_eip712: the AppendInbox message (the 192-byte
+ *  entry in full), signed by the device's wallet, then the call. */
+export async function appendInboxWithEvmEip712(account: EvmEip712CustodySurface, device: EvmEip712Device, entry: Uint8Array) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.appendInbox(frame, entry);
+  const auth = await device.authorise(typedData, counter);
+  return { typedData, auth, ...(await account.appendInboxWithAuth(entry, auth)) };
+}
+
+/** withdraw_unshielded_with_evm_eip712 to a 32-byte user address. */
+export async function withdrawUnshieldedWithEvmEip712(
+  account: EvmEip712CustodySurface, device: EvmEip712Device, color: Uint8Array, amount: bigint, recipient: Uint8Array,
+) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const typedData = evmEip712Messages.withdrawUnshielded(frame, color, amount, recipient);
+  const auth = await device.authorise(typedData, counter);
+  return { typedData, auth, ...(await account.withdrawUnshieldedWithAuth(color, amount, recipient, auth)) };
+}
+
+/** withdraw_shielded_with_evm_eip712 to a Zswap coin public key: the approval
+ *  shows the coin the store holds for `color` (nonce, value, Merkle index)
+ *  and the change. */
+export async function withdrawShieldedWithEvmEip712(
+  account: EvmEip712CustodySurface, device: EvmEip712Device, recipient: Uint8Array, color: Uint8Array, amount: bigint,
+) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const coin = await spentCoin(account, color);
+  const typedData = evmEip712Messages.withdrawShielded(frame, color, amount, recipient, coin);
+  const auth = await device.authorise(typedData, counter);
+  return { typedData, auth, coin, ...(await account.withdrawShieldedWithAuth(recipient, color, amount, auth)) };
+}
+
+/** withdraw_shielded_to_contract_with_evm_eip712 (direct transfer, MIP-0012
+ *  §6.6): the typed data and authorisation only, because the call must be
+ *  composed with the recipient contract's claim in one transaction (see
+ *  `withdrawShieldedToContractWithAuth` for an uncomposed call). */
+export async function authoriseWithdrawShieldedToContract(
+  account: EvmEip712CustodySurface, device: EvmEip712Device, recipientContract: Uint8Array, color: Uint8Array, amount: bigint,
+) {
+  const { frame, counter } = await deviceFrame(account, device);
+  const coin = await spentCoin(account, color);
+  const typedData = evmEip712Messages.withdrawShieldedToContract(frame, color, amount, recipientContract, coin);
+  return { typedData, coin, auth: await device.authorise(typedData, counter) };
 }
