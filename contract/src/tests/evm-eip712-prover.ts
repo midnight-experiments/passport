@@ -52,6 +52,19 @@
 //               binding, the stale grant nonce, the grant seam's forged
 //               address (G1E-1), a wrong blind, and the shielded twins'
 //               witness substitution (colour, value);
+//   recovery    (S9E) publish_recovery_session_with_evm_eip712 and
+//               recover_cancel_with_evm_eip712: positives (a session, a cancel
+//               of a pending recovery, a fresh device's session after a
+//               finalised recovery); the binding of every signed member of
+//               PublishRecoverySession (the effect line, the key, the session
+//               identifier, each phi, the length, the wrap, the nonce, the
+//               type); every assert of the shared chips reached through the
+//               arm under a VALID signature (pending, the phi length and
+//               slots, the session identifier, the commitment, the identity
+//               key; nothing to cancel); the seam's asserts on both circuits
+//               (an unenrolled key, r = 0); and, after a finalised recovery,
+//               the old evm_eip712 devices and an entry planted at
+//               device_epoch + 1 before it (#183 clears the set);
 //   witness     (S6E) withdraw_shielded and withdraw_shielded_to_contract on
 //               a local Zswap tree: partial and full spends as positives, then
 //               a valid signature over one coin with the held_coin witness
@@ -74,7 +87,8 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { CONFIG } from '../node/wallet.js';
-import { JubjubDevice, K256Device, k256Challenges } from '../wallet/signer.js';
+import { JubjubDevice, K256Device, k256Challenges, jubjubChallenges, authArgs } from '../wallet/signer.js';
+import { recoveryKey, signRecoverSubmit, recoverSubmitArgs, recoverSubmitChallenge, JUBJUB_IDENTITY, JUBJUB_ORDER_TWO } from '../wallet/recovery-gate.js';
 import { SoftwareEvmWallet, EvmEip712Device, EvmEip712Grantee, highSTwin, parseEvmSignature, serialiseEvmSignature, evmEip712DescriptorInput, evmDeviceDescriptor, EVM_EIP712_UNUSED_DESCRIPTOR, evmEip712GranteeInput, evmEip712IssueArgs } from '../wallet/signer-evm-eip712.js';
 import { grantLabel, grantOriginHash } from '../wallet/descriptors.js';
 import { K256Grantee, originHash as upstreamOriginHash, grantAuthArgs, RECIPIENT_USER_ADDRESS, type GrantOpening } from '../wallet/signer.js';
@@ -90,7 +104,7 @@ import {
 } from './evm-eip712-negative.js';
 import type { BypassedContractModule } from './constraint-negative.js';
 
-const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness', 'devices', 'grants'];
+const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness', 'devices', 'grants', 'recovery'];
 const SEED = 'aa00067/e/s5/evm-eip712-prover/v1';
 let ctr = 0;
 const rnd = (n: number) => {
@@ -781,6 +795,162 @@ if (SECTIONS.includes('grants')) {
   await negative('grants', 'grantee shielded: valid approval for colour A, witness coin of colour B (a grant scoped to B)', colourB, GWS, sArgs(gSign(tdSB)), COLOUR_G, [COLOUR_G]);
   const value999 = shAccount([tree[0], { nonce: NONCE_H, color: COL_A, value: 999n }], 1);
   await negative('grants', 'grantee shielded: valid approval for coin value 1000, witness coin of value 999', value999.a, GWS, sArgs(gSign(tdS)), GINVALID, [GINVALID]);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// S9E: recovery — the session and the cancel through the arm
+// ═════════════════════════════════════════════════════════════════════════════
+
+if (SECTIONS.includes('recovery')) {
+  const PUBLISH = 'publish_recovery_session_with_evm_eip712';
+  const CANCEL = 'recover_cancel_with_evm_eip712';
+  const PENDING = 'recovery pending; cancel first';
+  const EMPTY = 'phi must not be empty';
+  const RANGE = 'phi length out of range';
+  const SLOT2 = 'unused phi slot 2 not zero', SLOT3 = 'unused phi slot 3 not zero', SLOT4 = 'unused phi slot 4 not zero';
+  const SIDZERO = 'session nonce is zero', SIDREUSE = 'session nonce reused', PKREUSE = 'recovery commitment reused';
+  const IDENT = 'recovery key is the identity', SMALL = 'recovery key has small order';
+  const NOPENDING = 'no recovery pending';
+  // The account's birth recovery key is one whose secret the test holds, so
+  // that it can open the recovery gate (recover_submit) itself.
+  const birth = 0xb1a7n;
+  const field = (n: number) => BigInt('0x' + Buffer.from(rnd(31)).toString('hex')) + BigInt(n);
+  type Sess = { recoveryPk: { x: bigint; y: bigint }; sessionNonce: Uint8Array; phi: [bigint, bigint, bigint, bigint]; phiLen: bigint; wrap: Uint8Array };
+  const sessionOf = (secret: bigint): Sess => ({ recoveryPk: recoveryKey(secret).pk, sessionNonce: rnd(32), phi: [field(1), field(2), 0n, 0n], phiLen: 2n, wrap: rnd(64) });
+  const sArgs = (x: Sess) => [x.recoveryPk, x.sessionNonce, ...x.phi, x.phiLen, x.wrap];
+  const frame = (a: LocalAccount, d: EvmEip712Device = device) => ({ account: a.addressBytes, device: d.address, authNonce: ledgerOf(a).auth_nonce as bigint });
+  const counterIn = (a: LocalAccount, d: EvmEip712Device) => { for (let k = 0n; k < 64n; k++) if (ledgerOf(a).devices.member(d.entryAt(a.addressBytes, ledgerOf(a).device_epoch, k))) return k; return 0n; };
+  const signBy = async (d: EvmEip712Device, t: Eip712TypedData, counter: bigint) => { const { arm, ...auth } = await d.authorise(t, counter); return auth; };
+  const pubArgs = async (a: LocalAccount, x: Sess, d: EvmEip712Device = device, signed?: (t: any) => void, counter = counterIn(a, d)) => {
+    const td = evmEip712Messages.publishRecoverySession(frame(a, d), x);
+    const t = signed ? JSON.parse(JSON.stringify(td)) : td;
+    if (signed) signed(t);
+    return [...sArgs(x), await signBy(d, t, counter)];
+  };
+  const cancelArgs = async (a: LocalAccount, d: EvmEip712Device = device, t?: Eip712TypedData, counter = counterIn(a, d)) =>
+    [await signBy(d, t ?? evmEip712Messages.cancelRecovery(frame(a, d)), counter)];
+  /** The shared JubJub gate: the recovery key `secret` and the successor co-sign. */
+  const submitArgs = (a: LocalAccount, secret: bigint, successor: JubjubDevice, successorRecoveryPk: { x: bigint; y: bigint }, nowUpper: bigint) => {
+    const l = ledgerOf(a);
+    const auth = signRecoverSubmit(recoveryKey(secret), successor,
+      recoverSubmitChallenge({ contractAddress: a.addressBytes, authNonce: l.auth_nonce }, l.recovery_pk, successor.pk, successorRecoveryPk as any, l.device_epoch + 1n, nowUpper),
+      { successorRecoveryPk: successorRecoveryPk as any, expectedEpoch: l.device_epoch, expectedNonce: l.auth_nonce, nowUpper });
+    return recoverSubmitArgs(auth);
+  };
+  const now = () => BigInt(Math.floor(Date.now() / 1000));
+  const posPath = await loadPatched([INVALID, UNKNOWN, ZERO, PENDING, EMPTY, RANGE, SLOT2, SLOT3, SLOT4, SIDZERO, SIDREUSE, PKREUSE, IDENT, SMALL, NOPENDING]);
+
+  // A0: the device, activated (counter 0); window 0 (the constructor's
+  // minimum) so that a finalisation can run locally
+  const A0 = (await execute(Original.Contract, await dormant(device.bootCommitment(salt), recoveryKey(birth).pk, 0n), ACTIVATE, device.activationArgs(salt))).after;
+  const S1 = sessionOf(0x5e55n);
+  await positive('recovery', 'publish_recovery_session: the honest session (patched path)', posPath, A0, PUBLISH, await pubArgs(A0, S1));
+  const A1 = (await execute(Original.Contract, A0, PUBLISH, await pubArgs(A0, S1))).after; // device at counter 1, S1 stored
+  if (ledgerOf(A1).recovery_phi_len !== 2n) throw new Error('setup: the session did not land');
+
+  // binding: the signed message differs from the executed values in one member
+  const S2 = sessionOf(0x5e56n);
+  const otherKey = recoveryKey(0x0dd0n).pk;
+  const hex32 = (v: bigint) => '0x' + Buffer.from(Array.from({ length: 32 }, (_, i) => Number((v >> BigInt(8 * i)) & 0xffn))).toString('hex');
+  const flipHex = (h: string) => h.slice(0, -2) + (h.slice(-2) === '00' ? '01' : '00');
+  const bindings: [string, (t: any) => void][] = [
+    ['the effect line', (t) => { t.message.effect = 'Adds a backup'; }],
+    ['recoveryKeyX', (t) => { t.message.recoveryKeyX = hex32(otherKey.x); }],
+    ['recoveryKeyY', (t) => { t.message.recoveryKeyY = hex32(otherKey.y); }],
+    ['sessionNonce', (t) => { t.message.sessionNonce = flipHex(t.message.sessionNonce); }],
+    ['phi1', (t) => { t.message.phi1 = flipHex(t.message.phi1); }],
+    ['phi2', (t) => { t.message.phi2 = flipHex(t.message.phi2); }],
+    ['phi3 (signed non-zero, executed zero)', (t) => { t.message.phi3 = hex32(7n); }],
+    ['phi4 (signed non-zero, executed zero)', (t) => { t.message.phi4 = hex32(7n); }],
+    ['phiLength (signed 3, executed 2)', (t) => { t.message.phiLength = '3'; }],
+    ['wrap (one byte)', (t) => { t.message.wrap = flipHex(t.message.wrap); }],
+    ['authNonce (n + 1)', (t) => { t.message.authNonce = String(BigInt(t.message.authNonce) + 1n); }],
+  ];
+  for (const [name, f] of bindings) await negative('recovery', `publish binding: ${name} changed in the signed message`, A1, PUBLISH, await pubArgs(A1, S2, device, f), INVALID, [INVALID]);
+  await negative('recovery', 'publish replay/operation: a CancelRecovery signature (bare frame) presented as the session approval', A1, PUBLISH,
+    [...sArgs(S2), await signBy(device, evmEip712Messages.cancelRecovery(frame(A1)), 1n)], INVALID, [INVALID]);
+  await negative('recovery', 'publish replay: the landed session approval replayed (entry consumed, nonce advanced, stored values)', A1, PUBLISH,
+    await pubArgs(A0, S1, device, undefined, 0n), UNKNOWN, [UNKNOWN, INVALID, SIDREUSE, PKREUSE]);
+
+  // the shared chip, through the arm, under a VALID signature
+  const chip: [string, Sess, string, string[]][] = [
+    ['an empty vector (length 0)', { ...S2, phi: [0n, 0n, 0n, 0n], phiLen: 0n }, EMPTY, [EMPTY]],
+    ['a length beyond the slot bound (5)', { ...S2, phi: [1n, 2n, 3n, 4n], phiLen: 5n }, RANGE, [RANGE]],
+    ['length 1 with phi2 non-zero', { ...S2, phi: [1n, 2n, 0n, 0n], phiLen: 1n }, SLOT2, [SLOT2]],
+    ['length 2 with phi3 non-zero', { ...S2, phi: [1n, 2n, 3n, 0n], phiLen: 2n }, SLOT3, [SLOT3]],
+    ['length 3 with phi4 non-zero', { ...S2, phi: [1n, 2n, 3n, 4n], phiLen: 3n }, SLOT4, [SLOT4]],
+    ['an all-zero session identifier', { ...S2, sessionNonce: new Uint8Array(32) }, SIDZERO, [SIDZERO]],
+    ['the stored session identifier reused', { ...S2, sessionNonce: new Uint8Array(S1.sessionNonce) }, SIDREUSE, [SIDREUSE]],
+    ['the stored recovery commitment reused', { ...S2, recoveryPk: S1.recoveryPk }, PKREUSE, [PKREUSE]],
+    ['the identity as the new recovery key', { ...S2, recoveryPk: JUBJUB_IDENTITY }, IDENT, [IDENT, SMALL]],
+  ];
+  for (const [name, x, expect, bypass] of chip) await negative('recovery', `publish under a valid signature: ${name}`, A1, PUBLISH, await pubArgs(A1, x), expect, bypass);
+  await runtimeOnly('recovery', 'publish under a valid signature: a small-order recovery key', A1, PUBLISH, await pubArgs(A1, { ...S2, recoveryPk: JUBJUB_ORDER_TWO }), 'unreachable',
+    'the runtime cannot construct a JubJub point outside the prime-order subgroup (it traps before the circuit body), and the proving toolchain constrains every assigned point into the subgroup (upstream recovery-sim, require_live_jubjub_point)');
+
+  // the seam on the new circuits
+  const stranger = await EvmEip712Device.enrol(other, 'undeployed', 0);
+  await negative('recovery', 'publish: an unenrolled evm key signs the session', A1, PUBLISH, await pubArgs(A1, S2, stranger, undefined, 0n), UNKNOWN, [UNKNOWN]);
+  await negative('recovery', 'publish: the device key with another blind', A1, PUBLISH,
+    [...sArgs(S2), { ...(await signBy(device, evmEip712Messages.publishRecoverySession(frame(A1), S2), 1n)), blind: device1.blind }], UNKNOWN, [UNKNOWN]);
+  await negative('recovery', 'publish: signature r = 0', A1, PUBLISH,
+    [...sArgs(S2), { ...(await signBy(device, evmEip712Messages.publishRecoverySession(frame(A1), S2), 1n)), sig: { r: 0n, s: 5n } }], ZERO, [ZERO, INVALID]);
+
+  // a pending recovery (AP): the device publishes, the gate opens with the
+  // session's secret, a k256 device K and a jubjub device J are enrolled, and
+  // J plants an evm_eip712 entry for W at device_epoch + 1 (erratum 7)
+  const jub = JubjubDevice.generate();
+  const jIn = evmEip712DescriptorInput({ scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y });
+  const AJ = (await execute(Original.Contract, A1, 'add_device_with_evm_eip712', [jIn, await signBy(device, evmEip712Messages.addDevice(frame(A1), jIn), 1n)])).after;
+  const e2 = await EvmEip712Device.enrol(new SoftwareEvmWallet(0xe2e2n), 'undeployed', 0);
+  const e2In = evmEip712DescriptorInput(evmDeviceDescriptor(e2));
+  const AE = (await execute(Original.Contract, AJ, 'add_device_with_evm_eip712', [e2In, await signBy(device, evmEip712Messages.addDevice(frame(AJ), e2In), 2n)])).after;
+  const W = await EvmEip712Device.enrol(new SoftwareEvmWallet(0x3a38n), 'undeployed', 0);
+  const plant = W.entryAt(AE.addressBytes, 1n, 0n);
+  const jPlant = jub.sign(jubjubChallenges.addDevice({ contractAddress: AE.addressBytes, authNonce: ledgerOf(AE).auth_nonce }, jub.pk, plant), 0n);
+  const AW = (await execute(Original.Contract, AE, 'add_device_with_jubjub', [plant, ...authArgs(jPlant)])).after;
+  if (!ledgerOf(AW).devices.member(plant)) throw new Error('setup: the plant did not land');
+  const Q = JubjubDevice.generate();
+  const QR = 0x9e11n;
+  const AP = (await execute(Original.Contract, AW, 'recover_submit', submitArgs(AW, 0x5e55n, Q, recoveryKey(QR).pk, now() + 2n))).after;
+  if (!ledgerOf(AP).pending_recovery) throw new Error('setup: the submission did not land');
+  await negative('recovery', 'publish under a valid signature while a recovery is pending', AP, PUBLISH, await pubArgs(AP, S2), PENDING, [PENDING]);
+  await positive('recovery', 'recover_cancel: the second evm device vetoes the pending recovery (patched path)', posPath, AP, CANCEL, await cancelArgs(AP, e2));
+  await negative('recovery', 'cancel binding: a RevokeAllGrants signature over the same bare frame', AP, CANCEL, await cancelArgs(AP, e2, evmEip712Messages.revokeAllGrants(frame(AP, e2))), INVALID, [INVALID]);
+  await negative('recovery', 'cancel binding: a CancelRecovery signature over authNonce + 1', AP, CANCEL,
+    await cancelArgs(AP, e2, evmEip712Messages.cancelRecovery({ ...frame(AP, e2), authNonce: ledgerOf(AP).auth_nonce + 1n })), INVALID, [INVALID]);
+  await negative('recovery', 'cancel binding: a CancelRecovery signature for another account', AP, CANCEL,
+    await cancelArgs(AP, e2, evmEip712Messages.cancelRecovery({ ...frame(AP, e2), account: rnd(32) })), INVALID, [INVALID]);
+  await negative('recovery', 'cancel: an unenrolled evm key', AP, CANCEL, await cancelArgs(AP, stranger, undefined, 0n), UNKNOWN, [UNKNOWN]);
+  await negative('recovery', 'cancel: signature r = 0', AP, CANCEL, [{ ...(await cancelArgs(AP, e2))[0] as any, sig: { r: 0n, s: 5n } }], ZERO, [ZERO, INVALID]);
+  await negative('recovery', 'cancel under a valid signature with nothing pending', A1, CANCEL, await cancelArgs(A1), NOPENDING, [NOPENDING]);
+  const AC = (await execute(Original.Contract, AP, CANCEL, await cancelArgs(AP, e2))).after;
+  const landedCancel = await cancelArgs(AP, e2);
+  await negative('recovery', 'cancel replay: the landed cancel replayed (entry consumed, nonce advanced, nothing pending)', AC, CANCEL, landedCancel, UNKNOWN, [UNKNOWN, INVALID, NOPENDING]);
+
+  // finalised (AF): resubmit, wait out the window (0 s + the 2 s bound), finalise
+  const AP2 = (await execute(Original.Contract, AC, 'recover_submit', submitArgs(AC, 0x5e55n, Q, recoveryKey(QR).pk, now() + 2n))).after;
+  await new Promise((r) => setTimeout(r, 3500));
+  const AF0 = (await execute(Original.Contract, AP2, 'recover_finalise', [])).after;
+  const lf = ledgerOf(AF0);
+  const finalised: Result = { section: 'recovery', circuit: 'recover_finalise', case: 'finalised (simulator): the set holds only the successor; the plant is the planted device\'s entry at the new epoch and is gone', kind: 'positive' };
+  const fOk = lf.devices.size() === 1n && lf.device_epoch === 1n && !lf.devices.member(plant) && Buffer.from(plant).equals(Buffer.from(W.entryAt(AF0.addressBytes, lf.device_epoch, 0n)));
+  finalised.positive = { name: finalised.case, verdict: fOk ? 'PASS' : 'FAIL', reason: fOk ? 'state checked' : 'unexpected post-finalise state', proofServer: [], startedAt: new Date().toISOString(), ms: 0 };
+  tally(finalised.positive); results.push(finalised); line(finalised);
+  // the successor enrols a fresh evm device F and opens a new recovery, so
+  // that a cancel has something pending; F's own session is the positive
+  const F = await EvmEip712Device.enrol(new SoftwareEvmWallet(0xf0f0n), 'undeployed', 0);
+  const fEntry = F.entryAt(AF0.addressBytes, lf.device_epoch, 0n);
+  const AF = (await execute(Original.Contract, AF0, 'add_device_with_jubjub', [fEntry, ...authArgs(Q.sign(jubjubChallenges.addDevice({ contractAddress: AF0.addressBytes, authNonce: lf.auth_nonce }, Q.pk, fEntry), 0n))])).after;
+  const S3 = sessionOf(0x5e57n);
+  await positive('recovery', 'after the recovery: a fresh evm device enrolled by the successor publishes a session (patched path)', posPath, AF, PUBLISH, await pubArgs(AF, S3, F));
+  const AFP = (await execute(Original.Contract, AF, 'recover_submit', submitArgs(AF, QR, JubjubDevice.generate(), recoveryKey(0x9e12n).pk, now() + 600n))).after;
+  await positive('recovery', 'after the recovery: the fresh evm device cancels a new pending recovery (patched path)', posPath, AFP, CANCEL, await cancelArgs(AFP, F));
+  // every old evm_eip712 device, the plant included, refused by membership
+  for (const [name, d, ctr] of [['the planted entry\'s device W (counter 0 at the new epoch)', W, 0n], ['the original device', device, 3n], ['the second evm device', e2, 1n]] as const) {
+    await negative('recovery', `after the recovery: ${name} publishes`, AF, PUBLISH, await pubArgs(AF, S3, d, undefined, ctr), UNKNOWN, [UNKNOWN]);
+    await negative('recovery', `after the recovery: ${name} cancels a pending recovery`, AFP, CANCEL, await cancelArgs(AFP, d, undefined, ctr), UNKNOWN, [UNKNOWN]);
+  }
 }
 
 const verdict = errors ? 'ERROR' : failures ? 'FAIL' : 'PASS';

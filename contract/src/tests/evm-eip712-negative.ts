@@ -235,11 +235,12 @@ export function coinStoreAnswering(entries: { key: Uint8Array; coin: LocalCoin }
   return s;
 }
 
-/** A dormant account: the constructor state with boot commitment `boot`. */
-export async function dormant(boot: Uint8Array, recoveryPk: unknown): Promise<LocalAccount> {
+/** A dormant account: the constructor state with boot commitment `boot`
+ *  (veto window three days unless given; S9E's finalisations use 0). */
+export async function dormant(boot: Uint8Array, recoveryPk: unknown, vetoWindowSeconds = 3n * 24n * 3600n): Promise<LocalAccount> {
   const deploy: any = await createUnprovenDeployTxFromVerifierKeys(zk as any, coinPublicKey, {
     compiledContract: compiled(Original.Contract), signingKey: sampleSigningKey(), initialPrivateState: privateState,
-    args: [boot, new Uint8Array(32).fill(9), recoveryPk, new Uint8Array(64), 3n * 24n * 3600n],
+    args: [boot, new Uint8Array(32).fill(9), recoveryPk, new Uint8Array(64), vetoWindowSeconds],
   } as any, encryptionPublicKey);
   const contractAddress = String(deploy.public.contractAddress);
   return { contractAddress, addressBytes: new Uint8Array(Buffer.from(contractAddress, 'hex')), state: deploy.public.initialContractState };
