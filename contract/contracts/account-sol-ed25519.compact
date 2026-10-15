@@ -280,6 +280,36 @@ export circuit withdraw_unshielded_with_sol_ed25519(
   do_withdraw_unshielded(color, amount, recipient);
 }
 
+// Shielded (MIP-0012 §6). The coin enters through the held_coin witness
+// (never from ledger state), and the message is rendered from the coin the
+// witness actually returned: it shows every value of it the spend consumes
+// (the colour, as the Token line, the value, the nonce and the Merkle index)
+// and the change that returns to this account (value - amount; the amount
+// is bounded by the coin's value where the change is rendered). A valid
+// signature over one coin therefore never spends another (AUTH-10, FR-004).
+//
+// The colour is shown once, as `color`, so the export ASSERTS that the spent
+// coin is of that colour (FR-010, audit C1, issue 00050): without it a
+// dishonest prover could pair a valid signature over a coin of colour A with
+// a witness coin of colour B carrying the same nonce, value and index.
+export circuit withdraw_shielded_with_sol_ed25519(
+  recipient: ZswapCoinPublicKey,
+  color:     Bytes<32>,
+  amount:    Uint<128>,
+  a:         SolAmountShow,
+  c:         SolCoinShow,
+  show:      SolShow,
+  frame:     Vector<128, Uint<0..16>>,
+  hex:       Vector<192, Uint<0..16>>,
+  auth:      SolEd25519Auth,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  require_authorised_with_sol_ed25519<36, 535, 861>(sol_title_withdraw_shielded(),
+    sol_body_withdraw_shielded(recipient, color, amount, coin, a, c, hex), show, frame, auth);
+  return do_withdraw_shielded(recipient, amount, coin);
+}
+
 // ── Signed messages, format sol v1 (spec FR-S02, FR-S03, FR-004, FR-023) ────
 //
 // A Solana wallet's `signMessage` signs the raw bytes it is given, so the
