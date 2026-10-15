@@ -21,8 +21,9 @@
 //     check what it is asked to approve;
 //   - describes a descriptor for display, with the forms a user can compare
 //     by eye (EVM address, Solana key, passkey origin) and the labelled values
-//     (the passkey's "Passkey RP (hash)" and a blinded key's "Device privacy
-//     salt").
+//     (the passkey's "Passkey RP (hash)" and a blinded key's privacy salt:
+//     "Device privacy salt" for a device, "Grantee privacy salt" for a
+//     grantee, whose blind comes from its own grantee request, blind.ts).
 //
 // Platform-neutral: no node:crypto, so the same code runs in Node and in a
 // browser page.
@@ -507,14 +508,23 @@ export function coordinateHex(scheme: keyof typeof COORDINATE_DISPLAY_ORDER, v: 
 /** One shown line: a fixed label and its value in full. */
 export interface DescriptorLine { label: string; value: string; verifiableByEye: boolean }
 
+/** The label of a readable key's blind: a device's (device entries and boot
+ *  commitments) or a grantee's (grant ids). The two blinds come from two
+ *  different requests (blind.ts), so the label says whose it is. */
+export function privacySaltLabel(recipe: DescriptorRecipe): 'Device privacy salt' | 'Grantee privacy salt' {
+  return recipe === 'grant-id' ? 'Grantee privacy salt' : 'Device privacy salt';
+}
+
 /** The lines a client shows for a descriptor, the same values the frozen
  *  approvals show. Keys are shown in full: an EVM address in EIP-55 form, a
  *  Solana key in base58 and hex, a passkey origin as text, and coordinates
  *  per COORDINATE_DISPLAY_ORDER (Q29: secp256k1 and P-256 big-endian, JubJub
  *  little-endian). `rp_id_hash` and the blind are the two labelled hash-like
- *  values; the client shows the RP ID beside the RP hash when it knows it. */
+ *  values (the blind under privacySaltLabel); the client shows the RP ID
+ *  beside the RP hash when it knows it. */
 export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): DescriptorLine[] {
   const tag = { label: 'Scheme tag', value: DESCRIPTOR_TAGS[recipe][d.scheme], verifiableByEye: true };
+  const salt = (blind: Uint8Array) => ({ label: privacySaltLabel(recipe), value: '0x' + toHex(blind), verifiableByEye: false });
   const coord = (name: string, scheme: keyof typeof COORDINATE_DISPLAY_ORDER, v: bigint) =>
     ({ label: name, value: coordinateHex(scheme, v), verifiableByEye: false });
   switch (d.scheme) {
@@ -530,10 +540,10 @@ export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): Des
       return lines;
     }
     case 'evm_eip712': return [tag, { label: 'Ethereum address', value: evmChecksumAddress(d.address), verifiableByEye: true },
-      { label: 'Device privacy salt', value: '0x' + toHex(d.blind), verifiableByEye: false }];
+      salt(d.blind)];
     case 'sol_ed25519': return [tag, { label: 'Solana public key', value: base58Encode(d.key), verifiableByEye: true },
       { label: 'Solana public key (hex)', value: toHex(d.key), verifiableByEye: true },
-      { label: 'Device privacy salt', value: '0x' + toHex(d.blind), verifiableByEye: false }];
+      salt(d.blind)];
   }
 }
 

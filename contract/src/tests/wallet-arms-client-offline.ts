@@ -51,7 +51,7 @@ import {
   padTag, tagOf, evmChecksumAddress, parseEvmAddress, evmAddressOf, base58Encode, base58Decode,
   parseSolanaPublicKey, parseK256Descriptor, parseP256Descriptor, parseJubjubPoint, evmDescriptor,
   solDescriptor, checkDescriptor, payloadParts, entryCall, bootCall, grantIdCall, derive, decodeDescriptor,
-  describeDescriptor, grantOriginHash, grantLabel, COORDINATE_DISPLAY_ORDER, coordinateHex,
+  describeDescriptor, privacySaltLabel, grantOriginHash, grantLabel, COORDINATE_DISPLAY_ORDER, coordinateHex,
   type Descriptor, type DescriptorRecipe,
 } from '../wallet/descriptors.js';
 import {
@@ -303,13 +303,24 @@ console.log(`  ✓ encoders: ${tally.encoders.pass} descriptors × 3 recipes equ
   const e = lines('device', evm);
   assert.equal(e['Ethereum address'], evmChecksumAddress((evm as any).address));
   assert.equal(e['Device privacy salt'], '0x' + hex((evm as any).blind));
+  // A grantee's blind is labelled as a grantee's (AA 00067 Q39), a device's
+  // (entries and boot commitments) as a device's; never both, never neither.
+  for (const d of [evm, sol]) {
+    for (const r of ['device', 'boot', 'grant-id'] as DescriptorRecipe[]) {
+      const shown = lines(r, d), want = r === 'grant-id' ? 'Grantee privacy salt' : 'Device privacy salt';
+      const other = r === 'grant-id' ? 'Device privacy salt' : 'Grantee privacy salt';
+      assert.equal(privacySaltLabel(r), want);
+      assert.equal(shown[want], '0x' + hex((d as any).blind), `${d.scheme} ${r}: the blind under "${want}"`);
+      assert.equal(shown[other], undefined, `${d.scheme} ${r}: no "${other}" line`);
+    }
+  }
   assert.equal(lines('device', sol)['Solana public key'], base58Encode((sol as any).key));
   const p = lines('device', pk);
   assert.equal(p['Passkey origin'], 'https://a.example.com');
   assert.match(p['Passkey RP (hash)'], /^0x[0-9a-f]{64} \(RP ID example\.com, shown by this client\)$/);
   assert.equal(lines('grant-id', pk)['Passkey origin'], undefined, 'a p256 grant id binds the key only');
   assert.equal(lines('device', pk)['Scheme tag'], 'midnight:account:device:r1:v2');
-  console.log('  ✓ display: EIP-55 address, base58 key, passkey origin as text, the two labelled values');
+  console.log('  ✓ display: EIP-55 address, base58 key, passkey origin as text, the two labelled values (a grantee\'s blind as "Grantee privacy salt")');
 }
 
 // The comparison display equals what the circuit binds and what the
@@ -354,14 +365,14 @@ const ctrBeforeDisplayOrder = ctr; // restored below: later sections keep S1's s
           }
           case 'evm_eip712':
             assert.equal(shown['Ethereum address'].toLowerCase(), h0x(parts[0] as Uint8Array), `evm address ${r}`);
-            assert.equal(shown['Device privacy salt'], h0x(parts[1] as Uint8Array), `evm blind ${r}`);
+            assert.equal(shown[privacySaltLabel(r)], h0x(parts[1] as Uint8Array), `evm blind ${r}`);
             break;
           case 'sol_ed25519': {
             // The circuit takes the point and binds its RFC 8032 encoding.
             const bound = probe.encode_public_key_with_sol_ed25519(parts[0] as any);
             assert.ok(eq(base58Decode(shown['Solana public key'], 32), bound), `sol key ${r}`);
             assert.equal(shown['Solana public key (hex)'], hex(bound), `sol key hex ${r}`);
-            assert.equal(shown['Device privacy salt'], h0x(parts[1] as Uint8Array), `sol blind ${r}`);
+            assert.equal(shown[privacySaltLabel(r)], h0x(parts[1] as Uint8Array), `sol blind ${r}`);
             break;
           }
         }
