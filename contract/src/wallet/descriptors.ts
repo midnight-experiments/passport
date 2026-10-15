@@ -427,22 +427,45 @@ export function decodeDescriptor(recipe: DescriptorRecipe, tag: Uint8Array, part
 
 // ── Display ──────────────────────────────────────────────────────────────────
 
+/** The byte order a client SHOWS a curve coordinate in (decision Q29 of AA
+ *  00067, the convention of the frozen approvals): secp256k1 and P-256
+ *  coordinates big-endian, as SEC1 and every wallet and tool show them;
+ *  JubJub coordinates little-endian, Midnight's own encoding and the bytes
+ *  the recipes bind (`x_le ‖ y_le`). Field values, which no descriptor
+ *  carries, are shown little-endian under the same decision. */
+export const COORDINATE_DISPLAY_ORDER: Readonly<Record<'jubjub' | 'k256' | 'p256', 'little-endian' | 'big-endian'>> = Object.freeze({
+  jubjub: 'little-endian',
+  k256: 'big-endian',
+  p256: 'big-endian',
+});
+
+/** A coordinate as shown: `0x` and 64 lowercase hex digits, in the byte order
+ *  of COORDINATE_DISPLAY_ORDER for its scheme. */
+export function coordinateHex(scheme: keyof typeof COORDINATE_DISPLAY_ORDER, v: bigint): string {
+  const order = COORDINATE_DISPLAY_ORDER[scheme];
+  if (!order) throw new Error(`descriptor: ${scheme} has no coordinates`);
+  return '0x' + toHex(order === 'little-endian' ? bytesLE(v, 32) : bytesBE(v, 32));
+}
+
 /** One shown line: a fixed label and its value in full. */
 export interface DescriptorLine { label: string; value: string; verifiableByEye: boolean }
 
-/** The lines a client shows for a descriptor. Keys are shown in full in their
- *  usual form (big-endian coordinates; the circuits bind them little-endian).
- *  `rp_id_hash` and the blind are the two labelled hash-like values; the
- *  client shows the RP ID beside the RP hash when it knows it. */
+/** The lines a client shows for a descriptor, the same values the frozen
+ *  approvals show. Keys are shown in full: an EVM address in EIP-55 form, a
+ *  Solana key in base58 and hex, a passkey origin as text, and coordinates
+ *  per COORDINATE_DISPLAY_ORDER (Q29: secp256k1 and P-256 big-endian, JubJub
+ *  little-endian). `rp_id_hash` and the blind are the two labelled hash-like
+ *  values; the client shows the RP ID beside the RP hash when it knows it. */
 export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): DescriptorLine[] {
   const tag = { label: 'Scheme tag', value: DESCRIPTOR_TAGS[recipe][d.scheme], verifiableByEye: true };
-  const coord = (name: string, v: bigint) => ({ label: name, value: '0x' + toHex(bytesBE(v, 32)), verifiableByEye: false });
+  const coord = (name: string, scheme: keyof typeof COORDINATE_DISPLAY_ORDER, v: bigint) =>
+    ({ label: name, value: coordinateHex(scheme, v), verifiableByEye: false });
   switch (d.scheme) {
-    case 'jubjub': return [tag, coord('JubJub key x', d.x), coord('JubJub key y', d.y)];
-    case 'k256': return [tag, coord('secp256k1 key x', d.x), coord('secp256k1 key y', d.y),
+    case 'jubjub': return [tag, coord('JubJub key x', 'jubjub', d.x), coord('JubJub key y', 'jubjub', d.y)];
+    case 'k256': return [tag, coord('secp256k1 key x', 'k256', d.x), coord('secp256k1 key y', 'k256', d.y),
       { label: 'Signing envelope', value: d.envelope === 0 ? '0 (SHA-256 of the challenge)' : '1 (dApp-connector signData)', verifiableByEye: false }];
     case 'p256': {
-      const lines: DescriptorLine[] = [tag, coord('Passkey key x', d.x), coord('Passkey key y', d.y)];
+      const lines: DescriptorLine[] = [tag, coord('Passkey key x', 'p256', d.x), coord('Passkey key y', 'p256', d.y)];
       if (recipe !== 'grant-id' && d.policy) {
         lines.push({ label: 'Passkey origin', value: String.fromCharCode(...d.policy.origin), verifiableByEye: true });
         lines.push({ label: 'Passkey RP (hash)', value: '0x' + toHex(d.policy.rpIdHash) + (d.policy.rpId ? ` (RP ID ${d.policy.rpId}, shown by this client)` : ''), verifiableByEye: false });

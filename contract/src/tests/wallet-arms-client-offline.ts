@@ -13,7 +13,11 @@
 //                specified preimage (new schemes); the decoder inverts the
 //                encoder and refuses unknown tags, other recipes' tags, wrong
 //                widths, and inadmissible keys
-//   display      the shown lines, including the two labelled values
+//   display      the shown lines, including the two labelled values; every
+//                scheme's comparison display equals the bytes the circuit
+//                binds in the byte order of Q29 (secp256k1 and P-256
+//                coordinates big-endian, as SEC1; JubJub little-endian) and
+//                the values the frozen evm_eip712 approvals show
 //   blind        golden request messages, input refusals, low-S EVM and
 //                strict Ed25519 canonical forms, the sign-twice check against
 //                a deterministic and a hedged signer, and derive_blind
@@ -37,7 +41,7 @@ import {
   padTag, tagOf, evmChecksumAddress, parseEvmAddress, evmAddressOf, base58Encode, base58Decode,
   parseSolanaPublicKey, parseK256Descriptor, parseP256Descriptor, parseJubjubPoint, evmDescriptor,
   solDescriptor, checkDescriptor, payloadParts, entryCall, bootCall, grantIdCall, derive, decodeDescriptor,
-  describeDescriptor, grantOriginHash, grantLabel,
+  describeDescriptor, grantOriginHash, grantLabel, COORDINATE_DISPLAY_ORDER, coordinateHex,
   type Descriptor, type DescriptorRecipe,
 } from '../wallet/descriptors.js';
 import {
@@ -261,6 +265,110 @@ console.log(`  ✓ encoders: ${tally.encoders.pass} descriptors × 3 recipes equ
   assert.equal(lines('grant-id', pk)['Passkey origin'], undefined, 'a p256 grant id binds the key only');
   assert.equal(lines('device', pk)['Scheme tag'], 'midnight:account:device:r1:v2');
   console.log('  ✓ display: EIP-55 address, base58 key, passkey origin as text, the two labelled values');
+}
+
+// The comparison display equals what the circuit binds and what the
+// approvals show (audit G1(E) G1E-3, F-B2; decision Q29).
+assert.deepEqual(COORDINATE_DISPLAY_ORDER, { jubjub: 'little-endian', k256: 'big-endian', p256: 'big-endian' });
+const ctrBeforeDisplayOrder = ctr; // restored below: later sections keep S1's seeded inputs
+{
+  const lines = (r: DescriptorRecipe, d: Descriptor) => Object.fromEntries(describeDescriptor(r, d).map((l) => [l.label, l.value]));
+  const h0x = (b: Uint8Array) => '0x' + hex(b);
+  const rev = (b: Uint8Array) => Uint8Array.from(b).reverse();
+  for (let round = 0; round < 4; round++) {
+    for (const d of sampleDescriptors()) {
+      for (const r of ['device', 'boot', 'grant-id'] as DescriptorRecipe[]) {
+        const parts = payloadParts(d, r);      // the circuit's arguments (S1 recipes)
+        const shown = lines(r, d);
+        assert.equal(shown['Scheme tag'], DESCRIPTOR_TAGS[r][d.scheme]);
+        switch (d.scheme) {
+          case 'jubjub':
+            // Recipe w64 binds x_le ‖ y_le; Q29 shows JubJub little-endian:
+            // the shown hex IS the bound bytes.
+            assert.equal(shown['JubJub key x'], h0x(parts[0] as Uint8Array), `jubjub x ${r}`);
+            assert.equal(shown['JubJub key y'], h0x(parts[1] as Uint8Array), `jubjub y ${r}`);
+            assert.equal(shown['JubJub key x'], h0x(le(d.x, 32)));
+            break;
+          case 'k256':
+          case 'p256': {
+            // Recipes bind x_le ‖ y_le; Q29 shows SEC1 big-endian: the
+            // reversed bound bytes, which equal the SEC1 encoding's x and y.
+            const curve = d.scheme === 'k256' ? secp256k1 : p256;
+            const sec1 = curve.Point.fromAffine({ x: d.x, y: d.y }).toBytes(false);
+            const name = d.scheme === 'k256' ? 'secp256k1 key' : 'Passkey key';
+            assert.equal(shown[`${name} x`], h0x(rev(parts[0] as Uint8Array)), `${d.scheme} x ${r}`);
+            assert.equal(shown[`${name} y`], h0x(rev(parts[1] as Uint8Array)), `${d.scheme} y ${r}`);
+            assert.equal(shown[`${name} x`], h0x(sec1.subarray(1, 33)), `${d.scheme} x is SEC1`);
+            assert.equal(shown[`${name} y`], h0x(sec1.subarray(33, 65)), `${d.scheme} y is SEC1`);
+            if (d.scheme === 'k256') assert.ok(shown['Signing envelope'].startsWith(`${parts[2]} (`), 'envelope');
+            if (d.scheme === 'p256' && r !== 'grant-id') {
+              assert.equal(shown['Passkey RP (hash)'].slice(0, 66), h0x(parts[2] as Uint8Array), 'rp_id_hash');
+              assert.ok(eq(new TextEncoder().encode(shown['Passkey origin']), parts[3] as Uint8Array), 'origin');
+            }
+            break;
+          }
+          case 'evm_eip712':
+            assert.equal(shown['Ethereum address'].toLowerCase(), h0x(parts[0] as Uint8Array), `evm address ${r}`);
+            assert.equal(shown['Device privacy salt'], h0x(parts[1] as Uint8Array), `evm blind ${r}`);
+            break;
+          case 'sol_ed25519':
+            assert.ok(eq(base58Decode(shown['Solana public key'], 32), parts[0] as Uint8Array), `sol key ${r}`);
+            assert.equal(shown['Solana public key (hex)'], hex(parts[0] as Uint8Array), `sol key hex ${r}`);
+            assert.equal(shown['Device privacy salt'], h0x(parts[1] as Uint8Array), `sol blind ${r}`);
+            break;
+        }
+        ok('display order');
+      }
+    }
+  }
+  // The frozen evm_eip712 approvals (lane E, src/tests/vectors/evm-eip712-v2.json
+  // at 5b6af98): the descriptor arguments the circuit takes (key = x_le,
+  // key2 = y_le, as stored) and the nested member values the wallet shows.
+  // The keys are random bytes, not points: only the rendering is compared.
+  const FROZEN: { name: string; recipe: DescriptorRecipe; d: Descriptor; shown: Record<string, string> }[] = [];
+  const le32 = (h: string) => bigLE(unhex(h));
+  const frozenXY = (name: string, recipe: DescriptorRecipe, scheme: 'jubjub' | 'k256' | 'p256', key: string, key2: string, x: string, y: string, extra: object = {}) =>
+    FROZEN.push({ name, recipe, d: { scheme, x: le32(key), y: le32(key2), ...extra } as Descriptor, shown: { x, y } });
+  frozenXY('add_device/jubjub', 'device', 'jubjub', '008d9c106ab2f8e6e42b403fd938c78ae05ff2b883a44d547ffc01b38708d3b8', 'e775dbf815339a367d7f1c45083bfb0c55784ff48ee30a5bb7b486fd533e8463',
+    '0x008d9c106ab2f8e6e42b403fd938c78ae05ff2b883a44d547ffc01b38708d3b8', '0xe775dbf815339a367d7f1c45083bfb0c55784ff48ee30a5bb7b486fd533e8463');
+  frozenXY('issue_grant/jubjub', 'grant-id', 'jubjub', 'd2f45c25780e3d4586366c0a189d603517a55368aac7dbf0a2218e4a45ae4158', '0000e72e4e7155f9b4a2b468c26189fc1fb4754aa5c983a5aff206c1e1de41d5',
+    '0xd2f45c25780e3d4586366c0a189d603517a55368aac7dbf0a2218e4a45ae4158', '0x0000e72e4e7155f9b4a2b468c26189fc1fb4754aa5c983a5aff206c1e1de41d5');
+  frozenXY('add_device/k256', 'device', 'k256', '96b657cae691101d92423746ef842e62f62a3b7d31b0c13106529471d5221a80', '63500fd4c3578f23fd0dec6345ef84c3222150f55de9ff2b10c0af803ab66665',
+    '0x801a22d57194520631c1b0317d3b2af6622e84ef463742921d1091e6ca57b696', '0x6566b63a80afc0102bffe95df5502122c384ef4563ec0dfd238f57c3d40f5063', { envelope: 1 });
+  frozenXY('issue_grant/k256', 'grant-id', 'k256', '24509c24cadf8e52f697e3ed5d118bd911862d674dacade8863358bf94d849ee', 'b69d4997abf276bc581bda0ce6678224cd4778dce9a444fba9488bb77d82cf52',
+    '0xee49d894bf583386e8adac4d672d8611d98b115dede397f6528edfca249c5024', '0x52cf827db78b48a9fb44a4e9dc7847cd248267e60cda1b58bc76f2ab97499db6', { envelope: 0 });
+  frozenXY('add_device/p256', 'device', 'p256', '1f939d5962ae73813107f975307dcb6c66e4dfe4533606a23cc389ce395e28cd', 'c4ebf9dcdf67ddcd64f80a9372db2aad857e5a7e59a1582c40d1656fb29242af',
+    '0xcd285e39ce89c33ca2063653e4dfe4666ccb7d3075f907318173ae62599d931f', '0xaf4292b26f65d1402c58a1597e5a7e85ad2adb72930af864cddd67dfdcf9ebc4',
+    { policy: { rpIdHash: unhex('6fbc9a902223169eb4763f26ae9d1ce2541dd3bfcd10143069324b6573772220'), origin: new TextEncoder().encode('https://a.example.com') } });
+  frozenXY('issue_grant/p256', 'grant-id', 'p256', '524ffadd6134eee82413ffebe1a179a590dec98902943ad49b0f5f9eea544198', 'a5a850d7f706ce3511bb160b2fab501c1b9d36b937f500b0a613d652fd85a248',
+    '0x984154ea9e5f0f9bd43a940289c9de90a579a1e1ebff1324e8ee3461ddfa4f52', '0x48a285fd52d613a6b000f537b9369d1b1c50ab2f0b16bb1135ce06f7d750a8a5');
+  for (const f of FROZEN) {
+    const shown = describeDescriptor(f.recipe, f.d).filter((l) => / key [xy]$/.test(l.label)).map((l) => l.value);
+    assert.deepEqual(shown, [f.shown.x, f.shown.y], `${f.name}: the comparison display equals the frozen approval`);
+    assert.equal(coordinateHex(f.d.scheme as 'jubjub' | 'k256' | 'p256', (f.d as any).x), f.shown.x);
+    ok('frozen approvals');
+  }
+  {
+    const p = lines('device', FROZEN.find((f) => f.name === 'add_device/p256')!.d);
+    assert.equal(p['Passkey origin'], 'https://a.example.com');
+    assert.equal(p['Passkey RP (hash)'], '0x6fbc9a902223169eb4763f26ae9d1ce2541dd3bfcd10143069324b6573772220');
+    assert.ok(lines('device', FROZEN.find((f) => f.name === 'add_device/k256')!.d)['Signing envelope'].startsWith('1 '));
+    const evm = lines('device', evmDescriptor('0x44eaa4af74c5a2c0c826381c64ce349f53da908a', unhex('7352b6318696467d60beee1663620e75dd8237a2cc4a2b59acc75f50a9d2c291')));
+    assert.equal(evm['Ethereum address'], '0x44EAa4aF74C5A2c0c826381C64cE349f53dA908A');
+    assert.equal(evm['Device privacy salt'], '0x7352b6318696467d60beee1663620e75dd8237a2cc4a2b59acc75f50a9d2c291');
+    // The frozen sol_ed25519 target (random bytes, not a key: no strict parse).
+    const sol = lines('device', { scheme: 'sol_ed25519', key: unhex('418e8e76243534c60cbfa63014f32881ce3c53eb27ed0e9019e96e783f42ceaf'), blind: unhex('5dce20c082b6b733bfa86bfe9c76b5251c1faa32868a08f5e2ab869d89ba7aa2') });
+    assert.equal('0x' + sol['Solana public key (hex)'], '0x418e8e76243534c60cbfa63014f32881ce3c53eb27ed0e9019e96e783f42ceaf');
+    assert.equal(sol['Device privacy salt'], '0x5dce20c082b6b733bfa86bfe9c76b5251c1faa32868a08f5e2ab869d89ba7aa2');
+    ok('frozen approvals');
+  }
+  // The decision is not symmetric: JubJub big-endian (the display before this
+  // fix) would differ from the frozen approval.
+  const jj = FROZEN[0];
+  assert.notEqual('0x' + hex(Uint8Array.from(le((jj.d as any).x, 32)).reverse()), jj.shown.x, 'a big-endian JubJub display differs from the approval');
+  assert.throws(() => coordinateHex('sol_ed25519' as any, 1n), /no coordinates/);
+  ctr = ctrBeforeDisplayOrder;
+  console.log(`  ✓ display order (Q29): ${tally['display order'].pass} descriptor × recipe displays equal the circuit's bound bytes (JubJub little-endian; secp256k1 and P-256 big-endian, equal to SEC1); ${tally['frozen approvals'].pass} frozen evm_eip712 approvals shown identically`);
 }
 
 // ── Grant origin labels ──────────────────────────────────────────────────────
