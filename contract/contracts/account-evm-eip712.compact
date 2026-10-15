@@ -1,0 +1,138 @@
+// EVM / EIP-712 arm (`evm_eip712`), included by account.compact. All custody,
+// grant-scope and recovery mutations use the existing shared chips; this file
+// adds the arm's identity, its derivations, its activation and (in later
+// steps) its readable EIP-712 approvals and its seam.
+//
+// THE DEVICE IS ITS ETHEREUM ADDRESS, BLINDED. An ordinary Ethereum account
+// (MetaMask, or any EIP-712 wallet) is the device. Its identity is the 20-byte
+// `secp256k1EthereumAddress(pk)`, the value the wallet shows, and every
+// derivation binds it together with the account's BLIND, a 32-byte secret the
+// client re-derives from a deterministic wallet signature over a readable,
+// non-authorising request message (spec FR-013; the request is signed with
+// `personal_sign`, so it can never be an EIP-712 authorisation):
+//
+//   entry    = H(pad32("midnight:account:device:evm:v2") || account
+//                || address(20) || blind(32) || le4(epoch) || le8(counter))
+//   boot     = H(pad32("midnight:account:boot:evm:v2") || salt
+//                || address(20) || blind(32))
+//   grant id = H(pad32("midnight:account:grant:id:evm:v2") || account
+//                || address(20) || blind(32) || origin_hash || slot)
+//
+// (H = persistentHash = SHA-256 of the plain concatenation.) The recipes live
+// in the shared descriptor module (modules/WalletArmDescriptors, width class
+// 52), so that every readable arm derives an `evm_eip712` target's entry
+// exactly as this arm does. Without the blind, anyone could test a public
+// address against every account's entries; with it, the ledger holds nothing
+// a known address can be tested against. The blind is a private input of
+// every proof and is never disclosed.
+//
+// THE ADDRESS IS ALWAYS DERIVED FROM THE PRESENTED POINT. Every path that
+// admits a key (activation here; the device and grantee seams later) takes
+// the secp256k1 point and derives the address itself
+// (`evm_eip712_address`), after refusing the point at infinity by its
+// COORDINATES, so that both encodings of the identity ({0, 0, identity} and
+// {0, 0, not identity}) are refused, as upstream's `require_live_k256_key`
+// does. A caller can therefore never present an address it did not prove a
+// key for.
+//
+// Tags: the arm hashes four tags, all registered in the descriptor module
+// (`midnight:account:{device,boot,grant:id,blind}:evm:v2`); the `evm` marker
+// starts at v2 because the experimental fork used v1 with other preimages.
+
+import "modules/WalletArmDescriptors";
+
+// The descriptor module's derivations and tags, re-exported as pure circuits
+// of the account contract: a client derives any readable descriptor's entry,
+// boot commitment, or grant id through the account's own compiled module.
+// Pure: no proving key, no deploy cost.
+export {
+  device_tag_jubjub, device_tag_k256, device_tag_p256,
+  device_tag_evm_eip712, device_tag_sol_ed25519,
+  boot_tag_jubjub, boot_tag_k256, boot_tag_p256,
+  boot_tag_evm_eip712, boot_tag_sol_ed25519,
+  grant_id_tag_jubjub, grant_id_tag_k256, grant_id_tag_p256,
+  grant_id_tag_evm_eip712, grant_id_tag_sol_ed25519,
+  blind_tag_evm_eip712, blind_tag_sol_ed25519, grant_origin_tag,
+  derive_descriptor_entry_w52, derive_descriptor_entry_w64,
+  derive_descriptor_entry_w65, derive_descriptor_entry_w117,
+  derive_descriptor_boot_w52, derive_descriptor_boot_w64,
+  derive_descriptor_boot_w65, derive_descriptor_boot_w117,
+  derive_descriptor_grant_id_w52, derive_descriptor_grant_id_w64,
+  derive_descriptor_grant_id_w65,
+  derive_grant_origin_hash_label, derive_grant_origin_hash_origin,
+  derive_blind,
+};
+
+// ── Keys ────────────────────────────────────────────────────────────────────
+
+// Q8: scalar-to-point on secp256k1, for software signers and degenerate-key
+// vectors (MetaMask keys never reach a client as scalars: the client recovers
+// the point from a wallet signature). The same curve as the k256 arm.
+export pure circuit compute_public_point_with_evm_eip712(scalar: Secp256k1Scalar): Secp256k1Point {
+  return ecMulGenerator(scalar);
+}
+
+// The device's address, derived from the presented point. Refuses the point
+// at infinity by its coordinates first, so the unflagged encoding
+// {0, 0, not identity} is refused here too (the stdlib's own guard inside
+// secp256k1EthereumAddress compares the whole struct, flag included).
+// Exported so that clients and tests obtain the address through the
+// contract's own code.
+export pure circuit evm_eip712_address(pk: Secp256k1Point): Bytes<20> {
+  assert(
+    !((secp256k1PointX(pk) as Bytes<32>) == pad(32, "")
+      && (secp256k1PointY(pk) as Bytes<32>) == pad(32, "")),
+    "evm_eip712: device key is the point at infinity"
+  );
+  return secp256k1EthereumAddress(pk);
+}
+
+// ── Derivations (width class 52 of the descriptor module) ──────────────────
+
+export pure circuit derive_boot_commitment_with_evm_eip712(
+  salt:    Bytes<32>,
+  address: Bytes<20>,
+  blind:   Bytes<32>,
+): Bytes<32> {
+  return derive_descriptor_boot_w52(boot_tag_evm_eip712(), salt, address, blind);
+}
+
+export pure circuit derive_device_entry_with_evm_eip712(
+  self_addr: ContractAddress,
+  address:   Bytes<20>,
+  blind:     Bytes<32>,
+  epoch:     Uint<32>,
+  counter:   Uint<64>,
+): Bytes<32> {
+  return derive_descriptor_entry_w52(device_tag_evm_eip712(), self_addr, address, blind, epoch, counter);
+}
+
+export pure circuit derive_grant_id_with_evm_eip712(
+  self_addr:   ContractAddress,
+  address:     Bytes<20>,
+  blind:       Bytes<32>,
+  origin_hash: Bytes<32>,
+  slot:        Uint<8>,
+): Bytes<32> {
+  return derive_descriptor_grant_id_w52(grant_id_tag_evm_eip712(), self_addr, address, blind, origin_hash, slot);
+}
+
+// ── Bootstrap ───────────────────────────────────────────────────────────────
+
+// Permissionless, as on every arm: only the committed key can activate, so
+// the circuit cannot be front-run to register a foreign key. The caller
+// presents the device's POINT (recovered by the client from the blind-request
+// signature), the boot salt, and the blind; the address is derived here.
+export circuit activate_initial_device_with_evm_eip712(
+  pk:    Secp256k1Point,
+  salt:  Bytes<32>,
+  blind: Bytes<32>,
+): [] {
+  assert(!booted, "already activated");
+  const address = evm_eip712_address(pk);
+  assert(derive_boot_commitment_with_evm_eip712(salt, address, blind) == boot,
+         "boot commitment mismatch");
+  do_activate_initial_device(derive_device_entry_with_evm_eip712(
+    kernel.self(), address, blind, device_epoch, 0 as Uint<64>
+  ));
+}
