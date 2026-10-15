@@ -51,7 +51,7 @@ export {
   derive_blind,
   uint8_text, uint32_text, uint64_text, uint128_text,
   hex_text_20, hex_text_32, hex_text_64, hex_text_192, reverse_32,
-  label_text_32, visible_text_21,
+  label_text_32, visible_text_21, recipient_kind_text, k256_envelope_text,
 };
 
 export ledger derived: Bytes<32>;
@@ -59,6 +59,7 @@ export ledger text_21: Bytes<21>;
 export ledger text_32: Bytes<32>;
 export ledger text_39: Bytes<39>;
 export ledger text_384: Bytes<384>;
+export ledger text_24: Bytes<24>;
 
 // ── Derivations ─────────────────────────────────────────────────────────────
 
@@ -176,4 +177,12 @@ export circuit probe_label_text_32(label: Bytes<32>): [] {
 
 export circuit probe_visible_text_21(b: Bytes<21>): [] {
   text_21 = disclose(visible_text_21(b) as Bytes<21>);
+}
+
+export circuit probe_recipient_kind_text(kind: Uint<8>): [] {
+  text_24 = disclose(recipient_kind_text(kind) as Bytes<24>);
+}
+
+export circuit probe_k256_envelope_text(envelope: Uint<8>): [] {
+  text_24 = disclose(k256_envelope_text(envelope) as Bytes<24>);
 }

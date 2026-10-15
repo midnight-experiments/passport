@@ -15,7 +15,9 @@
 //   labels    zero-padded ASCII (a registered tag, a grantee's origin label):
 //             visible words separated by single spaces, then zero bytes,
 //             shown with the zero bytes as spaces;
-//   visible   exact visible ASCII (a passkey origin), shown as is.
+//   visible   exact visible ASCII (a passkey origin), shown as is;
+//   enums     an enumerated operand (a grant's recipient kind, a k256 key's
+//             signing envelope) as a fixed text label per value.
 //
 // Compact has no division, so the decimal digits are DISPLAY INPUTS: the
 // caller supplies the text and the circuit CHECKS that it reads back to the
@@ -169,5 +171,41 @@ module WalletArmRendering {
   // A passkey's 21-byte origin (the wa-json134 profile).
   export pure circuit visible_text_21(b: Bytes<21>): Vector<21, Uint<8>> {
     return visible_text<21>(b);
+  }
+
+  // ── Enumerated values ─────────────────────────────────────────────────────
+  //
+  // An enumerated operand is shown as a fixed label, selected in-circuit
+  // from the executed value, so the label cannot disagree with it; a value
+  // without a label is refused. Each label is visible words, space-padded to
+  // 24 bytes, and distinct labels show distinct texts. The client's table
+  // (src/wallet/labels.ts) holds the same texts.
+
+  // One of four zero-padded 24-byte labels, chosen by `i`, shown with its
+  // padding as spaces.
+  circuit enum_text_24(i: Uint<8>, l0: Bytes<24>, l1: Bytes<24>, l2: Bytes<24>, l3: Bytes<24>): Vector<24, Uint<8>> {
+    return map((a: Uint<8>, b: Uint<8>, c: Uint<8>, d: Uint<8>): Uint<8> => {
+                 const x = i == 0 ? a : i == 1 ? b : i == 2 ? c : d;
+                 return (x == 0 ? 32 : x) as Uint<8>;
+               },
+               l0 as Vector<24, Uint<8>>, l1 as Vector<24, Uint<8>>,
+               l2 as Vector<24, Uint<8>>, l3 as Vector<24, Uint<8>>);
+  }
+
+  // A grant's recipient kind (scoped-grants MIP): 0 no recipient pin,
+  // 1 a user address (unshielded), 2 a Zswap coin public key (shielded),
+  // 3 a contract address (direct transfer).
+  export pure circuit recipient_kind_text(kind: Uint<8>): Vector<24, Uint<8>> {
+    assert(kind <= 3, "display: unknown recipient kind");
+    return enum_text_24(kind, pad(24, "any recipient"), pad(24, "unshielded user address"),
+                        pad(24, "shielded coin public key"), pad(24, "contract address"));
+  }
+
+  // A k256 key's signing envelope: 0 the key signs SHA-256 of the
+  // challenge, 1 it signs through a dApp connector's signData prefix.
+  export pure circuit k256_envelope_text(envelope: Uint<8>): Vector<24, Uint<8>> {
+    assert(envelope <= 1, "display: unknown signing envelope");
+    return enum_text_24(envelope, pad(24, "SHA-256 of the challenge"), pad(24, "dApp-connector signData"),
+                        pad(24, ""), pad(24, ""));
   }
 }

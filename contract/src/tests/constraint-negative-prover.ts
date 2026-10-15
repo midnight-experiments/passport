@@ -108,6 +108,8 @@ const CASES: [string, unknown[], unknown[], string][] = [
   ['probe_uint128_text', [7n, digits('7')], [7n, digits('07')], 'display: leading zero'],
   ['probe_label_text_32', [pad('Midnight Night Market')], [pad('Midnight Night Market ')], 'display: not a zero-padded label'],
   ['probe_visible_text_21', [B21], [new Uint8Array(Buffer.from('https://a example.com'))], 'display: not visible ASCII'],
+  ['probe_recipient_kind_text', [3n], [4n], 'display: unknown recipient kind'],
+  ['probe_k256_envelope_text', [1n], [2n], 'display: unknown signing envelope'],
 ];
 
 const results: { circuit: string; assert: string; positive: PositiveResult; runtime: NegativeResult; prover: NegativeResult }[] = [];

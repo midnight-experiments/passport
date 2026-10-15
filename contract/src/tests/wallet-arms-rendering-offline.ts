@@ -15,6 +15,10 @@
 //            inner zero bytes, and control and non-ASCII bytes refused; distinct
 //            labels never show the same text. visible_text_21: visible ASCII
 //            only.
+//   enums    recipient_kind_text and k256_envelope_text: every value with a
+//            label shows the client table's text (src/wallet/labels.ts),
+//            space-padded to 24 bytes, labels distinct; every other value of
+//            the type (0-255) is refused, by the circuit and by the client.
 //
 // Writes $EVIDENCE_DIR/wallet-arms-rendering-offline.json when EVIDENCE_DIR
 // is set; never writes into the repository.
@@ -24,6 +28,9 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pureCircuits as probe } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
+import {
+  ENUM_TEXT_WIDTH, RECIPIENT_KIND_LABELS, K256_ENVELOPE_LABELS, recipientKindLabel, k256EnvelopeLabel, enumText,
+} from '../wallet/labels.js';
 
 const SEED = 'aa00067/s1/wallet-arms-rendering-offline/v1';
 let ctr = 0;
@@ -197,6 +204,34 @@ for (const [why, o] of [
   count('visible_text_21', 'refused');
 }
 console.log(`  ✓ visible_text_21: ${counts.visible_text_21.accepted} origins shown byte for byte, ${counts.visible_text_21.refused} refused`);
+
+// ── Enumerated values ───────────────────────────────────────────────────────
+
+console.log('\n── enums');
+const enums: [string, (v: bigint) => unknown, readonly string[], (v: bigint) => string, RegExp][] = [
+  ['recipient_kind_text', (v) => probe.recipient_kind_text(v), RECIPIENT_KIND_LABELS, recipientKindLabel, /unknown recipient kind/],
+  ['k256_envelope_text', (v) => probe.k256_envelope_text(v), K256_ENVELOPE_LABELS, k256EnvelopeLabel, /unknown signing envelope/],
+];
+for (const [name, f, table, client, refusal] of enums) {
+  const texts = new Set<string>();
+  for (let v = 0n; v < 256n; v++) {
+    if (v < BigInt(table.length)) {
+      const out = ascii(f(v) as bigint[]);
+      assert.equal(out.length, ENUM_TEXT_WIDTH);
+      assert.equal(out, table[Number(v)].padEnd(ENUM_TEXT_WIDTH, ' '), `${name}(${v})`);
+      assert.equal(out, Buffer.from(enumText(client(v))).toString('latin1'), `${name}(${v}) == the client's text`);
+      assert.ok(/^[!-~]+(?: [!-~]+)* *$/.test(out), `${name}(${v}): visible words, then spaces`);
+      assert.ok(!texts.has(out), `${name}: two values show the same label`);
+      texts.add(out);
+      count(name, 'accepted');
+    } else {
+      assert.throws(() => f(v), new RegExp(`failed assert: display: ${refusal.source}`), `${name}(${v}) must be refused`);
+      assert.throws(() => client(v), refusal, `the client must refuse ${name}(${v})`);
+      count(name, 'refused');
+    }
+  }
+  console.log(`  ✓ ${name}: ${counts[name].accepted} labels equal the client table (${table.map((t) => JSON.stringify(t)).join(', ')}), ${counts[name].refused} other values refused`);
+}
 
 report.counts = counts;
 report.verdict = 'PASS';

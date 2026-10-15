@@ -35,6 +35,7 @@ import { p256 } from '@noble/curves/nist.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { jubjub } from '@noble/curves/misc.js';
 import { WEBAUTHN_ORIGIN_BYTES, webauthnPolicy } from './webauthn.js';
+import { k256EnvelopeLabel } from './labels.js';
 
 // ── Schemes, recipes, and tags ───────────────────────────────────────────────
 
@@ -530,7 +531,7 @@ export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): Des
   switch (d.scheme) {
     case 'jubjub': return [tag, coord('JubJub key x', 'jubjub', d.x), coord('JubJub key y', 'jubjub', d.y)];
     case 'k256': return [tag, coord('secp256k1 key x', 'k256', d.x), coord('secp256k1 key y', 'k256', d.y),
-      { label: 'Signing envelope', value: d.envelope === 0 ? '0 (SHA-256 of the challenge)' : '1 (dApp-connector signData)', verifiableByEye: false }];
+      { label: 'Signing envelope', value: `${d.envelope} (${k256EnvelopeLabel(d.envelope)})`, verifiableByEye: false }];
     case 'p256': {
       const lines: DescriptorLine[] = [tag, coord('Passkey key x', 'p256', d.x), coord('Passkey key y', 'p256', d.y)];
       if (recipe !== 'grant-id' && d.policy) {
