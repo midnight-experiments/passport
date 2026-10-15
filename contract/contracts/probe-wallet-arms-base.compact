@@ -52,6 +52,7 @@ export {
   uint8_text, uint32_text, uint64_text, uint128_text,
   hex_text_20, hex_text_32, hex_text_64, hex_text_192, reverse_32,
   label_text_32, visible_text_21, recipient_kind_text, k256_envelope_text,
+  uint128_magnitude_text, expiry_text, rp_hash_text, rp_hash_text_from_hex,
 };
 
 export ledger derived: Bytes<32>;
@@ -185,4 +186,74 @@ export circuit probe_recipient_kind_text(kind: Uint<8>): [] {
 
 export circuit probe_k256_envelope_text(envelope: Uint<8>): [] {
   text_24 = disclose(k256_envelope_text(envelope) as Bytes<24>);
+}
+
+// ── Q43: magnitude and exact words ──────────────────────────────────────────
+//
+// Rows: each helper probe has a control probe with the same inputs and the
+// same ledger writes but without the helper's logic; the difference is what
+// the helper adds to an arm's circuit (the message bytes it adds are the
+// arm's own cost). Checks: an arm binds the shown text through its signed
+// bytes; the probe_check_* circuits model that with an assert, so that a
+// forged magnitude or word is refused at the prover.
+
+export ledger text_13: Bytes<13>;
+export ledger text_20: Bytes<20>;
+export ledger text_64: Bytes<64>;
+
+export circuit probe_uint128_magnitude_text(value: Uint<128>, text: Vector<39, Uint<8>>): [] {
+  const r = uint128_magnitude_text(value, text);
+  text_39 = disclose(r[0] as Bytes<39>);
+  text_13 = disclose(r[1] as Bytes<13>);
+}
+
+// Control: the digits and a 13-byte input, no magnitude.
+export circuit probe_uint128_text_control_13(value: Uint<128>, text: Vector<39, Uint<8>>, other: Bytes<13>): [] {
+  text_39 = disclose(uint128_text(value, text) as Bytes<39>);
+  text_13 = disclose(other);
+}
+
+export circuit probe_expiry_text(value: Uint<64>, text: Vector<20, Uint<8>>): [] {
+  text_20 = disclose(expiry_text(value, text) as Bytes<20>);
+}
+
+// Control: the decimal digits alone.
+export circuit probe_uint64_text(value: Uint<64>, text: Vector<20, Uint<8>>): [] {
+  text_20 = disclose(uint64_text(value, text) as Bytes<20>);
+}
+
+export circuit probe_rp_hash_text(h: Bytes<32>): [] {
+  text_64 = disclose(rp_hash_text(h) as Bytes<64>);
+}
+
+// Control: the hex alone.
+export circuit probe_hex_text_32(h: Bytes<32>): [] {
+  text_64 = disclose(hex_text_32(h) as Bytes<64>);
+}
+
+// The selection alone, for an arm with its own hex renderer (a free hex here:
+// the probe only measures; an arm passes its checked text).
+export circuit probe_rp_hash_text_from_hex(h: Bytes<32>, hex: Vector<64, Uint<8>>): [] {
+  text_64 = disclose(rp_hash_text_from_hex(h, hex) as Bytes<64>);
+}
+
+// Control: h and a 64-byte input, no selection.
+export circuit probe_text_64_control(h: Bytes<32>, hex: Vector<64, Uint<8>>): [] {
+  derived = disclose(h);
+  text_64 = disclose(hex as Bytes<64>);
+}
+
+export circuit probe_check_magnitude(value: Uint<128>, text: Vector<39, Uint<8>>, shown: Bytes<13>): [] {
+  assert(uint128_magnitude_text(value, text)[1] as Bytes<13> == shown, "display: the shown magnitude is not the circuit's");
+  text_13 = disclose(shown);
+}
+
+export circuit probe_check_expiry(value: Uint<64>, text: Vector<20, Uint<8>>, shown: Bytes<20>): [] {
+  assert(expiry_text(value, text) as Bytes<20> == shown, "display: the shown expiry is not the circuit's");
+  text_20 = disclose(shown);
+}
+
+export circuit probe_check_rp_hash(h: Bytes<32>, shown: Bytes<64>): [] {
+  assert(rp_hash_text(h) as Bytes<64> == shown, "display: the shown RP hash is not the circuit's");
+  text_64 = disclose(shown);
 }

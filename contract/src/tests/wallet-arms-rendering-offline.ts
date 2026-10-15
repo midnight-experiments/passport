@@ -19,6 +19,13 @@
 //            label shows the client table's text (src/wallet/labels.ts),
 //            space-padded to 24 bytes, labels distinct; every other value of
 //            the type (0-255) is refused, by the circuit and by the client.
+//   Q43      uint128_magnitude_text: "~d.dd x 10^e" from the checked digits,
+//            equal to an independent renderer and the client
+//            (src/wallet/rendering.ts) on every power-of-ten boundary and
+//            random values; 2^128 - 1 and 2^128 - 2 identical; 0, 1, 9, 10,
+//            99, 100, 10^38 - 1, 10^38; truncation; digit texts that would
+//            shift it refused. expiry_text: "never" exactly for 0.
+//            rp_hash_text: "not applicable" exactly for the all-zero hash.
 //
 // Writes $EVIDENCE_DIR/wallet-arms-rendering-offline.json when EVIDENCE_DIR
 // is set; never writes into the repository.
@@ -31,6 +38,10 @@ import { pureCircuits as probe } from '../../contracts/managed/probe-wallet-arms
 import {
   ENUM_TEXT_WIDTH, RECIPIENT_KIND_LABELS, K256_ENVELOPE_LABELS, recipientKindLabel, k256EnvelopeLabel, enumText,
 } from '../wallet/labels.js';
+import {
+  MAGNITUDE_TEXT_WIDTH, EXPIRY_TEXT_WIDTH, RP_HASH_TEXT_WIDTH, NEVER_TEXT, NOT_APPLICABLE_TEXT,
+  magnitudeText, magnitudeTextBytes, expiryTextBytes, rpHashText, rpHashTextBytes,
+} from '../wallet/rendering.js';
 
 const SEED = 'aa00067/s1/wallet-arms-rendering-offline/v1';
 let ctr = 0;
@@ -232,6 +243,109 @@ for (const [name, f, table, client, refusal] of enums) {
   }
   console.log(`  ✓ ${name}: ${counts[name].accepted} labels equal the client table (${table.map((t) => JSON.stringify(t)).join(', ')}), ${counts[name].refused} other values refused`);
 }
+
+// ── Q43: magnitude and exact words ─────────────────────────────────────────
+//
+// The independent magnitude renderer here works on the decimal STRING (the
+// client's works arithmetically): exponent = digits after the first,
+// mantissa = the first three digits (missing ones as 0), truncated.
+
+console.log('\n── Q43 magnitude and exact words');
+const magnitudeOf = (v: bigint): string => {
+  if (v === 0n) return '0';
+  const s = v.toString(10);
+  return `~${s[0]}.${(s[1] ?? '0')}${(s[2] ?? '0')} x 10^${s.length - 1}`;
+};
+const q43: Record<string, unknown> = {};
+{
+  const MAX = (1n << 128n) - 1n;
+  const values = new Set<bigint>([0n, 1n, 9n, 10n, 11n, 99n, 100n, 101n, 999n, 1000n, 1999n, 9999n, 12345n, MAX, MAX - 1n, 1n << 64n, (1n << 64n) - 1n]);
+  for (let k = 1; k <= 38; k++) { values.add(10n ** BigInt(k) - 1n); values.add(10n ** BigInt(k)); values.add(2n * 10n ** BigInt(k) - 1n); }
+  for (let i = 0; i < 64; i++) values.add(randBig(1 + (i * 2) % 128));
+  const seen = new Map<string, bigint>();
+  for (const v of values) {
+    const t = decimal(v, 39);
+    const [d, m] = probe.uint128_magnitude_text(v, vec(t)) as [bigint[], bigint[]];
+    assert.equal(ascii(d), ascii(t), `uint128_magnitude_text(${v}): the digits`);
+    const shown = ascii(m);
+    assert.equal(shown.length, MAGNITUDE_TEXT_WIDTH);
+    assert.equal(shown, magnitudeOf(v).padEnd(MAGNITUDE_TEXT_WIDTH, ' '), `magnitude(${v}) == the independent renderer`);
+    assert.equal(shown, Buffer.from(magnitudeTextBytes(v)).toString('latin1'), `magnitude(${v}) == the client`);
+    assert.equal(magnitudeText(v), magnitudeOf(v));
+    assert.ok(/^(0 {12}|~[1-9]\.[0-9]{2} x 10\^(?:[0-9]|[1-3][0-9]) *)$/.test(shown), `magnitude(${v}): the grammar`);
+    seen.set(shown, v);
+    count('uint128_magnitude_text', 'accepted');
+  }
+  // The required cases (Q43): no cliff at the maximum; zero; small values; powers of ten; truncation.
+  const GOLDEN: [bigint, string][] = [
+    [MAX, '~3.40 x 10^38'], [MAX - 1n, '~3.40 x 10^38'], [0n, '0'], [1n, '~1.00 x 10^0'], [9n, '~9.00 x 10^0'],
+    [10n, '~1.00 x 10^1'], [99n, '~9.90 x 10^1'], [100n, '~1.00 x 10^2'], [10n ** 38n - 1n, '~9.99 x 10^37'], [10n ** 38n, '~1.00 x 10^38'],
+    [1999n, '~1.99 x 10^3'], [9999n, '~9.99 x 10^3'], [1n << 64n, '~1.84 x 10^19'],
+  ];
+  for (const [v, want] of GOLDEN) {
+    const m = ascii((probe.uint128_magnitude_text(v, vec(decimal(v, 39))) as [bigint[], bigint[]])[1]);
+    assert.equal(m, want.padEnd(MAGNITUDE_TEXT_WIDTH, ' '), `golden magnitude of ${v}`);
+    count('magnitude golden', 'accepted');
+  }
+  assert.equal(magnitudeText(MAX), magnitudeText(MAX - 1n), '2^128 - 1 and 2^128 - 2 read the same');
+  // The digits the magnitude comes from are the checked ones: a text that would shift it is refused.
+  const refuseM = (v: bigint, text: string, why: RegExp, label: string) => {
+    assert.throws(() => probe.uint128_magnitude_text(v, vec(bytes(text.padEnd(39, ' ')))), why, label);
+    count('uint128_magnitude_text', 'refused');
+  };
+  refuseM(10n ** 37n, '0' + (10n ** 37n).toString(), /leading zero/, 'a leading zero (would read as "0")');
+  refuseM(3n, '3 4', /left-aligned/, 'a digit after the padding (would read as ~3.04 x 10^1)');
+  refuseM(MAX - 1n, MAX.toString(), /do not match/, "2^128 - 1's digits for 2^128 - 2");
+  refuseM(5n, ' 5', /empty decimal|left-aligned/, 'right-shifted (would shift the exponent)');
+  assert.throws(() => magnitudeText(MAX + 1n), /out of range/);
+  assert.throws(() => magnitudeText(-1n), /out of range/);
+  console.log(`  ✓ uint128_magnitude_text: ${counts.uint128_magnitude_text.accepted} values equal the independent renderer and the client (every 10^k - 1, 10^k, 2·10^k - 1 for k = 1..38, random widths); ${counts['magnitude golden'].accepted} golden cases incl. 2^128 - 1 = 2^128 - 2 = "~3.40 x 10^38", 0 = "0", truncation (1999 = "~1.99 x 10^3"); ${counts.uint128_magnitude_text.refused} non-canonical digit texts refused`);
+
+  // Expiry: "never" only for 0.
+  const U64 = (1n << 64n) - 1n;
+  for (const v of [0n, 1n, 9n, 10n, 1712345678n, U64, U64 - 1n, ...Array.from({ length: 16 }, () => randBig(64))]) {
+    const out = ascii(probe.expiry_text(v, vec(decimal(v, 20))) as bigint[]);
+    const want = (v === 0n ? 'never' : v.toString()).padEnd(EXPIRY_TEXT_WIDTH, ' ');
+    assert.equal(out, want, `expiry_text(${v})`);
+    assert.equal(out, Buffer.from(expiryTextBytes(v)).toString('latin1'), `expiry_text(${v}) == the client`);
+    assert.equal(out.startsWith(NEVER_TEXT), v === 0n, `"never" iff the expiry is 0 (${v})`);
+    count('expiry_text', 'accepted');
+  }
+  for (const [v, text, why, label] of [
+    [0n, 'never', /left-aligned/, 'the word as digits'],
+    [0n, '00', /leading zero/, 'zero with a leading zero'],
+    [1n, '0', /do not match/, "0's digits for 1 (the word follows the value, not the text)"],
+    [1n, '2', /do not match/, 'wrong digits'],
+  ] as [bigint, string, RegExp, string][]) {
+    assert.throws(() => probe.expiry_text(v, vec(bytes(text.padEnd(20, ' ')))), why, `expiry_text: ${label}`);
+    count('expiry_text', 'refused');
+  }
+  console.log(`  ✓ expiry_text: ${counts.expiry_text.accepted} values ("never" exactly for 0, else the decimal seconds) equal the client; ${counts.expiry_text.refused} wrong digit texts refused`);
+
+  // RP hash: "not applicable" only for the all-zero hash.
+  const hashes: Uint8Array[] = [new Uint8Array(32), new Uint8Array(32).fill(0xff), rnd(32), rnd(32)];
+  for (let i = 0; i < 32; i++) { const h = new Uint8Array(32); h[i] = 1; hashes.push(h); }
+  for (const h of hashes) {
+    const out = ascii(probe.rp_hash_text(h) as bigint[]);
+    const zero = h.every((b) => b === 0);
+    assert.equal(out, (zero ? 'not applicable' : hexOf(h)).padEnd(RP_HASH_TEXT_WIDTH, ' '), `rp_hash_text(${hexOf(h)})`);
+    assert.equal(out, Buffer.from(rpHashTextBytes(h)).toString('latin1'), 'rp_hash_text == the client');
+    assert.equal(out, ascii(probe.rp_hash_text_from_hex(h, probe.hex_text_32(h)) as bigint[]), 'rp_hash_text == rp_hash_text_from_hex(h, hex_text_32(h))');
+    assert.equal(out.startsWith(NOT_APPLICABLE_TEXT), zero, '"not applicable" iff the hash is all zero');
+    count('rp_hash_text', 'accepted');
+  }
+  // The word is never a hex text, and a hex text is never the word: the selection is one-to-one.
+  assert.ok(!/^[0-9a-f]{64}$/.test(NOT_APPLICABLE_TEXT.padEnd(64, ' ')));
+  assert.throws(() => rpHashText(new Uint8Array(31)), /32 bytes/);
+  console.log(`  ✓ rp_hash_text: ${counts.rp_hash_text.accepted} hashes ("not applicable" exactly for all zero, incl. every single-bit-set byte position, else 64 hex digits) equal the client and rp_hash_text_from_hex`);
+
+  // The constraint-level checks the prover suite forges against (honest calls pass here).
+  probe.uint128_magnitude_text(MAX, vec(decimal(MAX, 39)));
+  q43.format = '~d.dd x 10^e (ASCII; 13 bytes, left-aligned, space-padded); 0 = "0"';
+  q43.golden = Object.fromEntries(GOLDEN.map(([v, s]) => [v.toString(), s]));
+  q43.distinctMagnitudesSeen = seen.size;
+}
+report.q43 = q43;
 
 report.counts = counts;
 report.verdict = 'PASS';
