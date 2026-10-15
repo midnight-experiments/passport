@@ -156,9 +156,9 @@ for (const t of ED25519_TORSION_SUBGROUP) refused('solana key', () => parseSolan
   assert.ok(eq(parent.policy!.rpIdHash, sha(Buffer.from('example.com'))));
   ok('p256 key');
   parseP256Descriptor(pt, 'a.example.com', 'https://a.example.com'); ok('p256 key');
-  refused('p256 key', () => parseP256Descriptor(pt, 'a.example.org', 'https://a.example.com'), /registrable parent/, 'a mismatched RP');
-  refused('p256 key', () => parseP256Descriptor(pt, 'example.com', 'https://ab.example.com'), /21-byte/, 'a 22-byte origin');
-  refused('p256 key', () => parseP256Descriptor(pt, 'example12.com', 'http://example12.com'), /HTTPS/, 'http outside localhost');
+  refused('p256 key', () => parseP256Descriptor(pt, 'a.example.org', 'https://a.example.com'), /^Error: descriptor: .*registrable parent/, 'a mismatched RP');
+  refused('p256 key', () => parseP256Descriptor(pt, 'example.com', 'https://ab.example.com'), /^Error: descriptor: .*21-byte/, 'a 22-byte origin');
+  refused('p256 key', () => parseP256Descriptor(pt, 'example12.com', 'http://example12.com'), /^Error: descriptor: .*HTTPS/, 'http outside localhost');
   refused('p256 key', () => parseP256Descriptor({ x: 0n, y: 0n }, 'example.com', 'https://a.example.com'), /not a P-256 public key|infinity/, 'the point at infinity');
   refused('p256 key', () => checkDescriptor({ ...parent, policy: { ...parent.policy!, rpId: 'other.example' } }), /registrable parent|SHA-256 of the RP ID/, 'an RP ID that does not hash to the shown value');
 }
