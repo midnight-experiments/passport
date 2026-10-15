@@ -1,7 +1,9 @@
 // Constraint-level negatives of the base modules, at the proof server.
 //
 // For every assert of the readable-descriptor and rendering modules, through
-// the base probe contract's impure probe_* circuits:
+// the base probe contract's impure probe_* circuits (and, for Q43, forged
+// magnitudes and exact words: digit texts that would shift a magnitude, and
+// shown texts other than the circuit's rendering):
 //
 //   positive   the honest call, built with the patched module (the same path
 //              as the negatives), is proved by the proof server; it is
@@ -83,6 +85,11 @@ const digits = (s: string) => [...Buffer.from(s.padEnd(39, ' '), 'ascii')].map(B
 const affine = (p: { x: bigint; y: bigint }) => ({ x: p.x, y: p.y });
 const PT = affine(ed25519.Point.fromHex('d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a').toAffine());
 const O = { x: 0n, y: 1n };
+// Q43: the magnitude and the exact words.
+const MAX = (1n << 128n) - 1n, E37 = 10n ** 37n;
+const text = (s: string, w: number) => new Uint8Array(Buffer.from(s.padEnd(w, ' '), 'ascii'));
+const d20 = (s: string) => [...text(s, 20)].map(BigInt);
+const Z32 = new Uint8Array(32);
 
 // [circuit, honest arguments, bad arguments, the assert the bad call fails]
 const CASES: [string, unknown[], unknown[], string][] = [
@@ -110,6 +117,20 @@ const CASES: [string, unknown[], unknown[], string][] = [
   ['probe_visible_text_21', [B21], [new Uint8Array(Buffer.from('https://a example.com'))], 'display: not visible ASCII'],
   ['probe_recipient_kind_text', [3n], [4n], 'display: unknown recipient kind'],
   ['probe_k256_envelope_text', [1n], [2n], 'display: unknown signing envelope'],
+  // Q43. The magnitude has no input of its own: the digits it comes from are
+  // checked, so a text that would shift it is refused (a leading zero would
+  // show 10^37 as "0"; a digit after the padding would show 3 as ~3.04 x 10^1).
+  ['probe_uint128_magnitude_text', [E37, digits(E37.toString())], [E37, digits('0' + E37.toString())], 'display: leading zero'],
+  ['probe_uint128_magnitude_text', [3n, digits('3')], [3n, digits('3 4')], 'display: not a left-aligned decimal'],
+  ['probe_uint128_magnitude_text', [MAX - 1n, digits((MAX - 1n).toString())], [MAX - 1n, digits(MAX.toString())], 'display: digits do not match the value'],
+  // A shown text other than the circuit's own rendering (an arm binds it
+  // through its signed bytes; the probe through an assert).
+  ['probe_check_magnitude', [MAX - 1n, digits((MAX - 1n).toString()), text('~3.40 x 10^38', 13)], [MAX - 1n, digits((MAX - 1n).toString()), text('no limit', 13)], "display: the shown magnitude is not the circuit's"],
+  ['probe_check_magnitude', [MAX - 1n, digits((MAX - 1n).toString()), text('~3.40 x 10^38', 13)], [MAX - 1n, digits((MAX - 1n).toString()), text('~3.40 x 10^37', 13)], "display: the shown magnitude is not the circuit's"],
+  ['probe_check_expiry', [1n, d20('1'), text('1', 20)], [1n, d20('1'), text('never', 20)], "display: the shown expiry is not the circuit's"],
+  ['probe_check_expiry', [0n, d20('0'), text('never', 20)], [0n, d20('0'), text('0', 20)], "display: the shown expiry is not the circuit's"],
+  ['probe_check_rp_hash', [B32, text(Buffer.from(B32).toString('hex'), 64)], [B32, text('not applicable', 64)], "display: the shown RP hash is not the circuit's"],
+  ['probe_check_rp_hash', [Z32, text('not applicable', 64)], [Z32, text('0'.repeat(64), 64)], "display: the shown RP hash is not the circuit's"],
 ];
 
 const results: { circuit: string; assert: string; positive: PositiveResult; runtime: NegativeResult; prover: NegativeResult }[] = [];
