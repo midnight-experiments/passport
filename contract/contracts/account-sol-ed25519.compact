@@ -378,6 +378,272 @@ export circuit remove_device_with_sol_ed25519(
   do_remove_device(literal ? entry : sol_device_entry(target, target_pk, self_addr, epoch, counter), caller_entry);
 }
 
+// ── Scoped grants: the device role (the scoped-grants MIP) ──────────────────
+//
+// The device issues, revokes and revokes all grants through the device seam
+// (over auth_nonce). The grantee is shown by its readable descriptor
+// (FR-005, FR-006): its scheme's key (a Solana grantee as a point, Q37), the
+// site label (or, for a k256 or JubJub grantee, the labelled origin hash,
+// Q17; for a passkey, its exact origin) and the slot; the circuit derives the
+// grant id from exactly those values with the grantee scheme's own grant-id
+// recipe. Every scope field is shown, the caller pin included (#176). The
+// issue rules themselves are upstream's shared chip's.
+//
+// The delegate's read key is shown itself; the record stores its hash (the
+// MIP's read_pk_hash), and zero when `read` is off, in which case the key
+// must be zero too (audit G1(E) G1E-7: nothing is stored that the wallet did
+// not show). The passkey RP hash belongs to a passkey grantee and must be
+// zero for every other grantee, so that no other hash-like value is shown.
+// An absent caller pin must carry a zero address (upstream's caller
+// commitment refuses any other encoding).
+export circuit issue_grant_with_sol_ed25519(
+  grantee:                          SolGrantee,
+  grantee_pk:                       Curve25519Point,
+  op_withdraw_unshielded:           Boolean,
+  op_withdraw_shielded:             Boolean,
+  op_withdraw_shielded_to_contract: Boolean,
+  read:                             Boolean,
+  color:                            Bytes<32>,
+  recipient_kind:                   Uint<8>,
+  recipient:                        Bytes<32>,
+  max_coin_value:                   Uint<128>,
+  per_call_cap:                     Uint<128>,
+  cap:                              Uint<128>,
+  expires_at:                       Uint<64>,
+  rp_id_hash:                       Bytes<32>,
+  read_pk:                          Bytes<32>,
+  window_len:                       Uint<64>,
+  window_cap:                       Uint<128>,
+  caller:                           Maybe<ContractAddress>,
+  scope_salt:                       Bytes<32>,
+  gs:                               SolGranteeShow,
+  ss:                               SolScopeShow,
+  show:                             SolShow,
+  frame:                            Vector<128, Uint<0..16>>,
+  hex:                              Vector<552, Uint<0..16>>,
+  auth:                             SolEd25519Auth,
+): [] {
+  assert(read || read_pk == pad(32, ""), "sol_ed25519: a read key without read");
+  assert(read_pk != pad(32, "") || !read, "sol_ed25519: read without a read key");
+  const cls = sol_grantee_class(grantee.tag);
+  assert(cls == 4 || rp_id_hash == pad(32, ""), "sol_ed25519: an RP hash belongs to a passkey grantee");
+  require_authorised_with_sol_ed25519<32, 1351, 1673>(sol_title_issue_grant(),
+    sol_body_issue_grant(grantee, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color,
+      recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk, window_len, window_cap,
+      caller, gs, ss, hex), show, frame, auth);
+  const self_addr = kernel.self();
+  do_issue_grant(sol_grantee_id(grantee, grantee_pk, cls, self_addr, sol_grantee_origin_hash(grantee, cls)),
+    op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
+    max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read ? persistentHash<Bytes<32>>(read_pk) : pad(32, ""),
+    window_len, window_cap, caller, scope_salt);
+}
+
+// Revocation shows the grantee's descriptor; the grant id is re-derived.
+export circuit revoke_grant_with_sol_ed25519(
+  grantee:    SolGrantee,
+  grantee_pk: Curve25519Point,
+  gs:         SolGranteeShow,
+  show:       SolShow,
+  frame:      Vector<128, Uint<0..16>>,
+  hex:        Vector<232, Uint<0..16>>,
+  auth:       SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<33, 427, 750>(sol_title_revoke_grant(), sol_body_revoke_grant(grantee, gs, hex), show, frame, auth);
+  const cls = sol_grantee_class(grantee.tag);
+  const self_addr = kernel.self();
+  do_revoke_grant(sol_grantee_id(grantee, grantee_pk, cls, self_addr, sol_grantee_origin_hash(grantee, cls)));
+}
+
+export circuit revoke_all_grants_with_sol_ed25519(
+  show:  SolShow,
+  frame: Vector<128, Uint<0..16>>,
+  auth:  SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<36, 63, 389>(sol_title_revoke_all_grants(), sol_body_revoke_all_grants(), show, frame, auth);
+  do_revoke_all_grants();
+}
+
+// ── The grant seam (grantee role) ───────────────────────────────────────────
+//
+// A Solana key as a GRANTEE: its grant id is
+//   H(pad32("midnight:account:grant:id:sol:v1") || account || key(32)
+//     || blind(32) || origin_hash || le1(slot)),
+// origin_hash = H(pad32("midnight:account:grant:origin:v1") || label(32)) of
+// the 32-byte site label. The grantee signs the grantee-role message: the
+// common frame (account, its own key, "Role: grantee of a scoped grant"),
+// the operation, then the grant's label, slot, issued-at nonce and use
+// nonce, never auth_nonce (FR-008, GR-5): a grant call reads and advances
+// only its record's nonce and never touches a device entry.
+//
+// As the device seam does (G1E-1; audit G1(S) F-A8 (c)), this seam owns the
+// frame: it derives the key bytes from the point the signature is verified
+// under, the grant id from that key, the blind and the label and slot the
+// message shows, and takes issued_at and the nonce from the record itself.
+// An export passes only its title and body, its operation (1 unshielded, 2
+// shielded, 3 shielded to a contract), and the values the scope checks. The
+// MIP's steps in order: identity (the record by id), liveness (active,
+// epoch, generation, expiry), the spend scope (upstream's check_spend_scope),
+// then R != O and the signature, the record written back with its nonce
+// advanced and the new spent commitment, and round bumped.
+struct SolEd25519GrantAuth {
+  pk:    Curve25519Point;
+  blind: Bytes<32>;
+  label: Bytes<32>;
+  sig:   Ed25519Signature;
+}
+
+circuit require_grant_with_sol_ed25519<#t, #b, #n>(
+  title:            Vector<t, Uint<8>>,
+  body:             Vector<b, Uint<8>>,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            Vector<128, Uint<0..16>>,
+  auth:             SolEd25519GrantAuth,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  op:               Uint<8>,
+  obj_color:        Bytes<32>,
+  amount:           Uint<128>,
+  recipient_bytes:  Bytes<32>,
+): [] {
+  const self_addr = kernel.self();
+  const [key, gid] = derive_descriptor_grant_id_ed25519(grant_id_tag_sol_ed25519(), self_addr, auth.pk, auth.blind,
+    derive_grant_origin_hash_label(auth.label), slot);
+  const id = disclose(gid);
+  assert(grants.member(id), "unknown grant");
+  const gr = grants.lookup(id);
+  assert(gr.active, "grant revoked");
+  assert(gr.epoch == device_epoch, "grant epoch stale");
+  assert(gr.gen == grant_generation, "grant generation stale");
+  assert(gr.scope.expires_at == (0 as Uint<64>) || kernel.blockTimeLessThan(gr.scope.expires_at), "grant expired");
+  const admitted = op == 1 ? gr.scope.op_withdraw_unshielded
+                 : op == 2 ? gr.scope.op_withdraw_shielded
+                 : gr.scope.op_withdraw_shielded_to_contract;
+  const new_spent = check_spend_scope(gr, admitted, scope_salt, obj_color, recipient_kind, pinned_recipient,
+    max_coin_value, amount, spent_prev, op, recipient_bytes);
+  const msg = sol_grantee_message<t, b, n>(self_addr, key, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
+  assert((curve25519PointX(auth.sig.r) as Bytes<32>) != pad(32, ""), "R is the identity");
+  assert(ed25519Verify<n>(msg, auth.sig, auth.pk), "invalid grant signature");
+  grants.insert(id, GrantRecord {
+    epoch:        gr.epoch,
+    gen:          gr.gen,
+    issued_at:    gr.issued_at,
+    nonce:        ((gr.nonce + (1 as Uint<64>)) as Uint<64>),
+    spent_commit: disclose(derive_grant_spent_commit(scope_salt, new_spent)),
+    window_start: gr.window_start,
+    window_spent: gr.window_spent,
+    active:       gr.active,
+    scope:        gr.scope
+  });
+  bump_round();
+}
+
+// ── Grant twins (grantee role) ──────────────────────────────────────────────
+//
+// Operation arguments first, then the grant opening in the order this arm's
+// client passes it (signer.ts grantAuthArgs): the slot, scope_salt, the
+// recipient kind and pin, the max coin value, the cumulative spend so far;
+// then the message's display inputs and the grantee's authorisation (whose
+// label is the grant's site label).
+
+export circuit withdraw_unshielded_with_grant_sol_ed25519(
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  recipient:        UserAddress,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  a:                SolAmountShow,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            Vector<128, Uint<0..16>>,
+  hex:              Vector<128, Uint<0..16>>,
+  auth:             SolEd25519GrantAuth,
+): [] {
+  require_grant_with_sol_ed25519<52, 292, 746>(sol_title_withdraw_unshielded_with_grant(),
+    sol_body_withdraw_unshielded_with_grant(color, amount, recipient, a, hex), show, g, frame, auth,
+    slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev, 1, color, amount, recipient.bytes);
+  do_withdraw_unshielded(color, amount, recipient);
+}
+
+// The shielded twins: the spent coin (from the held_coin witness) is shown by
+// its value, nonce and Merkle index under the approved colour (asserted,
+// FR-010), with the change; the change entry the grantee sealed to the live
+// enc_key and that key are shown too, and the change entry is appended when
+// the send produces change (INV-4 under a grant).
+export circuit withdraw_shielded_with_grant_sol_ed25519(
+  recipient:        ZswapCoinPublicKey,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  a:                SolAmountShow,
+  c:                SolCoinShow,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            Vector<128, Uint<0..16>>,
+  hex:              Vector<640, Uint<0..16>>,
+  auth:             SolEd25519GrantAuth,
+): Maybe<ShieldedCoinInfo> {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  require_grant_with_sol_ed25519<50, 1134, 1586>(sol_title_withdraw_shielded_with_grant(),
+    sol_body_withdraw_shielded_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame, auth,
+    slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev, 2, coin.color, amount, recipient.bytes);
+  const result = do_withdraw_shielded(recipient, amount, coin);
+  if (disclose(result.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return result;
+}
+
+export circuit withdraw_shielded_to_contract_with_grant_sol_ed25519(
+  recipient:        ContractAddress,
+  color:            Bytes<32>,
+  amount:           Uint<128>,
+  change_entry:     Bytes<192>,
+  enc_pk:           Bytes<32>,
+  slot:             Uint<8>,
+  scope_salt:       Bytes<32>,
+  recipient_kind:   Uint<8>,
+  pinned_recipient: Bytes<32>,
+  max_coin_value:   Uint<128>,
+  spent_prev:       Uint<128>,
+  a:                SolAmountShow,
+  c:                SolCoinShow,
+  show:             SolShow,
+  g:                SolGrantShow,
+  frame:            Vector<128, Uint<0..16>>,
+  hex:              Vector<640, Uint<0..16>>,
+  auth:             SolEd25519GrantAuth,
+): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
+  const coin = held_coin(color);
+  assert(coin.color == color, "held coin colour does not match the withdrawn colour");
+  check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
+  require_grant_with_sol_ed25519<64, 1130, 1596>(sol_title_withdraw_shielded_to_contract_with_grant(),
+    sol_body_withdraw_shielded_to_contract_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame, auth,
+    slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev, 3, coin.color, amount, recipient.bytes);
+  const [sent, change] = do_withdraw_shielded_to_contract(recipient, amount, coin);
+  if (disclose(change.is_some)) {
+    do_append_inbox(change_entry);
+  }
+  return [sent, change];
+}
+
 // ── Signed messages, format sol v1 (spec FR-S02, FR-S03, FR-004, FR-023) ────
 //
 // A Solana wallet's `signMessage` signs the raw bytes it is given, so the

@@ -597,3 +597,170 @@ export async function removeUnknownDeviceWithSolEd25519(account: SolEd25519Lifec
   const r = await account.callTx.remove_device_with_sol_ed25519(true, solTargetArg({ tag: '' }), { ...SOL_UNUSED_POINT }, 0n, 0n, new Uint8Array(entry), ...solEd25519AuthArgs(auth));
   return { auth, txId: txIdOf(r) };
 }
+
+// ── Scoped grants (S8S) ──────────────────────────────────────────────────────
+//
+// The grantee is a readable descriptor (FR-005, FR-006) with its site and
+// slot: a readable grantee (evm_eip712, sol_ed25519) by its 32-byte site
+// label (shown as text), a passkey by its 21-byte origin (shown as text; its
+// RP is a scope field), a k256 or JubJub grantee by the labelled origin hash
+// of its client id (Q17). A Solana grantee also passes its point (Q37).
+
+/** Where a grant's origin_hash comes from (one per grantee class). */
+export type SolGranteeSite = { label: string } | { origin: Uint8Array } | { originHash: Uint8Array };
+
+/** The message-level grantee of a readable descriptor at a site and slot. */
+export function solGranteeOf(d: Descriptor, site: SolGranteeSite, slot: bigint): SolGranteeFields {
+  const tag = DESCRIPTOR_TAGS['grant-id'][d.scheme];
+  const need = <K extends string>(k: K): any => {
+    if (!(k in site)) throw new Error(`sol_ed25519: a ${d.scheme} grantee is identified by its ${k}`);
+    return (site as any)[k];
+  };
+  switch (d.scheme) {
+    case 'evm_eip712': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind), label: need('label'), slot };
+    case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind), label: need('label'), slot };
+    case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y), originHash: new Uint8Array(need('originHash')), slot };
+    case 'k256': return { tag, a: le32(d.x), b: le32(d.y), envelope: BigInt(d.envelope), originHash: new Uint8Array(need('originHash')), slot };
+    case 'p256': return { tag, a: le32(d.x), b: le32(d.y), origin: new Uint8Array(need('origin')), slot };
+  }
+}
+
+/** A grant scope as the issuer approves it (the read key itself, not its hash). */
+export interface SolIssueScope {
+  opWithdrawUnshielded: boolean; opWithdrawShielded: boolean; opWithdrawShieldedToContract: boolean; read: boolean;
+  color: Uint8Array; recipientKind: bigint; recipient: Uint8Array; maxCoinValue: bigint; perCallCap: bigint; cap: bigint;
+  expiresAt: bigint; rpIdHash: Uint8Array; readPk: Uint8Array; windowLen: bigint; windowCap: bigint; caller: Uint8Array | null;
+}
+
+/** issue_grant_with_sol_ed25519: the grantee descriptor and every scope
+ *  field shown, signed, then the call. */
+export async function issueGrantWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string,
+  grantee: SolGranteeFields, scope: SolIssueScope, scopeSalt: Uint8Array) {
+  const o: SolDeviceOperation = { op: 'issue_grant', grantee, ...scope };
+  const auth = await authoriseSolDeviceOn(account, device, site, o);
+  const caller = { is_some: scope.caller !== null, value: { bytes: scope.caller ?? new Uint8Array(32) } };
+  const r = await account.callTx.issue_grant_with_sol_ed25519(solGranteeArg(grantee), solTargetPointArg(grantee),
+    scope.opWithdrawUnshielded, scope.opWithdrawShielded, scope.opWithdrawShieldedToContract, scope.read, scope.color, scope.recipientKind,
+    scope.recipient, scope.maxCoinValue, scope.perCallCap, scope.cap, scope.expiresAt, scope.rpIdHash, scope.readPk, scope.windowLen,
+    scope.windowCap, caller, scopeSalt, ...solEd25519AuthArgs(auth));
+  return { auth, txId: txIdOf(r) };
+}
+
+/** revoke_grant_with_sol_ed25519: the grantee descriptor shown; the grant id
+ *  re-derived in-circuit. */
+export async function revokeGrantWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, grantee: SolGranteeFields) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'revoke_grant', grantee });
+  const r = await account.callTx.revoke_grant_with_sol_ed25519(solGranteeArg(grantee), solTargetPointArg(grantee), ...solEd25519AuthArgs(auth));
+  return { auth, txId: txIdOf(r) };
+}
+
+/** revoke_all_grants_with_sol_ed25519. */
+export async function revokeAllGrantsWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'revoke_all_grants' });
+  const r = await account.callTx.revoke_all_grants_with_sol_ed25519(...solEd25519AuthArgs(auth));
+  return { auth, txId: txIdOf(r) };
+}
+
+// ── The grantee (S8S, Q39) ─────────────────────────────────────────────────
+//
+// A Solana key acting under a grant. Its blind is NOT its device blind: the
+// issuer sees a grantee's blind (it derives the grant id and is shown in the
+// issuer's approvals), so a grantee blind comes from its own readable request
+// naming the role "grantee", the network and the ISSUING account
+// (blind.ts granteeBlindMessage, AA 00067 Q39), signed twice, under the same
+// blind tag.
+
+export interface SolGranteeBlindRequest { network: string; issuingAccount: Uint8Array }
+
+/** The grantee blind for one issuing account (sign-twice check, the
+ *  contract's own derivation cross-checked). */
+export async function deriveSolGranteeBlind(signer: SolSigner, req: SolGranteeBlindRequest): Promise<Uint8Array> {
+  const key = parseSolanaPublicKey(signer.publicKey);
+  const bytes = granteeBlindMessageBytes({ scheme: 'sol_ed25519', network: req.network, identity: key, issuingAccount: req.issuingAccount });
+  const first = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
+  verifySolSignature(bytes, first, key);
+  const second = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
+  verifySolSignature(bytes, second, key);
+  const a = canonicalEd25519Signature(first), b = canonicalEd25519Signature(second);
+  if (!equalBytes(a, b)) throw new Error('sol_ed25519: the wallet signed the grantee request twice with different signatures (not deterministic); refused');
+  const blind = deriveBlind('sol_ed25519', a);
+  if (!equalBytes(blind, pureCircuits.derive_blind_with_sol_ed25519(a))) throw new Error('sol_ed25519: blind differs from the contract derivation');
+  return blind;
+}
+
+export class SolEd25519Grantee {
+  readonly arm = SOL_ED25519;
+  /** The signing key with its GRANTEE blind (never its device blind). */
+  readonly device: SolEd25519Device;
+  readonly label: string;
+
+  constructor(device: SolEd25519Device, label: string) {
+    labelBytes(label);
+    this.device = device;
+    this.label = label;
+  }
+
+  /** Enrolment as a grantee of `issuingAccount`: the grantee blind (Q39). */
+  static async enrol(signer: SolSigner, req: SolGranteeBlindRequest, label: string): Promise<SolEd25519Grantee> {
+    const blind = await deriveSolGranteeBlind(signer, req);
+    return new SolEd25519Grantee(new SolEd25519Device({ publicKey: signer.publicKey, blind, sign: signer.sign }), label);
+  }
+
+  get key(): Uint8Array { return this.device.key; }
+  get pk(): Curve25519Point { return this.device.pk; }
+  get blind(): Uint8Array { return this.device.blind; }
+
+  /** The descriptor the issuer shows for this grantee at a slot. */
+  grantee(slot: bigint): SolGranteeFields { return solGranteeOf(this.device.descriptor(), { label: this.label }, slot); }
+
+  /** The grant id: the contract's own derivation (label origin hash). */
+  grantId(contractAddress: Uint8Array, slot: bigint): Uint8Array {
+    return pureCircuits.derive_grant_id_with_sol_ed25519({ bytes: contractAddress }, this.pk, this.blind, grantOriginHash(labelBytes(this.label)), slot);
+  }
+}
+
+/** A CustodyAccount's surface for the grantee twins. */
+export interface SolEd25519GrantSurface {
+  addressBytes: Uint8Array;
+  grantContext(grantId: Uint8Array): Promise<{ issuedAt: bigint; grantNonce: bigint }>;
+  heldCoin(color: Uint8Array): Promise<{ nonce: Uint8Array; color: Uint8Array; value: bigint; mt_index: bigint }>;
+  encKey(): Promise<Uint8Array>;
+  withdrawUnshieldedWithGrantAuth(color: Uint8Array, amount: bigint, recipient: Uint8Array, opening: GrantOpening, a: SolEd25519GrantAuthorisation): Promise<{ txId: string }>;
+  withdrawShieldedWithGrantAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, changeEntry: Uint8Array, encPk: Uint8Array, opening: GrantOpening, a: SolEd25519GrantAuthorisation): Promise<{ txId: string; change: unknown }>;
+  withdrawShieldedToContractWithGrantAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, changeEntry: Uint8Array, encPk: Uint8Array, opening: GrantOpening, a: SolEd25519GrantAuthorisation): Promise<{ txId: string; sent: unknown; change: unknown }>;
+}
+
+/** The grantee's signing context: the record's issued_at and nonce as the
+ *  ledger holds them now (never auth_nonce). */
+export async function solGrantContext(account: SolEd25519GrantSurface, g: SolEd25519Grantee, slot: bigint): Promise<SolGrantCallContext> {
+  const c = await account.grantContext(g.grantId(account.addressBytes, slot));
+  return { contractAddress: account.addressBytes, label: g.label, slot, issuedAt: c.issuedAt, grantNonce: c.grantNonce };
+}
+
+/** withdraw_unshielded_with_grant_sol_ed25519 under `opening`. */
+export async function withdrawUnshieldedAsSolGrantee(account: SolEd25519GrantSurface, g: SolEd25519Grantee, site: string, opening: GrantOpening, amount: SolAmount, recipient: Uint8Array) {
+  const auth = await authoriseSolGrantee(g.device, await solGrantContext(account, g, opening.slot), site, { op: 'withdraw_unshielded_with_grant', amount, recipient });
+  return { auth, ...(await account.withdrawUnshieldedWithGrantAuth(amount.color, amount.amount, recipient, opening, auth)) };
+}
+
+/** withdraw_shielded_with_grant_sol_ed25519: the coin the store holds for
+ *  the colour, the change entry sealed to the live enc_key. */
+export async function withdrawShieldedAsSolGrantee(account: SolEd25519GrantSurface, g: SolEd25519Grantee, site: string, opening: GrantOpening,
+  amount: SolAmount, recipient: Uint8Array, changeEntry: Uint8Array, encPk?: Uint8Array) {
+  const coin = await solSpentCoin(account as any, amount.color);
+  const enc = encPk ?? await account.encKey();
+  const auth = await authoriseSolGrantee(g.device, await solGrantContext(account, g, opening.slot), site,
+    { op: 'withdraw_shielded_with_grant', amount, recipient, changeEntry, encPk: enc, coin });
+  return { auth, coin, ...(await account.withdrawShieldedWithGrantAuth(recipient, amount.color, amount.amount, changeEntry, enc, opening, auth)) };
+}
+
+/** withdraw_shielded_to_contract_with_grant_sol_ed25519: the authorisation
+ *  only (the call is composed with the recipient's claim, MIP-0012 §6.6). */
+export async function authoriseWithdrawShieldedToContractAsSolGrantee(account: SolEd25519GrantSurface, g: SolEd25519Grantee, site: string, opening: GrantOpening,
+  amount: SolAmount, recipientContract: Uint8Array, changeEntry: Uint8Array, encPk?: Uint8Array) {
+  const coin = await solSpentCoin(account as any, amount.color);
+  const enc = encPk ?? await account.encKey();
+  const auth = await authoriseSolGrantee(g.device, await solGrantContext(account, g, opening.slot), site,
+    { op: 'withdraw_shielded_to_contract_with_grant', amount, recipient: recipientContract, changeEntry, encPk: enc, coin });
+  return { auth, coin, encPk: enc };
+}
