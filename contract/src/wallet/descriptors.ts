@@ -114,8 +114,29 @@ const bigLE = (b: Uint8Array): bigint => { let v = 0n; for (let i = b.length - 1
 const bigBE = (b: Uint8Array): bigint => { let v = 0n; for (const x of b) v = (v << 8n) | BigInt(x); return v; };
 const bytesBE = (v: bigint, w: number): Uint8Array => bytesLE(v, w).reverse();
 
+/** The value of an unknown scheme as an error shows it: a descriptor's
+ *  `scheme` field or the scheme itself, quoted and cut to 40 characters. */
+function schemeText(value: unknown): string {
+  const s = typeof value === 'object' && value !== null ? (value as { scheme?: unknown }).scheme : value;
+  if (typeof s === 'string') return JSON.stringify(s.length > 40 ? `${s.slice(0, 40)}...` : s);
+  try { return String(s); } catch { return typeof s; }
+}
+
+/** Refuses a scheme that client code does not handle: the default case of
+ *  every switch over a scheme (descriptor or blind). The value is typed
+ *  `never`, so a switch that leaves a registered scheme unhandled fails to
+ *  compile; at run time it refuses a value from outside the type (an
+ *  unregistered scheme in a dApp's request, or none at all) with a client
+ *  decode error, so an unknown scheme never passes silently. */
+export function unknownScheme(value: never, where: string, registered: readonly string[] = DESCRIPTOR_SCHEMES, prefix = 'descriptor'): never {
+  throw new Error(`${prefix}: unknown scheme ${schemeText(value)} in ${where} (registered: ${registered.join(', ')})`);
+}
+
 /** A registered tag's 32-byte, zero-padded form. */
 export function padTag(text: string): Uint8Array {
+  // Not a string (e.g. a tag table looked up with an unknown scheme): refused,
+  // never encoded as the text "undefined" or as an all-zero tag.
+  if (typeof text !== 'string') throw new Error(`descriptor: a tag is text, not ${schemeText(text)}`);
   if (!/^[\x21-\x7e]+$/.test(text)) throw new Error(`descriptor: tag is not visible ASCII: ${JSON.stringify(text)}`);
   const b = TEXT.encode(text);
   if (b.length > 32) throw new Error(`descriptor: tag exceeds 32 bytes: ${text}`);
@@ -340,8 +361,10 @@ export function solDescriptor(key: Uint8Array | string, blind: Uint8Array): SolD
 }
 
 /** Re-checks a descriptor built elsewhere (for example decoded from a dApp's
- *  request) with the strict parsers above. Returns a fresh copy. */
+ *  request) with the strict parsers above. Returns a fresh copy. Refuses a
+ *  value that is not a descriptor object and a scheme that is not registered. */
 export function checkDescriptor(d: Descriptor): Descriptor {
+  if (typeof d !== 'object' || d === null) throw new Error(`descriptor: not a descriptor object (${d === null ? 'null' : typeof d})`);
   switch (d.scheme) {
     case 'jubjub': return parseJubjubPoint({ x: d.x, y: d.y });
     case 'k256': return parseK256Descriptor({ x: d.x, y: d.y }, d.envelope);
@@ -365,6 +388,7 @@ export function checkDescriptor(d: Descriptor): Descriptor {
     }
     case 'evm_eip712': return evmDescriptor(d.address, d.blind);
     case 'sol_ed25519': return solDescriptor(d.key, d.blind);
+    default: return unknownScheme(d, 'checkDescriptor');
   }
 }
 
@@ -393,6 +417,7 @@ export function payloadParts(d: Descriptor, recipe: DescriptorRecipe): unknown[]
     }
     case 'evm_eip712': return [d.address, d.blind];
     case 'sol_ed25519': return [solanaKeyPoint(d.key), d.blind];
+    default: return unknownScheme(d, 'payloadParts');
   }
 }
 
@@ -404,29 +429,33 @@ const contractAddress = (a: Uint8Array) => {
 /** The device entry of `d` in an account, at an epoch and use counter. An
  *  enrolment MUST pass the account's current device_epoch and counter 0. */
 export function entryCall(d: Descriptor, account: Uint8Array, epoch: bigint, counter: bigint): DescriptorCall {
+  // The parts first: an unknown scheme is refused before any table lookup.
+  const parts = payloadParts(d, 'device');
   return {
     circuit: `derive_descriptor_entry_${DESCRIPTOR_CLASS.device[d.scheme]}`,
-    args: [padTag(DESCRIPTOR_TAGS.device[d.scheme]), contractAddress(account), ...payloadParts(d, 'device'), epoch, counter],
+    args: [padTag(DESCRIPTOR_TAGS.device[d.scheme]), contractAddress(account), ...parts, epoch, counter],
     ...pickOf(DESCRIPTOR_CLASS.device[d.scheme]),
   };
 }
 
 /** The boot commitment of `d` under a salt. */
 export function bootCall(d: Descriptor, salt: Uint8Array): DescriptorCall {
+  const parts = payloadParts(d, 'boot');
   if (salt.length !== 32) throw new Error('descriptor: a salt is 32 bytes');
   return {
     circuit: `derive_descriptor_boot_${DESCRIPTOR_CLASS.boot[d.scheme]}`,
-    args: [padTag(DESCRIPTOR_TAGS.boot[d.scheme]), salt, ...payloadParts(d, 'boot')],
+    args: [padTag(DESCRIPTOR_TAGS.boot[d.scheme]), salt, ...parts],
     ...pickOf(DESCRIPTOR_CLASS.boot[d.scheme]),
   };
 }
 
 /** The grant id of grantee `d` in an account, for an origin_hash and slot. */
 export function grantIdCall(d: Descriptor, account: Uint8Array, originHash: Uint8Array, slot: bigint): DescriptorCall {
+  const parts = payloadParts(d, 'grant-id');
   if (originHash.length !== 32) throw new Error('descriptor: origin_hash is 32 bytes');
   return {
     circuit: `derive_descriptor_grant_id_${DESCRIPTOR_CLASS['grant-id'][d.scheme]}`,
-    args: [padTag(DESCRIPTOR_TAGS['grant-id'][d.scheme]), contractAddress(account), ...payloadParts(d, 'grant-id'), originHash, slot],
+    args: [padTag(DESCRIPTOR_TAGS['grant-id'][d.scheme]), contractAddress(account), ...parts, originHash, slot],
     ...pickOf(DESCRIPTOR_CLASS['grant-id'][d.scheme]),
   };
 }
@@ -481,6 +510,7 @@ export function decodeDescriptor(recipe: DescriptorRecipe, tag: Uint8Array, part
     case 'sol_ed25519':
       want(2);
       return solDescriptor(solanaKeyFromPoint(parts[0] as Curve25519Affine), bytes(parts[1], 32, 'blind'));
+    default: return unknownScheme(t.scheme, 'decodeDescriptor');
   }
 }
 
@@ -545,6 +575,7 @@ export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): Des
     case 'sol_ed25519': return [tag, { label: 'Solana public key', value: base58Encode(d.key), verifiableByEye: true },
       { label: 'Solana public key (hex)', value: toHex(d.key), verifiableByEye: true },
       salt(d.blind)];
+    default: return unknownScheme(d, 'describeDescriptor');
   }
 }
 

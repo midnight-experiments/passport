@@ -54,9 +54,13 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { BLIND_TAGS, padTag, evmChecksumAddress, base58Encode, parseSolanaPublicKey } from './descriptors.js';
+import { BLIND_TAGS, padTag, evmChecksumAddress, base58Encode, parseSolanaPublicKey, unknownScheme } from './descriptors.js';
 
 export type BlindScheme = 'evm_eip712' | 'sol_ed25519';
+/** The readable schemes that have a blind. Every switch over a BlindScheme
+ *  ends in unknownScheme (a `never` check): any other scheme is refused. */
+export const BLIND_SCHEMES: readonly BlindScheme[] = ['evm_eip712', 'sol_ed25519'];
+const unknownBlindScheme = (scheme: never, where: string): never => unknownScheme(scheme, where, BLIND_SCHEMES, 'blind');
 
 /** The device request message's format version, named on its first line. */
 export const BLIND_MESSAGE_VERSION = 1;
@@ -83,12 +87,23 @@ function checkNetwork(network: string): void {
 
 /** The wallet line's value: the EIP-55 address, or the base58 Ed25519 key. */
 function walletText(scheme: BlindScheme, identity: Uint8Array): string {
-  if (scheme === 'evm_eip712') {
-    if (identity.length !== 20 || identity.every((b) => b === 0)) throw new Error('blind: an Ethereum address is 20 bytes, not zero');
-    return `Ethereum address ${evmChecksumAddress(identity)}`;
+  switch (scheme) {
+    case 'evm_eip712':
+      if (identity.length !== 20 || identity.every((b) => b === 0)) throw new Error('blind: an Ethereum address is 20 bytes, not zero');
+      return `Ethereum address ${evmChecksumAddress(identity)}`;
+    case 'sol_ed25519': return `Solana public key ${base58Encode(parseSolanaPublicKey(identity))}`;
+    default: return unknownBlindScheme(scheme, 'the blind request');
   }
-  if (scheme === 'sol_ed25519') return `Solana public key ${base58Encode(parseSolanaPublicKey(identity))}`;
-  throw new Error('blind: unknown scheme');
+}
+
+/** The blind tag text of a readable scheme; any other scheme is refused (never
+ *  looked up as undefined). */
+function blindTagText(scheme: BlindScheme, where: string): string {
+  switch (scheme) {
+    case 'evm_eip712': return BLIND_TAGS.evm_eip712;
+    case 'sol_ed25519': return BLIND_TAGS.sol_ed25519;
+    default: return unknownBlindScheme(scheme, where);
+  }
 }
 
 /** The DEVICE request message (ASCII, lines separated by LF, no trailing
@@ -198,9 +213,13 @@ export function canonicalEd25519Signature(sig: Uint8Array): Uint8Array {
   return new Uint8Array(sig);
 }
 
-/** The canonical form for a scheme. */
+/** The canonical form for a scheme; any other scheme is refused. */
 export function canonicalSignature(scheme: BlindScheme, sig: Uint8Array): Uint8Array {
-  return scheme === 'evm_eip712' ? canonicalEvmSignature(sig) : canonicalEd25519Signature(sig);
+  switch (scheme) {
+    case 'evm_eip712': return canonicalEvmSignature(sig);
+    case 'sol_ed25519': return canonicalEd25519Signature(sig);
+    default: return unknownBlindScheme(scheme, 'canonicalSignature');
+  }
 }
 
 /** The sign-twice check: true only when both signatures have the same
@@ -214,12 +233,14 @@ export function sameCanonicalSignature(scheme: BlindScheme, first: Uint8Array, s
  *  derive_blind, computed without the contract (it is needed before an
  *  account exists). */
 export function deriveBlind(scheme: BlindScheme, canonical: Uint8Array): Uint8Array {
+  const tag = blindTagText(scheme, 'deriveBlind');
   if (canonical.length !== 64) throw new Error('blind: a canonical signature is 64 bytes');
-  return sha256(new Uint8Array([...padTag(BLIND_TAGS[scheme]), ...canonical]));
+  return sha256(new Uint8Array([...padTag(tag), ...canonical]));
 }
 
 /** The same derivation as a call of the module's pure circuit `derive_blind`. */
 export function blindCall(scheme: BlindScheme, canonical: Uint8Array): { circuit: string; args: unknown[] } {
+  const tag = blindTagText(scheme, 'blindCall');
   if (canonical.length !== 64) throw new Error('blind: a canonical signature is 64 bytes');
-  return { circuit: 'derive_blind', args: [padTag(BLIND_TAGS[scheme]), canonical] };
+  return { circuit: 'derive_blind', args: [padTag(tag), canonical] };
 }

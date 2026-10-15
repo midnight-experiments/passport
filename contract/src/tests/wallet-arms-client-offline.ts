@@ -30,6 +30,12 @@
 //                equals any of its device blinds, and each issuing account
 //                (and network) gives its own grantee blind, under the same
 //                blind tag
+//   unknown      an unknown descriptor or blind scheme (unregistered, a
+//                typo, another case, an Object.prototype key, a number,
+//                none) is refused at client decode by every function that
+//                dispatches on the scheme; a non-object descriptor and a
+//                missing tag text are refused; every registered scheme
+//                still passes (positive control)
 //
 // Writes $EVIDENCE_DIR/wallet-arms-client-offline.json when EVIDENCE_DIR is
 // set; never writes into the repository.
@@ -653,10 +659,96 @@ const separation: Record<string, unknown>[] = [];
   console.log(`  ✓ grantee blind: ${wallets.length} wallets; ${tally['grantee blind'].pass} grantee blinds, none equal to any of the wallet's ${NETWORKS.length * INDICES.length} device blinds; ${ISSUERS.length} issuing accounts × ${NETWORKS.length} networks give ${ISSUERS.length * NETWORKS.length} distinct blinds per wallet; same tag and derive_blind; restorable`);
 }
 
+// ── Unknown schemes: refused at client decode, never passed silently ─────────
+//
+// A descriptor whose scheme the client does not handle (from a dApp's request,
+// say) used to pass checkDescriptor as `undefined`, and a blind function given
+// such a scheme used the Ed25519 form or an all-zero tag. Every dispatch over
+// a scheme now ends in unknownScheme (a `never` check: a scheme added to the
+// type without a case fails to compile). Each bad scheme rides on a
+// well-formed EVM payload, so only the scheme is wrong.
+
+const unknownSchemeReport: { schemes: string[]; functions: string[]; refusals: number; knownSchemesAccepted: string[] } = { schemes: [], functions: [], refusals: 0, knownSchemesAccepted: [] };
+{
+  const ctrBefore = ctr;
+  const samples = sampleDescriptors();
+  // Positive control: every registered scheme still passes every dispatching function.
+  for (const d of samples) {
+    const again = checkDescriptor(d);
+    for (const r of ['device', 'boot', 'grant-id'] as DescriptorRecipe[]) {
+      assert.deepEqual(payloadParts(again, r), payloadParts(d, r), `${d.scheme}: checkDescriptor keeps the descriptor (${r})`);
+      assert.ok(describeDescriptor(r, again).length > 0);
+    }
+    entryCall(again, account, 0n, 0n); bootCall(again, rnd(32)); grantIdCall(again, account, rnd(32), 0n);
+    if (!unknownSchemeReport.knownSchemesAccepted.includes(d.scheme)) unknownSchemeReport.knownSchemesAccepted.push(d.scheme);
+    ok('known schemes');
+  }
+  assert.deepEqual([...unknownSchemeReport.knownSchemesAccepted].sort(), [...DESCRIPTOR_SCHEMES].sort(), 'the positive control covers every registered scheme');
+  const evm = samples.find((d) => d.scheme === 'evm_eip712')!;
+  const sig = new Uint8Array(64).fill(1), salt = rnd(32), oh = rnd(32);
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const BAD: [string, unknown][] = [
+    ['an unregistered scheme', 'zz'],
+    ['a curve name without its arm', 'ed25519'],
+    ['another case', 'EVM_EIP712'],
+    ['a trailing space', 'sol_ed25519 '],
+    ['an Object.prototype key', 'constructor'],
+    ['__proto__', '__proto__'],
+    ['a number', 1],
+    ['no scheme', undefined],
+  ];
+  const fns = new Set<string>();
+  const refuse = (why: string, where: string, prefix: 'descriptor' | 'blind', shown: string, f: () => unknown) => {
+    refused('unknown scheme', f, new RegExp(`${prefix}: unknown scheme ${escapeRe(shown)} in ${escapeRe(where)} \\(registered: `), `${why} (${where})`);
+    fns.add(where === 'payloadParts' ? 'payloadParts (via payloadParts, entryCall, bootCall, grantIdCall)' : where);
+  };
+  for (const [why, scheme] of BAD) {
+    const shown = typeof scheme === 'string' ? JSON.stringify(scheme) : String(scheme);
+    unknownSchemeReport.schemes.push(shown);
+    const d = { ...evm, scheme } as unknown as Descriptor;
+    refuse(why, 'checkDescriptor', 'descriptor', shown, () => checkDescriptor(d));
+    refuse(why, 'payloadParts', 'descriptor', shown, () => payloadParts(d, 'device'));
+    refuse(why, 'payloadParts', 'descriptor', shown, () => entryCall(d, account, 0n, 0n));
+    refuse(why, 'payloadParts', 'descriptor', shown, () => bootCall(d, salt));
+    refuse(why, 'payloadParts', 'descriptor', shown, () => grantIdCall(d, account, oh, 0n));
+    for (const r of ['device', 'boot', 'grant-id'] as DescriptorRecipe[]) refuse(why, 'describeDescriptor', 'descriptor', shown, () => describeDescriptor(r, d));
+    const s = scheme as BlindScheme;
+    refuse(why, 'canonicalSignature', 'blind', shown, () => canonicalSignature(s, sig));
+    refuse(why, 'canonicalSignature', 'blind', shown, () => sameCanonicalSignature(s, sig, sig));
+    refuse(why, 'deriveBlind', 'blind', shown, () => deriveBlind(s, sig));
+    refuse(why, 'blindCall', 'blind', shown, () => blindCall(s, sig));
+    refuse(why, 'the blind request', 'blind', shown, () => blindMessage({ scheme: s, network: 'undeployed', identity: evmWallet, accountIndex: 0 }));
+    refuse(why, 'the blind request', 'blind', shown, () => granteeBlindMessage({ scheme: s, network: 'undeployed', identity: evmWallet, issuingAccount: ISSUER_1 }));
+  }
+  // The descriptor schemes that have no blind are unknown to every blind function.
+  for (const scheme of ['jubjub', 'k256', 'p256']) {
+    const s = scheme as BlindScheme, shown = JSON.stringify(scheme);
+    refuse(`${scheme} (no blind)`, 'canonicalSignature', 'blind', shown, () => canonicalSignature(s, sig));
+    refuse(`${scheme} (no blind)`, 'deriveBlind', 'blind', shown, () => deriveBlind(s, sig));
+    refuse(`${scheme} (no blind)`, 'blindCall', 'blind', shown, () => blindCall(s, sig));
+    refuse(`${scheme} (no blind)`, 'the blind request', 'blind', shown, () => blindMessage({ scheme: s, network: 'undeployed', identity: evmWallet, accountIndex: 0 }));
+  }
+  assert.match((() => { try { canonicalSignature('k256' as BlindScheme, sig); } catch (e: any) { return e.message; } return ''; })(), /\(registered: evm_eip712, sol_ed25519\)$/, 'a blind refusal names the readable schemes');
+  assert.match((() => { try { checkDescriptor({ ...evm, scheme: 'zz' } as any); } catch (e: any) { return e.message; } return ''; })(), /\(registered: jubjub, k256, p256, evm_eip712, sol_ed25519\)$/, 'a descriptor refusal names the registered schemes');
+  // A long scheme is cut in the message.
+  refused('unknown scheme', () => checkDescriptor({ ...evm, scheme: 'x'.repeat(5000) } as any), /unknown scheme "x{40}\.\.\." in checkDescriptor/, 'a 5000-character scheme (message cut to 40)');
+  // Not a descriptor at all, and a missing tag text.
+  refused('unknown scheme', () => checkDescriptor(null as any), /descriptor: not a descriptor object \(null\)$/, 'null');
+  refused('unknown scheme', () => checkDescriptor('evm_eip712' as any), /descriptor: not a descriptor object \(string\)$/, 'a scheme name instead of a descriptor');
+  refused('unknown scheme', () => padTag(undefined as any), /descriptor: a tag is text, not undefined$/, 'padTag(undefined): never an all-zero tag');
+  refused('unknown scheme', () => padTag((DESCRIPTOR_TAGS.device as any).zz), /descriptor: a tag is text/, 'a device tag looked up with an unknown scheme');
+  refused('unknown scheme', () => padTag((BLIND_TAGS as any).k256), /descriptor: a tag is text/, 'a blind tag looked up with a scheme that has none');
+  unknownSchemeReport.functions = [...fns];
+  unknownSchemeReport.refusals = tally['unknown scheme'].refused;
+  ctr = ctrBefore;
+  console.log(`  ✓ unknown schemes: ${BAD.length} bad schemes + 3 blind-less schemes refused at client decode by ${fns.size} dispatch points (${tally['unknown scheme'].refused} refusals); non-objects and missing tag texts refused; all ${DESCRIPTOR_SCHEMES.length} registered schemes still accepted`);
+}
+
 const report = {
   suite: 'wallet-arms-client-offline', seed: SEED, ranAt: new Date().toISOString(), tally,
   goldenEvmMessage: GOLDEN_EVM, solanaMessage: solMsg,
   goldenEvmGranteeMessage: GOLDEN_EVM_GRANTEE, solanaGranteeMessage: solGranteeMsg, granteeBlindSeparation: separation,
+  unknownSchemes: unknownSchemeReport,
   verdict: 'PASS',
 };
 if (process.env.EVIDENCE_DIR) {
