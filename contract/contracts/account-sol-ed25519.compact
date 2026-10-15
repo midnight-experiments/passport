@@ -187,16 +187,30 @@ struct SolEd25519Auth {
   sig:         Ed25519Signature;
 }
 
-// In upstream p256's order: membership of the device's current single-use
-// entry, verification, the entry rolled to its successor, auth_nonce
-// advanced, round bumped. `key` is the 32-byte encoding of auth.pk, computed
-// by the gated circuit (encode_public_key_with_sol_ed25519) before it
-// renders `msg`; the entries bind those bytes and the account's blind.
-// Verification: R != O (refused here; the standard library accepts it), then
-// ed25519Verify<n> (cofactorless [s]B == R + [k]A with k = SHA-512(R || A ||
-// msg) mod L; it refuses A = O). s < L and the prime-order subgroup for A and
-// R hold by type. The atomic abort of a failed assert reverts everything.
-circuit require_authorised_with_sol_ed25519<#n>(auth: SolEd25519Auth, key: Bytes<32>, msg: Bytes<n>): [] {
+// The seam owns everything that identifies the signer and the call's
+// freshness (G1E-1): it derives the 32-byte key from the point the signature
+// is verified under, and renders the message's common frame itself — the
+// first line, the account (kernel.self()), the signing key, and the
+// auth_nonce line — around the title and body the gated circuit supplies. No
+// gated circuit passes a key, an account, a nonce or a frame of its own.
+//
+// Then, in upstream p256's order: membership of the device's current
+// single-use entry (bound to that key and the account's blind),
+// verification — R != O (refused here; the standard library accepts it),
+// then ed25519Verify<n> (cofactorless [s]B == R + [k]A with
+// k = SHA-512(R || A || msg) mod L; it refuses A = O; s < L and the
+// prime-order subgroup for A and R hold by type) — the entry rolled to its
+// successor, auth_nonce advanced, round bumped. Any failed assert aborts the
+// whole call.
+circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
+  title: Vector<t, Uint<8>>,
+  body:  Vector<b, Uint<8>>,
+  show:  SolShow,
+  frame: Vector<128, Uint<0..16>>,
+  auth:  SolEd25519Auth,
+): [] {
+  const key = encode_public_key_with_sol_ed25519(auth.pk);
+  const msg = sol_device_message<t, b, n>(kernel.self(), key, auth_nonce, title, body, show, frame);
   const entry = disclose(derive_descriptor_entry_w64(device_tag_sol_ed25519(), kernel.self(), key, auth.blind,
     device_epoch, auth.use_counter));
   assert(devices.member(entry), "unknown device entry");
@@ -211,18 +225,19 @@ circuit require_authorised_with_sol_ed25519<#n>(auth: SolEd25519Auth, key: Bytes
 
 // ── Gated circuits ──────────────────────────────────────────────────────────
 //
-// Arguments: the operation's operands, then the message's display inputs
-// (in the message circuit's order, `hex` last), then the authorisation.
+// Arguments: the operation's operands, the message's display inputs (the
+// operation's own, then `show`, `frame` and `hex`), then the authorisation.
+// Each passes the seam only its circuit-fixed title and the body it renders
+// from its operands.
 
 export circuit rotate_enc_key_with_sol_ed25519(
   new_key: Bytes<32>,
   show:    SolShow,
-  hex:     Vector<192, Uint<0..16>>,
+  frame:   Vector<128, Uint<0..16>>,
+  hex:     Vector<64, Uint<0..16>>,
   auth:    SolEd25519Auth,
 ): [] {
-  const key = encode_public_key_with_sol_ed25519(auth.pk);
-  const msg = sol_message_rotate_enc_key(kernel.self(), key, auth_nonce, new_key, show, hex);
-  require_authorised_with_sol_ed25519<511>(auth, key, msg);
+  require_authorised_with_sol_ed25519<37, 184, 511>(sol_title_rotate_enc_key(), sol_body_rotate_enc_key(new_key, hex), show, frame, auth);
   do_rotate_enc_key(new_key);
 }
 
@@ -592,6 +607,29 @@ circuit sol_hex_field(f: Field, n: Vector<64, Uint<0..16>>): Vector<64, Uint<8>>
   return sol_hex32(f as Bytes<32>, n);
 }
 
+// The common frame of every message: the first line, the title, the site,
+// the role, the account and the signing key (from the `frame` nibbles,
+// checked against the account and the key), the operation's body, and the
+// freshness tail. The SEAM calls these with the key it derives from the
+// verified point and with the ledger's own nonce, so no gated circuit passes
+// an identity or a frame of its own (G1E-1); the pure message circuits call
+// them with their parameters, so a client gets the same bytes.
+circuit sol_device_message<#t, #b, #n>(self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>,
+                                       title: Vector<t, Uint<8>>, body: Vector<b, Uint<8>>, show: SolShow,
+                                       frame: Vector<128, Uint<0..16>>): Bytes<n> {
+  return Bytes[...sol_first_line(), ...title,
+               ...sol_device_lines(show.site, sol_hex32(self_addr.bytes, [frame[0], frame[1], frame[2], frame[3], frame[4], frame[5], frame[6], frame[7], frame[8], frame[9], frame[10], frame[11], frame[12], frame[13], frame[14], frame[15], frame[16], frame[17], frame[18], frame[19], frame[20], frame[21], frame[22], frame[23], frame[24], frame[25], frame[26], frame[27], frame[28], frame[29], frame[30], frame[31], frame[32], frame[33], frame[34], frame[35], frame[36], frame[37], frame[38], frame[39], frame[40], frame[41], frame[42], frame[43], frame[44], frame[45], frame[46], frame[47], frame[48], frame[49], frame[50], frame[51], frame[52], frame[53], frame[54], frame[55], frame[56], frame[57], frame[58], frame[59], frame[60], frame[61], frame[62], frame[63]]), sol_hex32(key, [frame[64], frame[65], frame[66], frame[67], frame[68], frame[69], frame[70], frame[71], frame[72], frame[73], frame[74], frame[75], frame[76], frame[77], frame[78], frame[79], frame[80], frame[81], frame[82], frame[83], frame[84], frame[85], frame[86], frame[87], frame[88], frame[89], frame[90], frame[91], frame[92], frame[93], frame[94], frame[95], frame[96], frame[97], frame[98], frame[99], frame[100], frame[101], frame[102], frame[103], frame[104], frame[105], frame[106], frame[107], frame[108], frame[109], frame[110], frame[111], frame[112], frame[113], frame[114], frame[115], frame[116], frame[117], frame[118], frame[119], frame[120], frame[121], frame[122], frame[123], frame[124], frame[125], frame[126], frame[127]])),
+               ...body, ...sol_device_nonce(nonce_value, show.nonce)];
+}
+circuit sol_grantee_message<#t, #b, #n>(self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>,
+                                        issued_at: Uint<64>, nonce_value: Uint<64>, title: Vector<t, Uint<8>>,
+                                        body: Vector<b, Uint<8>>, show: SolShow, g: SolGrantShow,
+                                        frame: Vector<128, Uint<0..16>>): Bytes<n> {
+  return Bytes[...sol_first_line(), ...title,
+               ...sol_grantee_lines(show.site, sol_hex32(self_addr.bytes, [frame[0], frame[1], frame[2], frame[3], frame[4], frame[5], frame[6], frame[7], frame[8], frame[9], frame[10], frame[11], frame[12], frame[13], frame[14], frame[15], frame[16], frame[17], frame[18], frame[19], frame[20], frame[21], frame[22], frame[23], frame[24], frame[25], frame[26], frame[27], frame[28], frame[29], frame[30], frame[31], frame[32], frame[33], frame[34], frame[35], frame[36], frame[37], frame[38], frame[39], frame[40], frame[41], frame[42], frame[43], frame[44], frame[45], frame[46], frame[47], frame[48], frame[49], frame[50], frame[51], frame[52], frame[53], frame[54], frame[55], frame[56], frame[57], frame[58], frame[59], frame[60], frame[61], frame[62], frame[63]]), sol_hex32(key, [frame[64], frame[65], frame[66], frame[67], frame[68], frame[69], frame[70], frame[71], frame[72], frame[73], frame[74], frame[75], frame[76], frame[77], frame[78], frame[79], frame[80], frame[81], frame[82], frame[83], frame[84], frame[85], frame[86], frame[87], frame[88], frame[89], frame[90], frame[91], frame[92], frame[93], frame[94], frame[95], frame[96], frame[97], frame[98], frame[99], frame[100], frame[101], frame[102], frame[103], frame[104], frame[105], frame[106], frame[107], frame[108], frame[109], frame[110], frame[111], frame[112], frame[113], frame[114], frame[115], frame[116], frame[117], frame[118], frame[119], frame[120], frame[121], frame[122], frame[123], frame[124], frame[125], frame[126], frame[127]])),
+               ...body, ...sol_grant_tail(label, slot, issued_at, nonce_value, g, show.nonce)];
+}
+
 // The digits of a little-endian 32-byte value in big-endian order (the pairs
 // reversed; wiring only).
 circuit sol_be(h: Vector<64, Uint<8>>): Vector<64, Uint<8>> {
@@ -773,457 +811,458 @@ circuit sol_remove_lines(literal: Boolean, target: SolTarget, counter: Uint<64>,
 // auditor obtains the contract's own bytes for any call, and
 // src/wallet/sol-ed25519-message.ts is an independent TypeScript renderer
 // held byte for byte to these (src/tests/sol-ed25519-message-offline.ts).
-// The last argument, `hex`, is the nibbles of every value the message shows
-// in hex, in the order of the layout table in SOL-ED25519.md.
+// `frame` is the nibbles of the account and the signing key; `hex` those of
+// every other value the message shows in hex, in the order of the layout
+// table in SOL-ED25519.md.
 
-// Rotate the encryption key (device role): 511 bytes; 192 nibbles.
+// Rotate the encryption key (device role): the body, 184 bytes; 64 body nibbles.
+circuit sol_body_rotate_enc_key(new_key: Bytes<32>, hex: Vector<64, Uint<0..16>>): Vector<184, Uint<8>> {
+  const h_new_key = sol_hex32(new_key, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  return [...pad(20, "New encryption key: "),
+          ...h_new_key,
+          10,
+          ...pad(98, "Consequence: coins deposited from now on are encrypted to this key; only its holder can read them."),
+          10];
+}
+circuit sol_title_rotate_enc_key(): Vector<37, Uint<8>> {
+  return [...pad(36, "Operation: Rotate the encryption key"), 10];
+}
+
+// Rotate the encryption key (device role): 511 bytes.
 export pure circuit sol_message_rotate_enc_key(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, new_key: Bytes<32>, show: SolShow,
-  hex: Vector<192, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, new_key: Bytes<32>, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<64, Uint<0..16>>
 ): Bytes<511> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_new_key = sol_hex32(new_key, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  return Bytes[...sol_first_line(),
-               ...pad(36, "Operation: Rotate the encryption key"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(20, "New encryption key: "),
-               ...h_new_key,
-               10,
-               ...pad(98, "Consequence: coins deposited from now on are encrypted to this key; only its holder can read them."),
-               10,
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<37, 184, 511>(self_addr, key, nonce_value, sol_title_rotate_enc_key(), sol_body_rotate_enc_key(new_key, hex), show, frame);
 }
 
-// Append an inbox entry (device role): 833 bytes; 512 nibbles.
+// Append an inbox entry (device role): the body, 510 bytes; 384 body nibbles.
+circuit sol_body_append_inbox(entry: Bytes<192>, hex: Vector<384, Uint<0..16>>): Vector<510, Uint<8>> {
+  const h_entry = sol_hex192(entry, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383]]);
+  return [...sol_entry_lines(h_entry)];
+}
+circuit sol_title_append_inbox(): Vector<33, Uint<8>> {
+  return [...pad(32, "Operation: Append an inbox entry"), 10];
+}
+
+// Append an inbox entry (device role): 833 bytes.
 export pure circuit sol_message_append_inbox(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, entry: Bytes<192>, show: SolShow,
-  hex: Vector<512, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, entry: Bytes<192>, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<384, Uint<0..16>>
 ): Bytes<833> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_entry = sol_hex192(entry, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511]]);
-  return Bytes[...sol_first_line(),
-               ...pad(32, "Operation: Append an inbox entry"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...sol_entry_lines(h_entry),
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<33, 510, 833>(self_addr, key, nonce_value, sol_title_append_inbox(), sol_body_append_inbox(entry, hex), show, frame);
 }
 
-// Withdraw unshielded tokens (device role): 620 bytes; 256 nibbles.
+// Withdraw unshielded tokens (device role): the body, 292 bytes; 128 body nibbles.
+circuit sol_body_withdraw_unshielded(color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, hex: Vector<128, Uint<0..16>>): Vector<292, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(23, "To unshielded address: "),
+          ...h_recipient,
+          10];
+}
+circuit sol_title_withdraw_unshielded(): Vector<38, Uint<8>> {
+  return [...pad(37, "Operation: Withdraw unshielded tokens"), 10];
+}
+
+// Withdraw unshielded tokens (device role): 620 bytes.
 export pure circuit sol_message_withdraw_unshielded(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, show: SolShow,
-  hex: Vector<256, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<128, Uint<0..16>>
 ): Bytes<620> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_color = sol_hex32(color, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  const h_recipient = sol_hex32(recipient.bytes, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
-  return Bytes[...sol_first_line(),
-               ...pad(37, "Operation: Withdraw unshielded tokens"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...sol_amount_lines(h_color, amount, a),
-               ...pad(23, "To unshielded address: "),
-               ...h_recipient,
-               10,
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<38, 292, 620>(self_addr, key, nonce_value, sol_title_withdraw_unshielded(), sol_body_withdraw_unshielded(color, amount, recipient, a, hex), show, frame);
 }
 
-// Withdraw shielded tokens (device role): 861 bytes; 320 nibbles.
+// Withdraw shielded tokens (device role): the body, 535 bytes; 192 body nibbles.
+circuit sol_body_withdraw_shielded(recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<192, Uint<0..16>>): Vector<535, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(17, "To shielded key: "),
+          ...h_recipient,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded(): Vector<36, Uint<8>> {
+  return [...pad(35, "Operation: Withdraw shielded tokens"), 10];
+}
+
+// Withdraw shielded tokens (device role): 861 bytes.
 export pure circuit sol_message_withdraw_shielded(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow,
-  hex: Vector<320, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<192, Uint<0..16>>
 ): Bytes<861> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_color = sol_hex32(color, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  const h_recipient = sol_hex32(recipient.bytes, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
-  const h_coin_nonce = sol_hex32(coin.nonce, [hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319]]);
-  return Bytes[...sol_first_line(),
-               ...pad(35, "Operation: Withdraw shielded tokens"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...sol_amount_lines(h_color, amount, a),
-               ...pad(17, "To shielded key: "),
-               ...h_recipient,
-               10,
-               ...sol_coin_lines(coin, amount, h_coin_nonce, c),
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<36, 535, 861>(self_addr, key, nonce_value, sol_title_withdraw_shielded(), sol_body_withdraw_shielded(recipient, color, amount, coin, a, c, hex), show, frame);
 }
 
-// Withdraw shielded tokens to a contract (device role): 871 bytes; 320 nibbles.
+// Withdraw shielded tokens to a contract (device role): the body, 531 bytes; 192 body nibbles.
+circuit sol_body_withdraw_shielded_to_contract(recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<192, Uint<0..16>>): Vector<531, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(13, "To contract: "),
+          ...h_recipient,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded_to_contract(): Vector<50, Uint<8>> {
+  return [...pad(49, "Operation: Withdraw shielded tokens to a contract"), 10];
+}
+
+// Withdraw shielded tokens to a contract (device role): 871 bytes.
 export pure circuit sol_message_withdraw_shielded_to_contract(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow,
-  hex: Vector<320, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<192, Uint<0..16>>
 ): Bytes<871> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_color = sol_hex32(color, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  const h_recipient = sol_hex32(recipient.bytes, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
-  const h_coin_nonce = sol_hex32(coin.nonce, [hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319]]);
-  return Bytes[...sol_first_line(),
-               ...pad(49, "Operation: Withdraw shielded tokens to a contract"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...sol_amount_lines(h_color, amount, a),
-               ...pad(13, "To contract: "),
-               ...h_recipient,
-               10,
-               ...sol_coin_lines(coin, amount, h_coin_nonce, c),
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<50, 531, 871>(self_addr, key, nonce_value, sol_title_withdraw_shielded_to_contract(), sol_body_withdraw_shielded_to_contract(recipient, color, amount, coin, a, c, hex), show, frame);
 }
 
-// Add a device (device role): 705 bytes; 360 nibbles.
+// Add a device (device role): the body, 391 bytes; 232 body nibbles.
+circuit sol_body_add_device(target: SolTarget, ts: SolTargetShow, hex: Vector<232, Uint<0..16>>): Vector<391, Uint<8>> {
+  const h_t_address = sol_hex20(target.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_t_a = sol_hex32(target.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_t_b = sol_hex32(target.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_t_c = sol_hex32(target.c, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  return [...pad(60, "Consequence: gives this device FULL control of this account."),
+          10,
+          ...pad(15, "Device scheme: "),
+          ...sol_device_tag_text(target.tag),
+          10,
+          ...sol_device_block(target, ts, h_t_address, h_t_a, h_t_b, h_t_c)];
+}
+circuit sol_title_add_device(): Vector<24, Uint<8>> {
+  return [...pad(23, "Operation: Add a device"), 10];
+}
+
+// Add a device (device role): 705 bytes.
 export pure circuit sol_message_add_device(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, target: SolTarget, ts: SolTargetShow, show: SolShow,
-  hex: Vector<360, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, target: SolTarget, ts: SolTargetShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<232, Uint<0..16>>
 ): Bytes<705> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_t_address = sol_hex20(target.address, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
-  const h_t_a = sol_hex32(target.a, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
-  const h_t_b = sol_hex32(target.b, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
-  const h_t_c = sol_hex32(target.c, [hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359]]);
-  return Bytes[...sol_first_line(),
-               ...pad(23, "Operation: Add a device"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(60, "Consequence: gives this device FULL control of this account."),
-               10,
-               ...pad(15, "Device scheme: "),
-               ...sol_device_tag_text(target.tag),
-               10,
-               ...sol_device_block(target, ts, h_t_address, h_t_a, h_t_b, h_t_c),
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<24, 391, 705>(self_addr, key, nonce_value, sol_title_add_device(), sol_body_add_device(target, ts, hex), show, frame);
 }
 
-// Remove a device (device role): 781 bytes; 424 nibbles.
+// Remove a device (device role): the body, 464 bytes; 296 body nibbles.
+circuit sol_body_remove_device(literal: Boolean, target: SolTarget, counter: Uint<64>, epoch: Uint<32>, entry: Bytes<32>, ts: SolTargetShow, hex: Vector<296, Uint<0..16>>): Vector<464, Uint<8>> {
+  const h_t_address = sol_hex20(target.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_t_a = sol_hex32(target.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_t_b = sol_hex32(target.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_t_c = sol_hex32(target.c, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  const h_entry = sol_hex32(entry, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
+  return [...pad(67, "Consequence: the removed device can no longer act for this account."),
+          10,
+          ...sol_remove_lines(literal, target, counter, epoch, ts, h_t_address, h_t_a, h_t_b, h_t_c, h_entry)];
+}
+circuit sol_title_remove_device(): Vector<27, Uint<8>> {
+  return [...pad(26, "Operation: Remove a device"), 10];
+}
+
+// Remove a device (device role): 781 bytes.
 export pure circuit sol_message_remove_device(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, literal: Boolean, target: SolTarget, counter: Uint<64>, epoch: Uint<32>, entry: Bytes<32>, ts: SolTargetShow, show: SolShow,
-  hex: Vector<424, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, literal: Boolean, target: SolTarget, counter: Uint<64>, epoch: Uint<32>, entry: Bytes<32>, ts: SolTargetShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<296, Uint<0..16>>
 ): Bytes<781> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_t_address = sol_hex20(target.address, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
-  const h_t_a = sol_hex32(target.a, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
-  const h_t_b = sol_hex32(target.b, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
-  const h_t_c = sol_hex32(target.c, [hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359]]);
-  const h_entry = sol_hex32(entry, [hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423]]);
-  return Bytes[...sol_first_line(),
-               ...pad(26, "Operation: Remove a device"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(67, "Consequence: the removed device can no longer act for this account."),
-               10,
-               ...sol_remove_lines(literal, target, counter, epoch, ts, h_t_address, h_t_a, h_t_b, h_t_c, h_entry),
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<27, 464, 781>(self_addr, key, nonce_value, sol_title_remove_device(), sol_body_remove_device(literal, target, counter, epoch, entry, ts, hex), show, frame);
 }
 
-// Issue a scoped grant (device role): 1646 bytes; 680 nibbles.
+// Issue a scoped grant (device role): the body, 1324 bytes; 552 body nibbles.
+circuit sol_body_issue_grant(grantee: SolGrantee, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, hex: Vector<552, Uint<0..16>>): Vector<1324, Uint<8>> {
+  const h_g_address = sol_hex20(grantee.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_g_a = sol_hex32(grantee.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_g_b = sol_hex32(grantee.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_g_oh = sol_hex32(grantee.origin_hash, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  const h_color = sol_hex32(color, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
+  const h_recipient = sol_hex32(recipient, [hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359]]);
+  const h_rp = sol_hex32(rp_id_hash, [hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423]]);
+  const h_read_pk = sol_hex32(read_pk, [hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487]]);
+  const h_caller = sol_hex32(caller.value.bytes, [hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511], hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551]]);
+  return [...pad(84, "Consequence: lets the grantee key below spend from this account within these limits."),
+          10,
+          ...pad(16, "Grantee scheme: "),
+          ...sol_grantee_tag_text(grantee.tag),
+          10,
+          ...sol_grantee_block(grantee, gs, h_g_address, h_g_a, h_g_b, h_g_oh),
+          ...pad(14, "Grantee slot: "),
+          ...uint8_text(grantee.slot, gs.slot),
+          10,
+          ...pad(25, "May withdraw unshielded: "),
+          ...sol_yes_no(op_withdraw_unshielded),
+          10,
+          ...pad(23, "May withdraw shielded: "),
+          ...sol_yes_no(op_withdraw_shielded),
+          10,
+          ...pad(37, "May withdraw shielded to a contract: "),
+          ...sol_yes_no(op_withdraw_shielded_to_contract),
+          10,
+          ...pad(20, "May read the inbox: "),
+          ...sol_yes_no(read),
+          10,
+          ...pad(7, "Token: "),
+          ...h_color,
+          10,
+          ...pad(16, "Recipient kind: "),
+          ...sol_recipient_kind(recipient_kind),
+          10,
+          ...pad(11, "Recipient: "),
+          ...h_recipient,
+          10,
+          ...pad(16, "Max coin value: "),
+          ...uint128_text(max_coin_value, ss.max_coin),
+          10,
+          ...pad(14, "Per-call cap: "),
+          ...uint128_text(per_call_cap, ss.per_call),
+          10,
+          ...pad(11, "Total cap: "),
+          ...uint128_text(cap, ss.cap),
+          10,
+          ...pad(45, "Expires at (block time, seconds; 0 = never): "),
+          ...uint64_text(expires_at, ss.expires),
+          10,
+          ...pad(19, "Passkey RP (hash): "),
+          ...h_rp,
+          10,
+          ...pad(16, "Inbox read key: "),
+          ...h_read_pk,
+          10,
+          ...pad(15, "Window length: "),
+          ...uint64_text(window_len, ss.window),
+          10,
+          ...pad(12, "Window cap: "),
+          ...uint128_text(window_cap, ss.window_cap),
+          10,
+          ...pad(33, "Caller restricted to a contract: "),
+          ...sol_yes_no(caller.is_some),
+          10,
+          ...pad(8, "Caller: "),
+          ...h_caller,
+          10];
+}
+circuit sol_title_issue_grant(): Vector<32, Uint<8>> {
+  return [...pad(31, "Operation: Issue a scoped grant"), 10];
+}
+
+// Issue a scoped grant (device role): 1646 bytes.
 export pure circuit sol_message_issue_grant(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, show: SolShow,
-  hex: Vector<680, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean, read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>, per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>, window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>, gs: SolGranteeShow, ss: SolScopeShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<552, Uint<0..16>>
 ): Bytes<1646> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_g_address = sol_hex20(grantee.address, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
-  const h_g_a = sol_hex32(grantee.a, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
-  const h_g_b = sol_hex32(grantee.b, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
-  const h_g_oh = sol_hex32(grantee.origin_hash, [hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359]]);
-  const h_color = sol_hex32(color, [hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423]]);
-  const h_recipient = sol_hex32(recipient, [hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487]]);
-  const h_rp = sol_hex32(rp_id_hash, [hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511], hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551]]);
-  const h_read_pk = sol_hex32(read_pk, [hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575], hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615]]);
-  const h_caller = sol_hex32(caller.value.bytes, [hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639], hex[640], hex[641], hex[642], hex[643], hex[644], hex[645], hex[646], hex[647], hex[648], hex[649], hex[650], hex[651], hex[652], hex[653], hex[654], hex[655], hex[656], hex[657], hex[658], hex[659], hex[660], hex[661], hex[662], hex[663], hex[664], hex[665], hex[666], hex[667], hex[668], hex[669], hex[670], hex[671], hex[672], hex[673], hex[674], hex[675], hex[676], hex[677], hex[678], hex[679]]);
-  return Bytes[...sol_first_line(),
-               ...pad(31, "Operation: Issue a scoped grant"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(84, "Consequence: lets the grantee key below spend from this account within these limits."),
-               10,
-               ...pad(16, "Grantee scheme: "),
-               ...sol_grantee_tag_text(grantee.tag),
-               10,
-               ...sol_grantee_block(grantee, gs, h_g_address, h_g_a, h_g_b, h_g_oh),
-               ...pad(14, "Grantee slot: "),
-               ...uint8_text(grantee.slot, gs.slot),
-               10,
-               ...pad(25, "May withdraw unshielded: "),
-               ...sol_yes_no(op_withdraw_unshielded),
-               10,
-               ...pad(23, "May withdraw shielded: "),
-               ...sol_yes_no(op_withdraw_shielded),
-               10,
-               ...pad(37, "May withdraw shielded to a contract: "),
-               ...sol_yes_no(op_withdraw_shielded_to_contract),
-               10,
-               ...pad(20, "May read the inbox: "),
-               ...sol_yes_no(read),
-               10,
-               ...pad(7, "Token: "),
-               ...h_color,
-               10,
-               ...pad(16, "Recipient kind: "),
-               ...sol_recipient_kind(recipient_kind),
-               10,
-               ...pad(11, "Recipient: "),
-               ...h_recipient,
-               10,
-               ...pad(16, "Max coin value: "),
-               ...uint128_text(max_coin_value, ss.max_coin),
-               10,
-               ...pad(14, "Per-call cap: "),
-               ...uint128_text(per_call_cap, ss.per_call),
-               10,
-               ...pad(11, "Total cap: "),
-               ...uint128_text(cap, ss.cap),
-               10,
-               ...pad(45, "Expires at (block time, seconds; 0 = never): "),
-               ...uint64_text(expires_at, ss.expires),
-               10,
-               ...pad(19, "Passkey RP (hash): "),
-               ...h_rp,
-               10,
-               ...pad(16, "Inbox read key: "),
-               ...h_read_pk,
-               10,
-               ...pad(15, "Window length: "),
-               ...uint64_text(window_len, ss.window),
-               10,
-               ...pad(12, "Window cap: "),
-               ...uint128_text(window_cap, ss.window_cap),
-               10,
-               ...pad(33, "Caller restricted to a contract: "),
-               ...sol_yes_no(caller.is_some),
-               10,
-               ...pad(8, "Caller: "),
-               ...h_caller,
-               10,
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<32, 1324, 1646>(self_addr, key, nonce_value, sol_title_issue_grant(), sol_body_issue_grant(grantee, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk, window_len, window_cap, caller, gs, ss, hex), show, frame);
 }
 
-// Revoke a scoped grant (device role): 729 bytes; 360 nibbles.
+// Revoke a scoped grant (device role): the body, 406 bytes; 232 body nibbles.
+circuit sol_body_revoke_grant(grantee: SolGrantee, gs: SolGranteeShow, hex: Vector<232, Uint<0..16>>): Vector<406, Uint<8>> {
+  const h_g_address = sol_hex20(grantee.address, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39]]);
+  const h_g_a = sol_hex32(grantee.a, [hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63], hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103]]);
+  const h_g_b = sol_hex32(grantee.b, [hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127], hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
+  const h_g_oh = sol_hex32(grantee.origin_hash, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
+  return [...pad(60, "Consequence: the grantee can no longer act under this grant."),
+          10,
+          ...pad(16, "Grantee scheme: "),
+          ...sol_grantee_tag_text(grantee.tag),
+          10,
+          ...sol_grantee_block(grantee, gs, h_g_address, h_g_a, h_g_b, h_g_oh),
+          ...pad(14, "Grantee slot: "),
+          ...uint8_text(grantee.slot, gs.slot),
+          10];
+}
+circuit sol_title_revoke_grant(): Vector<33, Uint<8>> {
+  return [...pad(32, "Operation: Revoke a scoped grant"), 10];
+}
+
+// Revoke a scoped grant (device role): 729 bytes.
 export pure circuit sol_message_revoke_grant(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, gs: SolGranteeShow, show: SolShow,
-  hex: Vector<360, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, grantee: SolGrantee, gs: SolGranteeShow, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<232, Uint<0..16>>
 ): Bytes<729> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_g_address = sol_hex20(grantee.address, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167]]);
-  const h_g_a = sol_hex32(grantee.a, [hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231]]);
-  const h_g_b = sol_hex32(grantee.b, [hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295]]);
-  const h_g_oh = sol_hex32(grantee.origin_hash, [hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359]]);
-  return Bytes[...sol_first_line(),
-               ...pad(32, "Operation: Revoke a scoped grant"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(60, "Consequence: the grantee can no longer act under this grant."),
-               10,
-               ...pad(16, "Grantee scheme: "),
-               ...sol_grantee_tag_text(grantee.tag),
-               10,
-               ...sol_grantee_block(grantee, gs, h_g_address, h_g_a, h_g_b, h_g_oh),
-               ...pad(14, "Grantee slot: "),
-               ...uint8_text(grantee.slot, gs.slot),
-               10,
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<33, 406, 729>(self_addr, key, nonce_value, sol_title_revoke_grant(), sol_body_revoke_grant(grantee, gs, hex), show, frame);
 }
 
-// Revoke all scoped grants (device role): 389 bytes; 128 nibbles.
+// Revoke all scoped grants (device role): the body, 63 bytes; 0 body nibbles.
+circuit sol_body_revoke_all_grants(): Vector<63, Uint<8>> {
+  return [...pad(62, "Consequence: every scoped grant of this account stops working."),
+          10];
+}
+circuit sol_title_revoke_all_grants(): Vector<36, Uint<8>> {
+  return [...pad(35, "Operation: Revoke all scoped grants"), 10];
+}
+
+// Revoke all scoped grants (device role): 389 bytes.
 export pure circuit sol_message_revoke_all_grants(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, show: SolShow,
-  hex: Vector<128, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, show: SolShow, frame: Vector<128, Uint<0..16>>
 ): Bytes<389> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  return Bytes[...sol_first_line(),
-               ...pad(35, "Operation: Revoke all scoped grants"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(62, "Consequence: every scoped grant of this account stops working."),
-               10,
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<36, 63, 389>(self_addr, key, nonce_value, sol_title_revoke_all_grants(), sol_body_revoke_all_grants(), show, frame);
 }
 
-// Publish a recovery session (device role): 1250 bytes; 704 nibbles.
+// Publish a recovery session (device role): the body, 922 bytes; 576 body nibbles.
+circuit sol_body_publish_recovery_session(new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field, phi_len: Uint<8>, wrap: Bytes<64>, phi_len_digits: Vector<3, Uint<8>>, hex: Vector<576, Uint<0..16>>): Vector<922, Uint<8>> {
+  const h_rx = sol_hex_field(jubjubPointX(new_recovery_pk), [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_ry = sol_hex_field(jubjubPointY(new_recovery_pk), [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_session = sol_hex32(session_nonce, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
+  const h_phi1 = sol_hex_field(phi_1, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
+  const h_phi2 = sol_hex_field(phi_2, [hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319]]);
+  const h_phi3 = sol_hex_field(phi_3, [hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383]]);
+  const h_phi4 = sol_hex_field(phi_4, [hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447]]);
+  const h_wrap = sol_hex64(wrap, [hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511], hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575]]);
+  return [...pad(107, "Consequence: sets this account's recovery key; its holder can take over this account after the veto window."),
+          10,
+          ...pad(16, "Recovery key x: "),
+          ...sol_be(h_rx),
+          10,
+          ...pad(16, "Recovery key y: "),
+          ...sol_be(h_ry),
+          10,
+          ...pad(15, "Session nonce: "),
+          ...h_session,
+          10,
+          ...pad(28, "Backup vector value 1 of 4: "),
+          ...sol_be(h_phi1),
+          10,
+          ...pad(28, "Backup vector value 2 of 4: "),
+          ...sol_be(h_phi2),
+          10,
+          ...pad(28, "Backup vector value 3 of 4: "),
+          ...sol_be(h_phi3),
+          10,
+          ...pad(28, "Backup vector value 4 of 4: "),
+          ...sol_be(h_phi4),
+          10,
+          ...pad(22, "Backup vector length: "),
+          ...uint8_text(phi_len, phi_len_digits),
+          10,
+          ...pad(22, "Key wrap part 1 of 2: "),
+          ...[h_wrap[0], h_wrap[1], h_wrap[2], h_wrap[3], h_wrap[4], h_wrap[5], h_wrap[6], h_wrap[7], h_wrap[8], h_wrap[9], h_wrap[10], h_wrap[11], h_wrap[12], h_wrap[13], h_wrap[14], h_wrap[15], h_wrap[16], h_wrap[17], h_wrap[18], h_wrap[19], h_wrap[20], h_wrap[21], h_wrap[22], h_wrap[23], h_wrap[24], h_wrap[25], h_wrap[26], h_wrap[27], h_wrap[28], h_wrap[29], h_wrap[30], h_wrap[31], h_wrap[32], h_wrap[33], h_wrap[34], h_wrap[35], h_wrap[36], h_wrap[37], h_wrap[38], h_wrap[39], h_wrap[40], h_wrap[41], h_wrap[42], h_wrap[43], h_wrap[44], h_wrap[45], h_wrap[46], h_wrap[47], h_wrap[48], h_wrap[49], h_wrap[50], h_wrap[51], h_wrap[52], h_wrap[53], h_wrap[54], h_wrap[55], h_wrap[56], h_wrap[57], h_wrap[58], h_wrap[59], h_wrap[60], h_wrap[61], h_wrap[62], h_wrap[63]],
+          10,
+          ...pad(22, "Key wrap part 2 of 2: "),
+          ...[h_wrap[64], h_wrap[65], h_wrap[66], h_wrap[67], h_wrap[68], h_wrap[69], h_wrap[70], h_wrap[71], h_wrap[72], h_wrap[73], h_wrap[74], h_wrap[75], h_wrap[76], h_wrap[77], h_wrap[78], h_wrap[79], h_wrap[80], h_wrap[81], h_wrap[82], h_wrap[83], h_wrap[84], h_wrap[85], h_wrap[86], h_wrap[87], h_wrap[88], h_wrap[89], h_wrap[90], h_wrap[91], h_wrap[92], h_wrap[93], h_wrap[94], h_wrap[95], h_wrap[96], h_wrap[97], h_wrap[98], h_wrap[99], h_wrap[100], h_wrap[101], h_wrap[102], h_wrap[103], h_wrap[104], h_wrap[105], h_wrap[106], h_wrap[107], h_wrap[108], h_wrap[109], h_wrap[110], h_wrap[111], h_wrap[112], h_wrap[113], h_wrap[114], h_wrap[115], h_wrap[116], h_wrap[117], h_wrap[118], h_wrap[119], h_wrap[120], h_wrap[121], h_wrap[122], h_wrap[123], h_wrap[124], h_wrap[125], h_wrap[126], h_wrap[127]],
+          10];
+}
+circuit sol_title_publish_recovery_session(): Vector<38, Uint<8>> {
+  return [...pad(37, "Operation: Publish a recovery session"), 10];
+}
+
+// Publish a recovery session (device role): 1250 bytes.
 export pure circuit sol_message_publish_recovery_session(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field, phi_len: Uint<8>, wrap: Bytes<64>, phi_len_digits: Vector<3, Uint<8>>, show: SolShow,
-  hex: Vector<704, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field, phi_len: Uint<8>, wrap: Bytes<64>, phi_len_digits: Vector<3, Uint<8>>, show: SolShow, frame: Vector<128, Uint<0..16>>, hex: Vector<576, Uint<0..16>>
 ): Bytes<1250> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_rx = sol_hex_field(jubjubPointX(new_recovery_pk), [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  const h_ry = sol_hex_field(jubjubPointY(new_recovery_pk), [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
-  const h_session = sol_hex32(session_nonce, [hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319]]);
-  const h_phi1 = sol_hex_field(phi_1, [hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383]]);
-  const h_phi2 = sol_hex_field(phi_2, [hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447]]);
-  const h_phi3 = sol_hex_field(phi_3, [hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511]]);
-  const h_phi4 = sol_hex_field(phi_4, [hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575]]);
-  const h_wrap = sol_hex64(wrap, [hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615], hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639], hex[640], hex[641], hex[642], hex[643], hex[644], hex[645], hex[646], hex[647], hex[648], hex[649], hex[650], hex[651], hex[652], hex[653], hex[654], hex[655], hex[656], hex[657], hex[658], hex[659], hex[660], hex[661], hex[662], hex[663], hex[664], hex[665], hex[666], hex[667], hex[668], hex[669], hex[670], hex[671], hex[672], hex[673], hex[674], hex[675], hex[676], hex[677], hex[678], hex[679], hex[680], hex[681], hex[682], hex[683], hex[684], hex[685], hex[686], hex[687], hex[688], hex[689], hex[690], hex[691], hex[692], hex[693], hex[694], hex[695], hex[696], hex[697], hex[698], hex[699], hex[700], hex[701], hex[702], hex[703]]);
-  return Bytes[...sol_first_line(),
-               ...pad(37, "Operation: Publish a recovery session"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(107, "Consequence: sets this account's recovery key; its holder can take over this account after the veto window."),
-               10,
-               ...pad(16, "Recovery key x: "),
-               ...sol_be(h_rx),
-               10,
-               ...pad(16, "Recovery key y: "),
-               ...sol_be(h_ry),
-               10,
-               ...pad(15, "Session nonce: "),
-               ...h_session,
-               10,
-               ...pad(28, "Backup vector value 1 of 4: "),
-               ...sol_be(h_phi1),
-               10,
-               ...pad(28, "Backup vector value 2 of 4: "),
-               ...sol_be(h_phi2),
-               10,
-               ...pad(28, "Backup vector value 3 of 4: "),
-               ...sol_be(h_phi3),
-               10,
-               ...pad(28, "Backup vector value 4 of 4: "),
-               ...sol_be(h_phi4),
-               10,
-               ...pad(22, "Backup vector length: "),
-               ...uint8_text(phi_len, phi_len_digits),
-               10,
-               ...pad(22, "Key wrap part 1 of 2: "),
-               ...[h_wrap[0], h_wrap[1], h_wrap[2], h_wrap[3], h_wrap[4], h_wrap[5], h_wrap[6], h_wrap[7], h_wrap[8], h_wrap[9], h_wrap[10], h_wrap[11], h_wrap[12], h_wrap[13], h_wrap[14], h_wrap[15], h_wrap[16], h_wrap[17], h_wrap[18], h_wrap[19], h_wrap[20], h_wrap[21], h_wrap[22], h_wrap[23], h_wrap[24], h_wrap[25], h_wrap[26], h_wrap[27], h_wrap[28], h_wrap[29], h_wrap[30], h_wrap[31], h_wrap[32], h_wrap[33], h_wrap[34], h_wrap[35], h_wrap[36], h_wrap[37], h_wrap[38], h_wrap[39], h_wrap[40], h_wrap[41], h_wrap[42], h_wrap[43], h_wrap[44], h_wrap[45], h_wrap[46], h_wrap[47], h_wrap[48], h_wrap[49], h_wrap[50], h_wrap[51], h_wrap[52], h_wrap[53], h_wrap[54], h_wrap[55], h_wrap[56], h_wrap[57], h_wrap[58], h_wrap[59], h_wrap[60], h_wrap[61], h_wrap[62], h_wrap[63]],
-               10,
-               ...pad(22, "Key wrap part 2 of 2: "),
-               ...[h_wrap[64], h_wrap[65], h_wrap[66], h_wrap[67], h_wrap[68], h_wrap[69], h_wrap[70], h_wrap[71], h_wrap[72], h_wrap[73], h_wrap[74], h_wrap[75], h_wrap[76], h_wrap[77], h_wrap[78], h_wrap[79], h_wrap[80], h_wrap[81], h_wrap[82], h_wrap[83], h_wrap[84], h_wrap[85], h_wrap[86], h_wrap[87], h_wrap[88], h_wrap[89], h_wrap[90], h_wrap[91], h_wrap[92], h_wrap[93], h_wrap[94], h_wrap[95], h_wrap[96], h_wrap[97], h_wrap[98], h_wrap[99], h_wrap[100], h_wrap[101], h_wrap[102], h_wrap[103], h_wrap[104], h_wrap[105], h_wrap[106], h_wrap[107], h_wrap[108], h_wrap[109], h_wrap[110], h_wrap[111], h_wrap[112], h_wrap[113], h_wrap[114], h_wrap[115], h_wrap[116], h_wrap[117], h_wrap[118], h_wrap[119], h_wrap[120], h_wrap[121], h_wrap[122], h_wrap[123], h_wrap[124], h_wrap[125], h_wrap[126], h_wrap[127]],
-               10,
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<38, 922, 1250>(self_addr, key, nonce_value, sol_title_publish_recovery_session(), sol_body_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap, phi_len_digits, hex), show, frame);
 }
 
-// Cancel a pending recovery (device role): 391 bytes; 128 nibbles.
+// Cancel a pending recovery (device role): the body, 64 bytes; 0 body nibbles.
+circuit sol_body_recover_cancel(): Vector<64, Uint<8>> {
+  return [...pad(63, "Consequence: the pending recovery of this account is cancelled."),
+          10];
+}
+circuit sol_title_recover_cancel(): Vector<37, Uint<8>> {
+  return [...pad(36, "Operation: Cancel a pending recovery"), 10];
+}
+
+// Cancel a pending recovery (device role): 391 bytes.
 export pure circuit sol_message_recover_cancel(
-  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, show: SolShow,
-  hex: Vector<128, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, nonce_value: Uint<64>, show: SolShow, frame: Vector<128, Uint<0..16>>
 ): Bytes<391> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  return Bytes[...sol_first_line(),
-               ...pad(36, "Operation: Cancel a pending recovery"),
-               10,
-               ...sol_device_lines(show.site, h_account, h_key),
-               ...pad(63, "Consequence: the pending recovery of this account is cancelled."),
-               10,
-               ...sol_device_nonce(nonce_value, show.nonce)];
+  return sol_device_message<37, 64, 391>(self_addr, key, nonce_value, sol_title_recover_cancel(), sol_body_recover_cancel(), show, frame);
 }
 
-// Withdraw unshielded tokens under a grant (grantee role): 746 bytes; 256 nibbles.
+// Withdraw unshielded tokens under a grant (grantee role): the body, 292 bytes; 128 body nibbles.
+circuit sol_body_withdraw_unshielded_with_grant(color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, hex: Vector<128, Uint<0..16>>): Vector<292, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(23, "To unshielded address: "),
+          ...h_recipient,
+          10];
+}
+circuit sol_title_withdraw_unshielded_with_grant(): Vector<52, Uint<8>> {
+  return [...pad(51, "Operation: Withdraw unshielded tokens under a grant"), 10];
+}
+
+// Withdraw unshielded tokens under a grant (grantee role): 746 bytes.
 export pure circuit sol_message_withdraw_unshielded_with_grant(
-  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, show: SolShow, g: SolGrantShow,
-  hex: Vector<256, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, color: Bytes<32>, amount: Uint<128>, recipient: UserAddress, a: SolAmountShow, show: SolShow, g: SolGrantShow, frame: Vector<128, Uint<0..16>>, hex: Vector<128, Uint<0..16>>
 ): Bytes<746> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_color = sol_hex32(color, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  const h_recipient = sol_hex32(recipient.bytes, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
-  return Bytes[...sol_first_line(),
-               ...pad(51, "Operation: Withdraw unshielded tokens under a grant"),
-               10,
-               ...sol_grantee_lines(show.site, h_account, h_key),
-               ...sol_amount_lines(h_color, amount, a),
-               ...pad(23, "To unshielded address: "),
-               ...h_recipient,
-               10,
-               ...sol_grant_tail(label, slot, issued_at, nonce_value, g, show.nonce)];
+  return sol_grantee_message<52, 292, 746>(self_addr, key, label, slot, issued_at, nonce_value, sol_title_withdraw_unshielded_with_grant(), sol_body_withdraw_unshielded_with_grant(color, amount, recipient, a, hex), show, g, frame);
 }
 
-// Withdraw shielded tokens under a grant (grantee role): 1586 bytes; 768 nibbles.
+// Withdraw shielded tokens under a grant (grantee role): the body, 1134 bytes; 640 body nibbles.
+circuit sol_body_withdraw_shielded_with_grant(recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<640, Uint<0..16>>): Vector<1134, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_change = sol_hex192(change_entry, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511]]);
+  const h_enc_pk = sol_hex32(enc_pk, [hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615], hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(17, "To shielded key: "),
+          ...h_recipient,
+          10,
+          ...pad(21, "Change entry 1 of 6: "),
+          ...[h_change[0], h_change[1], h_change[2], h_change[3], h_change[4], h_change[5], h_change[6], h_change[7], h_change[8], h_change[9], h_change[10], h_change[11], h_change[12], h_change[13], h_change[14], h_change[15], h_change[16], h_change[17], h_change[18], h_change[19], h_change[20], h_change[21], h_change[22], h_change[23], h_change[24], h_change[25], h_change[26], h_change[27], h_change[28], h_change[29], h_change[30], h_change[31], h_change[32], h_change[33], h_change[34], h_change[35], h_change[36], h_change[37], h_change[38], h_change[39], h_change[40], h_change[41], h_change[42], h_change[43], h_change[44], h_change[45], h_change[46], h_change[47], h_change[48], h_change[49], h_change[50], h_change[51], h_change[52], h_change[53], h_change[54], h_change[55], h_change[56], h_change[57], h_change[58], h_change[59], h_change[60], h_change[61], h_change[62], h_change[63]],
+          10,
+          ...pad(21, "Change entry 2 of 6: "),
+          ...[h_change[64], h_change[65], h_change[66], h_change[67], h_change[68], h_change[69], h_change[70], h_change[71], h_change[72], h_change[73], h_change[74], h_change[75], h_change[76], h_change[77], h_change[78], h_change[79], h_change[80], h_change[81], h_change[82], h_change[83], h_change[84], h_change[85], h_change[86], h_change[87], h_change[88], h_change[89], h_change[90], h_change[91], h_change[92], h_change[93], h_change[94], h_change[95], h_change[96], h_change[97], h_change[98], h_change[99], h_change[100], h_change[101], h_change[102], h_change[103], h_change[104], h_change[105], h_change[106], h_change[107], h_change[108], h_change[109], h_change[110], h_change[111], h_change[112], h_change[113], h_change[114], h_change[115], h_change[116], h_change[117], h_change[118], h_change[119], h_change[120], h_change[121], h_change[122], h_change[123], h_change[124], h_change[125], h_change[126], h_change[127]],
+          10,
+          ...pad(21, "Change entry 3 of 6: "),
+          ...[h_change[128], h_change[129], h_change[130], h_change[131], h_change[132], h_change[133], h_change[134], h_change[135], h_change[136], h_change[137], h_change[138], h_change[139], h_change[140], h_change[141], h_change[142], h_change[143], h_change[144], h_change[145], h_change[146], h_change[147], h_change[148], h_change[149], h_change[150], h_change[151], h_change[152], h_change[153], h_change[154], h_change[155], h_change[156], h_change[157], h_change[158], h_change[159], h_change[160], h_change[161], h_change[162], h_change[163], h_change[164], h_change[165], h_change[166], h_change[167], h_change[168], h_change[169], h_change[170], h_change[171], h_change[172], h_change[173], h_change[174], h_change[175], h_change[176], h_change[177], h_change[178], h_change[179], h_change[180], h_change[181], h_change[182], h_change[183], h_change[184], h_change[185], h_change[186], h_change[187], h_change[188], h_change[189], h_change[190], h_change[191]],
+          10,
+          ...pad(21, "Change entry 4 of 6: "),
+          ...[h_change[192], h_change[193], h_change[194], h_change[195], h_change[196], h_change[197], h_change[198], h_change[199], h_change[200], h_change[201], h_change[202], h_change[203], h_change[204], h_change[205], h_change[206], h_change[207], h_change[208], h_change[209], h_change[210], h_change[211], h_change[212], h_change[213], h_change[214], h_change[215], h_change[216], h_change[217], h_change[218], h_change[219], h_change[220], h_change[221], h_change[222], h_change[223], h_change[224], h_change[225], h_change[226], h_change[227], h_change[228], h_change[229], h_change[230], h_change[231], h_change[232], h_change[233], h_change[234], h_change[235], h_change[236], h_change[237], h_change[238], h_change[239], h_change[240], h_change[241], h_change[242], h_change[243], h_change[244], h_change[245], h_change[246], h_change[247], h_change[248], h_change[249], h_change[250], h_change[251], h_change[252], h_change[253], h_change[254], h_change[255]],
+          10,
+          ...pad(21, "Change entry 5 of 6: "),
+          ...[h_change[256], h_change[257], h_change[258], h_change[259], h_change[260], h_change[261], h_change[262], h_change[263], h_change[264], h_change[265], h_change[266], h_change[267], h_change[268], h_change[269], h_change[270], h_change[271], h_change[272], h_change[273], h_change[274], h_change[275], h_change[276], h_change[277], h_change[278], h_change[279], h_change[280], h_change[281], h_change[282], h_change[283], h_change[284], h_change[285], h_change[286], h_change[287], h_change[288], h_change[289], h_change[290], h_change[291], h_change[292], h_change[293], h_change[294], h_change[295], h_change[296], h_change[297], h_change[298], h_change[299], h_change[300], h_change[301], h_change[302], h_change[303], h_change[304], h_change[305], h_change[306], h_change[307], h_change[308], h_change[309], h_change[310], h_change[311], h_change[312], h_change[313], h_change[314], h_change[315], h_change[316], h_change[317], h_change[318], h_change[319]],
+          10,
+          ...pad(21, "Change entry 6 of 6: "),
+          ...[h_change[320], h_change[321], h_change[322], h_change[323], h_change[324], h_change[325], h_change[326], h_change[327], h_change[328], h_change[329], h_change[330], h_change[331], h_change[332], h_change[333], h_change[334], h_change[335], h_change[336], h_change[337], h_change[338], h_change[339], h_change[340], h_change[341], h_change[342], h_change[343], h_change[344], h_change[345], h_change[346], h_change[347], h_change[348], h_change[349], h_change[350], h_change[351], h_change[352], h_change[353], h_change[354], h_change[355], h_change[356], h_change[357], h_change[358], h_change[359], h_change[360], h_change[361], h_change[362], h_change[363], h_change[364], h_change[365], h_change[366], h_change[367], h_change[368], h_change[369], h_change[370], h_change[371], h_change[372], h_change[373], h_change[374], h_change[375], h_change[376], h_change[377], h_change[378], h_change[379], h_change[380], h_change[381], h_change[382], h_change[383]],
+          10,
+          ...pad(18, "Change entry key: "),
+          ...h_enc_pk,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded_with_grant(): Vector<50, Uint<8>> {
+  return [...pad(49, "Operation: Withdraw shielded tokens under a grant"), 10];
+}
+
+// Withdraw shielded tokens under a grant (grantee role): 1586 bytes.
 export pure circuit sol_message_withdraw_shielded_with_grant(
-  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, g: SolGrantShow,
-  hex: Vector<768, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, recipient: ZswapCoinPublicKey, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, g: SolGrantShow, frame: Vector<128, Uint<0..16>>, hex: Vector<640, Uint<0..16>>
 ): Bytes<1586> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_color = sol_hex32(color, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  const h_recipient = sol_hex32(recipient.bytes, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
-  const h_change = sol_hex192(change_entry, [hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511], hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575], hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615], hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639]]);
-  const h_enc_pk = sol_hex32(enc_pk, [hex[640], hex[641], hex[642], hex[643], hex[644], hex[645], hex[646], hex[647], hex[648], hex[649], hex[650], hex[651], hex[652], hex[653], hex[654], hex[655], hex[656], hex[657], hex[658], hex[659], hex[660], hex[661], hex[662], hex[663], hex[664], hex[665], hex[666], hex[667], hex[668], hex[669], hex[670], hex[671], hex[672], hex[673], hex[674], hex[675], hex[676], hex[677], hex[678], hex[679], hex[680], hex[681], hex[682], hex[683], hex[684], hex[685], hex[686], hex[687], hex[688], hex[689], hex[690], hex[691], hex[692], hex[693], hex[694], hex[695], hex[696], hex[697], hex[698], hex[699], hex[700], hex[701], hex[702], hex[703]]);
-  const h_coin_nonce = sol_hex32(coin.nonce, [hex[704], hex[705], hex[706], hex[707], hex[708], hex[709], hex[710], hex[711], hex[712], hex[713], hex[714], hex[715], hex[716], hex[717], hex[718], hex[719], hex[720], hex[721], hex[722], hex[723], hex[724], hex[725], hex[726], hex[727], hex[728], hex[729], hex[730], hex[731], hex[732], hex[733], hex[734], hex[735], hex[736], hex[737], hex[738], hex[739], hex[740], hex[741], hex[742], hex[743], hex[744], hex[745], hex[746], hex[747], hex[748], hex[749], hex[750], hex[751], hex[752], hex[753], hex[754], hex[755], hex[756], hex[757], hex[758], hex[759], hex[760], hex[761], hex[762], hex[763], hex[764], hex[765], hex[766], hex[767]]);
-  return Bytes[...sol_first_line(),
-               ...pad(49, "Operation: Withdraw shielded tokens under a grant"),
-               10,
-               ...sol_grantee_lines(show.site, h_account, h_key),
-               ...sol_amount_lines(h_color, amount, a),
-               ...pad(17, "To shielded key: "),
-               ...h_recipient,
-               10,
-               ...pad(21, "Change entry 1 of 6: "),
-               ...[h_change[0], h_change[1], h_change[2], h_change[3], h_change[4], h_change[5], h_change[6], h_change[7], h_change[8], h_change[9], h_change[10], h_change[11], h_change[12], h_change[13], h_change[14], h_change[15], h_change[16], h_change[17], h_change[18], h_change[19], h_change[20], h_change[21], h_change[22], h_change[23], h_change[24], h_change[25], h_change[26], h_change[27], h_change[28], h_change[29], h_change[30], h_change[31], h_change[32], h_change[33], h_change[34], h_change[35], h_change[36], h_change[37], h_change[38], h_change[39], h_change[40], h_change[41], h_change[42], h_change[43], h_change[44], h_change[45], h_change[46], h_change[47], h_change[48], h_change[49], h_change[50], h_change[51], h_change[52], h_change[53], h_change[54], h_change[55], h_change[56], h_change[57], h_change[58], h_change[59], h_change[60], h_change[61], h_change[62], h_change[63]],
-               10,
-               ...pad(21, "Change entry 2 of 6: "),
-               ...[h_change[64], h_change[65], h_change[66], h_change[67], h_change[68], h_change[69], h_change[70], h_change[71], h_change[72], h_change[73], h_change[74], h_change[75], h_change[76], h_change[77], h_change[78], h_change[79], h_change[80], h_change[81], h_change[82], h_change[83], h_change[84], h_change[85], h_change[86], h_change[87], h_change[88], h_change[89], h_change[90], h_change[91], h_change[92], h_change[93], h_change[94], h_change[95], h_change[96], h_change[97], h_change[98], h_change[99], h_change[100], h_change[101], h_change[102], h_change[103], h_change[104], h_change[105], h_change[106], h_change[107], h_change[108], h_change[109], h_change[110], h_change[111], h_change[112], h_change[113], h_change[114], h_change[115], h_change[116], h_change[117], h_change[118], h_change[119], h_change[120], h_change[121], h_change[122], h_change[123], h_change[124], h_change[125], h_change[126], h_change[127]],
-               10,
-               ...pad(21, "Change entry 3 of 6: "),
-               ...[h_change[128], h_change[129], h_change[130], h_change[131], h_change[132], h_change[133], h_change[134], h_change[135], h_change[136], h_change[137], h_change[138], h_change[139], h_change[140], h_change[141], h_change[142], h_change[143], h_change[144], h_change[145], h_change[146], h_change[147], h_change[148], h_change[149], h_change[150], h_change[151], h_change[152], h_change[153], h_change[154], h_change[155], h_change[156], h_change[157], h_change[158], h_change[159], h_change[160], h_change[161], h_change[162], h_change[163], h_change[164], h_change[165], h_change[166], h_change[167], h_change[168], h_change[169], h_change[170], h_change[171], h_change[172], h_change[173], h_change[174], h_change[175], h_change[176], h_change[177], h_change[178], h_change[179], h_change[180], h_change[181], h_change[182], h_change[183], h_change[184], h_change[185], h_change[186], h_change[187], h_change[188], h_change[189], h_change[190], h_change[191]],
-               10,
-               ...pad(21, "Change entry 4 of 6: "),
-               ...[h_change[192], h_change[193], h_change[194], h_change[195], h_change[196], h_change[197], h_change[198], h_change[199], h_change[200], h_change[201], h_change[202], h_change[203], h_change[204], h_change[205], h_change[206], h_change[207], h_change[208], h_change[209], h_change[210], h_change[211], h_change[212], h_change[213], h_change[214], h_change[215], h_change[216], h_change[217], h_change[218], h_change[219], h_change[220], h_change[221], h_change[222], h_change[223], h_change[224], h_change[225], h_change[226], h_change[227], h_change[228], h_change[229], h_change[230], h_change[231], h_change[232], h_change[233], h_change[234], h_change[235], h_change[236], h_change[237], h_change[238], h_change[239], h_change[240], h_change[241], h_change[242], h_change[243], h_change[244], h_change[245], h_change[246], h_change[247], h_change[248], h_change[249], h_change[250], h_change[251], h_change[252], h_change[253], h_change[254], h_change[255]],
-               10,
-               ...pad(21, "Change entry 5 of 6: "),
-               ...[h_change[256], h_change[257], h_change[258], h_change[259], h_change[260], h_change[261], h_change[262], h_change[263], h_change[264], h_change[265], h_change[266], h_change[267], h_change[268], h_change[269], h_change[270], h_change[271], h_change[272], h_change[273], h_change[274], h_change[275], h_change[276], h_change[277], h_change[278], h_change[279], h_change[280], h_change[281], h_change[282], h_change[283], h_change[284], h_change[285], h_change[286], h_change[287], h_change[288], h_change[289], h_change[290], h_change[291], h_change[292], h_change[293], h_change[294], h_change[295], h_change[296], h_change[297], h_change[298], h_change[299], h_change[300], h_change[301], h_change[302], h_change[303], h_change[304], h_change[305], h_change[306], h_change[307], h_change[308], h_change[309], h_change[310], h_change[311], h_change[312], h_change[313], h_change[314], h_change[315], h_change[316], h_change[317], h_change[318], h_change[319]],
-               10,
-               ...pad(21, "Change entry 6 of 6: "),
-               ...[h_change[320], h_change[321], h_change[322], h_change[323], h_change[324], h_change[325], h_change[326], h_change[327], h_change[328], h_change[329], h_change[330], h_change[331], h_change[332], h_change[333], h_change[334], h_change[335], h_change[336], h_change[337], h_change[338], h_change[339], h_change[340], h_change[341], h_change[342], h_change[343], h_change[344], h_change[345], h_change[346], h_change[347], h_change[348], h_change[349], h_change[350], h_change[351], h_change[352], h_change[353], h_change[354], h_change[355], h_change[356], h_change[357], h_change[358], h_change[359], h_change[360], h_change[361], h_change[362], h_change[363], h_change[364], h_change[365], h_change[366], h_change[367], h_change[368], h_change[369], h_change[370], h_change[371], h_change[372], h_change[373], h_change[374], h_change[375], h_change[376], h_change[377], h_change[378], h_change[379], h_change[380], h_change[381], h_change[382], h_change[383]],
-               10,
-               ...pad(18, "Change entry key: "),
-               ...h_enc_pk,
-               10,
-               ...sol_coin_lines(coin, amount, h_coin_nonce, c),
-               ...sol_grant_tail(label, slot, issued_at, nonce_value, g, show.nonce)];
+  return sol_grantee_message<50, 1134, 1586>(self_addr, key, label, slot, issued_at, nonce_value, sol_title_withdraw_shielded_with_grant(), sol_body_withdraw_shielded_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame);
 }
 
-// Withdraw shielded tokens to a contract under a grant (grantee role): 1596 bytes; 768 nibbles.
+// Withdraw shielded tokens to a contract under a grant (grantee role): the body, 1130 bytes; 640 body nibbles.
+circuit sol_body_withdraw_shielded_to_contract_with_grant(recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, hex: Vector<640, Uint<0..16>>): Vector<1130, Uint<8>> {
+  const h_color = sol_hex32(color, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
+  const h_recipient = sol_hex32(recipient.bytes, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
+  const h_change = sol_hex192(change_entry, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191], hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255], hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511]]);
+  const h_enc_pk = sol_hex32(enc_pk, [hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575]]);
+  const h_coin_nonce = sol_hex32(coin.nonce, [hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615], hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639]]);
+  return [...sol_amount_lines(h_color, amount, a),
+          ...pad(13, "To contract: "),
+          ...h_recipient,
+          10,
+          ...pad(21, "Change entry 1 of 6: "),
+          ...[h_change[0], h_change[1], h_change[2], h_change[3], h_change[4], h_change[5], h_change[6], h_change[7], h_change[8], h_change[9], h_change[10], h_change[11], h_change[12], h_change[13], h_change[14], h_change[15], h_change[16], h_change[17], h_change[18], h_change[19], h_change[20], h_change[21], h_change[22], h_change[23], h_change[24], h_change[25], h_change[26], h_change[27], h_change[28], h_change[29], h_change[30], h_change[31], h_change[32], h_change[33], h_change[34], h_change[35], h_change[36], h_change[37], h_change[38], h_change[39], h_change[40], h_change[41], h_change[42], h_change[43], h_change[44], h_change[45], h_change[46], h_change[47], h_change[48], h_change[49], h_change[50], h_change[51], h_change[52], h_change[53], h_change[54], h_change[55], h_change[56], h_change[57], h_change[58], h_change[59], h_change[60], h_change[61], h_change[62], h_change[63]],
+          10,
+          ...pad(21, "Change entry 2 of 6: "),
+          ...[h_change[64], h_change[65], h_change[66], h_change[67], h_change[68], h_change[69], h_change[70], h_change[71], h_change[72], h_change[73], h_change[74], h_change[75], h_change[76], h_change[77], h_change[78], h_change[79], h_change[80], h_change[81], h_change[82], h_change[83], h_change[84], h_change[85], h_change[86], h_change[87], h_change[88], h_change[89], h_change[90], h_change[91], h_change[92], h_change[93], h_change[94], h_change[95], h_change[96], h_change[97], h_change[98], h_change[99], h_change[100], h_change[101], h_change[102], h_change[103], h_change[104], h_change[105], h_change[106], h_change[107], h_change[108], h_change[109], h_change[110], h_change[111], h_change[112], h_change[113], h_change[114], h_change[115], h_change[116], h_change[117], h_change[118], h_change[119], h_change[120], h_change[121], h_change[122], h_change[123], h_change[124], h_change[125], h_change[126], h_change[127]],
+          10,
+          ...pad(21, "Change entry 3 of 6: "),
+          ...[h_change[128], h_change[129], h_change[130], h_change[131], h_change[132], h_change[133], h_change[134], h_change[135], h_change[136], h_change[137], h_change[138], h_change[139], h_change[140], h_change[141], h_change[142], h_change[143], h_change[144], h_change[145], h_change[146], h_change[147], h_change[148], h_change[149], h_change[150], h_change[151], h_change[152], h_change[153], h_change[154], h_change[155], h_change[156], h_change[157], h_change[158], h_change[159], h_change[160], h_change[161], h_change[162], h_change[163], h_change[164], h_change[165], h_change[166], h_change[167], h_change[168], h_change[169], h_change[170], h_change[171], h_change[172], h_change[173], h_change[174], h_change[175], h_change[176], h_change[177], h_change[178], h_change[179], h_change[180], h_change[181], h_change[182], h_change[183], h_change[184], h_change[185], h_change[186], h_change[187], h_change[188], h_change[189], h_change[190], h_change[191]],
+          10,
+          ...pad(21, "Change entry 4 of 6: "),
+          ...[h_change[192], h_change[193], h_change[194], h_change[195], h_change[196], h_change[197], h_change[198], h_change[199], h_change[200], h_change[201], h_change[202], h_change[203], h_change[204], h_change[205], h_change[206], h_change[207], h_change[208], h_change[209], h_change[210], h_change[211], h_change[212], h_change[213], h_change[214], h_change[215], h_change[216], h_change[217], h_change[218], h_change[219], h_change[220], h_change[221], h_change[222], h_change[223], h_change[224], h_change[225], h_change[226], h_change[227], h_change[228], h_change[229], h_change[230], h_change[231], h_change[232], h_change[233], h_change[234], h_change[235], h_change[236], h_change[237], h_change[238], h_change[239], h_change[240], h_change[241], h_change[242], h_change[243], h_change[244], h_change[245], h_change[246], h_change[247], h_change[248], h_change[249], h_change[250], h_change[251], h_change[252], h_change[253], h_change[254], h_change[255]],
+          10,
+          ...pad(21, "Change entry 5 of 6: "),
+          ...[h_change[256], h_change[257], h_change[258], h_change[259], h_change[260], h_change[261], h_change[262], h_change[263], h_change[264], h_change[265], h_change[266], h_change[267], h_change[268], h_change[269], h_change[270], h_change[271], h_change[272], h_change[273], h_change[274], h_change[275], h_change[276], h_change[277], h_change[278], h_change[279], h_change[280], h_change[281], h_change[282], h_change[283], h_change[284], h_change[285], h_change[286], h_change[287], h_change[288], h_change[289], h_change[290], h_change[291], h_change[292], h_change[293], h_change[294], h_change[295], h_change[296], h_change[297], h_change[298], h_change[299], h_change[300], h_change[301], h_change[302], h_change[303], h_change[304], h_change[305], h_change[306], h_change[307], h_change[308], h_change[309], h_change[310], h_change[311], h_change[312], h_change[313], h_change[314], h_change[315], h_change[316], h_change[317], h_change[318], h_change[319]],
+          10,
+          ...pad(21, "Change entry 6 of 6: "),
+          ...[h_change[320], h_change[321], h_change[322], h_change[323], h_change[324], h_change[325], h_change[326], h_change[327], h_change[328], h_change[329], h_change[330], h_change[331], h_change[332], h_change[333], h_change[334], h_change[335], h_change[336], h_change[337], h_change[338], h_change[339], h_change[340], h_change[341], h_change[342], h_change[343], h_change[344], h_change[345], h_change[346], h_change[347], h_change[348], h_change[349], h_change[350], h_change[351], h_change[352], h_change[353], h_change[354], h_change[355], h_change[356], h_change[357], h_change[358], h_change[359], h_change[360], h_change[361], h_change[362], h_change[363], h_change[364], h_change[365], h_change[366], h_change[367], h_change[368], h_change[369], h_change[370], h_change[371], h_change[372], h_change[373], h_change[374], h_change[375], h_change[376], h_change[377], h_change[378], h_change[379], h_change[380], h_change[381], h_change[382], h_change[383]],
+          10,
+          ...pad(18, "Change entry key: "),
+          ...h_enc_pk,
+          10,
+          ...sol_coin_lines(coin, amount, h_coin_nonce, c)];
+}
+circuit sol_title_withdraw_shielded_to_contract_with_grant(): Vector<64, Uint<8>> {
+  return [...pad(63, "Operation: Withdraw shielded tokens to a contract under a grant"), 10];
+}
+
+// Withdraw shielded tokens to a contract under a grant (grantee role): 1596 bytes.
 export pure circuit sol_message_withdraw_shielded_to_contract_with_grant(
-  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, g: SolGrantShow,
-  hex: Vector<768, Uint<0..16>>
+  self_addr: ContractAddress, key: Bytes<32>, label: Bytes<32>, slot: Uint<8>, issued_at: Uint<64>, nonce_value: Uint<64>, recipient: ContractAddress, color: Bytes<32>, amount: Uint<128>, change_entry: Bytes<192>, enc_pk: Bytes<32>, coin: QualifiedShieldedCoinInfo, a: SolAmountShow, c: SolCoinShow, show: SolShow, g: SolGrantShow, frame: Vector<128, Uint<0..16>>, hex: Vector<640, Uint<0..16>>
 ): Bytes<1596> {
-  const h_account = sol_hex32(self_addr.bytes, [hex[0], hex[1], hex[2], hex[3], hex[4], hex[5], hex[6], hex[7], hex[8], hex[9], hex[10], hex[11], hex[12], hex[13], hex[14], hex[15], hex[16], hex[17], hex[18], hex[19], hex[20], hex[21], hex[22], hex[23], hex[24], hex[25], hex[26], hex[27], hex[28], hex[29], hex[30], hex[31], hex[32], hex[33], hex[34], hex[35], hex[36], hex[37], hex[38], hex[39], hex[40], hex[41], hex[42], hex[43], hex[44], hex[45], hex[46], hex[47], hex[48], hex[49], hex[50], hex[51], hex[52], hex[53], hex[54], hex[55], hex[56], hex[57], hex[58], hex[59], hex[60], hex[61], hex[62], hex[63]]);
-  const h_key = sol_hex32(key, [hex[64], hex[65], hex[66], hex[67], hex[68], hex[69], hex[70], hex[71], hex[72], hex[73], hex[74], hex[75], hex[76], hex[77], hex[78], hex[79], hex[80], hex[81], hex[82], hex[83], hex[84], hex[85], hex[86], hex[87], hex[88], hex[89], hex[90], hex[91], hex[92], hex[93], hex[94], hex[95], hex[96], hex[97], hex[98], hex[99], hex[100], hex[101], hex[102], hex[103], hex[104], hex[105], hex[106], hex[107], hex[108], hex[109], hex[110], hex[111], hex[112], hex[113], hex[114], hex[115], hex[116], hex[117], hex[118], hex[119], hex[120], hex[121], hex[122], hex[123], hex[124], hex[125], hex[126], hex[127]]);
-  const h_color = sol_hex32(color, [hex[128], hex[129], hex[130], hex[131], hex[132], hex[133], hex[134], hex[135], hex[136], hex[137], hex[138], hex[139], hex[140], hex[141], hex[142], hex[143], hex[144], hex[145], hex[146], hex[147], hex[148], hex[149], hex[150], hex[151], hex[152], hex[153], hex[154], hex[155], hex[156], hex[157], hex[158], hex[159], hex[160], hex[161], hex[162], hex[163], hex[164], hex[165], hex[166], hex[167], hex[168], hex[169], hex[170], hex[171], hex[172], hex[173], hex[174], hex[175], hex[176], hex[177], hex[178], hex[179], hex[180], hex[181], hex[182], hex[183], hex[184], hex[185], hex[186], hex[187], hex[188], hex[189], hex[190], hex[191]]);
-  const h_recipient = sol_hex32(recipient.bytes, [hex[192], hex[193], hex[194], hex[195], hex[196], hex[197], hex[198], hex[199], hex[200], hex[201], hex[202], hex[203], hex[204], hex[205], hex[206], hex[207], hex[208], hex[209], hex[210], hex[211], hex[212], hex[213], hex[214], hex[215], hex[216], hex[217], hex[218], hex[219], hex[220], hex[221], hex[222], hex[223], hex[224], hex[225], hex[226], hex[227], hex[228], hex[229], hex[230], hex[231], hex[232], hex[233], hex[234], hex[235], hex[236], hex[237], hex[238], hex[239], hex[240], hex[241], hex[242], hex[243], hex[244], hex[245], hex[246], hex[247], hex[248], hex[249], hex[250], hex[251], hex[252], hex[253], hex[254], hex[255]]);
-  const h_change = sol_hex192(change_entry, [hex[256], hex[257], hex[258], hex[259], hex[260], hex[261], hex[262], hex[263], hex[264], hex[265], hex[266], hex[267], hex[268], hex[269], hex[270], hex[271], hex[272], hex[273], hex[274], hex[275], hex[276], hex[277], hex[278], hex[279], hex[280], hex[281], hex[282], hex[283], hex[284], hex[285], hex[286], hex[287], hex[288], hex[289], hex[290], hex[291], hex[292], hex[293], hex[294], hex[295], hex[296], hex[297], hex[298], hex[299], hex[300], hex[301], hex[302], hex[303], hex[304], hex[305], hex[306], hex[307], hex[308], hex[309], hex[310], hex[311], hex[312], hex[313], hex[314], hex[315], hex[316], hex[317], hex[318], hex[319], hex[320], hex[321], hex[322], hex[323], hex[324], hex[325], hex[326], hex[327], hex[328], hex[329], hex[330], hex[331], hex[332], hex[333], hex[334], hex[335], hex[336], hex[337], hex[338], hex[339], hex[340], hex[341], hex[342], hex[343], hex[344], hex[345], hex[346], hex[347], hex[348], hex[349], hex[350], hex[351], hex[352], hex[353], hex[354], hex[355], hex[356], hex[357], hex[358], hex[359], hex[360], hex[361], hex[362], hex[363], hex[364], hex[365], hex[366], hex[367], hex[368], hex[369], hex[370], hex[371], hex[372], hex[373], hex[374], hex[375], hex[376], hex[377], hex[378], hex[379], hex[380], hex[381], hex[382], hex[383], hex[384], hex[385], hex[386], hex[387], hex[388], hex[389], hex[390], hex[391], hex[392], hex[393], hex[394], hex[395], hex[396], hex[397], hex[398], hex[399], hex[400], hex[401], hex[402], hex[403], hex[404], hex[405], hex[406], hex[407], hex[408], hex[409], hex[410], hex[411], hex[412], hex[413], hex[414], hex[415], hex[416], hex[417], hex[418], hex[419], hex[420], hex[421], hex[422], hex[423], hex[424], hex[425], hex[426], hex[427], hex[428], hex[429], hex[430], hex[431], hex[432], hex[433], hex[434], hex[435], hex[436], hex[437], hex[438], hex[439], hex[440], hex[441], hex[442], hex[443], hex[444], hex[445], hex[446], hex[447], hex[448], hex[449], hex[450], hex[451], hex[452], hex[453], hex[454], hex[455], hex[456], hex[457], hex[458], hex[459], hex[460], hex[461], hex[462], hex[463], hex[464], hex[465], hex[466], hex[467], hex[468], hex[469], hex[470], hex[471], hex[472], hex[473], hex[474], hex[475], hex[476], hex[477], hex[478], hex[479], hex[480], hex[481], hex[482], hex[483], hex[484], hex[485], hex[486], hex[487], hex[488], hex[489], hex[490], hex[491], hex[492], hex[493], hex[494], hex[495], hex[496], hex[497], hex[498], hex[499], hex[500], hex[501], hex[502], hex[503], hex[504], hex[505], hex[506], hex[507], hex[508], hex[509], hex[510], hex[511], hex[512], hex[513], hex[514], hex[515], hex[516], hex[517], hex[518], hex[519], hex[520], hex[521], hex[522], hex[523], hex[524], hex[525], hex[526], hex[527], hex[528], hex[529], hex[530], hex[531], hex[532], hex[533], hex[534], hex[535], hex[536], hex[537], hex[538], hex[539], hex[540], hex[541], hex[542], hex[543], hex[544], hex[545], hex[546], hex[547], hex[548], hex[549], hex[550], hex[551], hex[552], hex[553], hex[554], hex[555], hex[556], hex[557], hex[558], hex[559], hex[560], hex[561], hex[562], hex[563], hex[564], hex[565], hex[566], hex[567], hex[568], hex[569], hex[570], hex[571], hex[572], hex[573], hex[574], hex[575], hex[576], hex[577], hex[578], hex[579], hex[580], hex[581], hex[582], hex[583], hex[584], hex[585], hex[586], hex[587], hex[588], hex[589], hex[590], hex[591], hex[592], hex[593], hex[594], hex[595], hex[596], hex[597], hex[598], hex[599], hex[600], hex[601], hex[602], hex[603], hex[604], hex[605], hex[606], hex[607], hex[608], hex[609], hex[610], hex[611], hex[612], hex[613], hex[614], hex[615], hex[616], hex[617], hex[618], hex[619], hex[620], hex[621], hex[622], hex[623], hex[624], hex[625], hex[626], hex[627], hex[628], hex[629], hex[630], hex[631], hex[632], hex[633], hex[634], hex[635], hex[636], hex[637], hex[638], hex[639]]);
-  const h_enc_pk = sol_hex32(enc_pk, [hex[640], hex[641], hex[642], hex[643], hex[644], hex[645], hex[646], hex[647], hex[648], hex[649], hex[650], hex[651], hex[652], hex[653], hex[654], hex[655], hex[656], hex[657], hex[658], hex[659], hex[660], hex[661], hex[662], hex[663], hex[664], hex[665], hex[666], hex[667], hex[668], hex[669], hex[670], hex[671], hex[672], hex[673], hex[674], hex[675], hex[676], hex[677], hex[678], hex[679], hex[680], hex[681], hex[682], hex[683], hex[684], hex[685], hex[686], hex[687], hex[688], hex[689], hex[690], hex[691], hex[692], hex[693], hex[694], hex[695], hex[696], hex[697], hex[698], hex[699], hex[700], hex[701], hex[702], hex[703]]);
-  const h_coin_nonce = sol_hex32(coin.nonce, [hex[704], hex[705], hex[706], hex[707], hex[708], hex[709], hex[710], hex[711], hex[712], hex[713], hex[714], hex[715], hex[716], hex[717], hex[718], hex[719], hex[720], hex[721], hex[722], hex[723], hex[724], hex[725], hex[726], hex[727], hex[728], hex[729], hex[730], hex[731], hex[732], hex[733], hex[734], hex[735], hex[736], hex[737], hex[738], hex[739], hex[740], hex[741], hex[742], hex[743], hex[744], hex[745], hex[746], hex[747], hex[748], hex[749], hex[750], hex[751], hex[752], hex[753], hex[754], hex[755], hex[756], hex[757], hex[758], hex[759], hex[760], hex[761], hex[762], hex[763], hex[764], hex[765], hex[766], hex[767]]);
-  return Bytes[...sol_first_line(),
-               ...pad(63, "Operation: Withdraw shielded tokens to a contract under a grant"),
-               10,
-               ...sol_grantee_lines(show.site, h_account, h_key),
-               ...sol_amount_lines(h_color, amount, a),
-               ...pad(13, "To contract: "),
-               ...h_recipient,
-               10,
-               ...pad(21, "Change entry 1 of 6: "),
-               ...[h_change[0], h_change[1], h_change[2], h_change[3], h_change[4], h_change[5], h_change[6], h_change[7], h_change[8], h_change[9], h_change[10], h_change[11], h_change[12], h_change[13], h_change[14], h_change[15], h_change[16], h_change[17], h_change[18], h_change[19], h_change[20], h_change[21], h_change[22], h_change[23], h_change[24], h_change[25], h_change[26], h_change[27], h_change[28], h_change[29], h_change[30], h_change[31], h_change[32], h_change[33], h_change[34], h_change[35], h_change[36], h_change[37], h_change[38], h_change[39], h_change[40], h_change[41], h_change[42], h_change[43], h_change[44], h_change[45], h_change[46], h_change[47], h_change[48], h_change[49], h_change[50], h_change[51], h_change[52], h_change[53], h_change[54], h_change[55], h_change[56], h_change[57], h_change[58], h_change[59], h_change[60], h_change[61], h_change[62], h_change[63]],
-               10,
-               ...pad(21, "Change entry 2 of 6: "),
-               ...[h_change[64], h_change[65], h_change[66], h_change[67], h_change[68], h_change[69], h_change[70], h_change[71], h_change[72], h_change[73], h_change[74], h_change[75], h_change[76], h_change[77], h_change[78], h_change[79], h_change[80], h_change[81], h_change[82], h_change[83], h_change[84], h_change[85], h_change[86], h_change[87], h_change[88], h_change[89], h_change[90], h_change[91], h_change[92], h_change[93], h_change[94], h_change[95], h_change[96], h_change[97], h_change[98], h_change[99], h_change[100], h_change[101], h_change[102], h_change[103], h_change[104], h_change[105], h_change[106], h_change[107], h_change[108], h_change[109], h_change[110], h_change[111], h_change[112], h_change[113], h_change[114], h_change[115], h_change[116], h_change[117], h_change[118], h_change[119], h_change[120], h_change[121], h_change[122], h_change[123], h_change[124], h_change[125], h_change[126], h_change[127]],
-               10,
-               ...pad(21, "Change entry 3 of 6: "),
-               ...[h_change[128], h_change[129], h_change[130], h_change[131], h_change[132], h_change[133], h_change[134], h_change[135], h_change[136], h_change[137], h_change[138], h_change[139], h_change[140], h_change[141], h_change[142], h_change[143], h_change[144], h_change[145], h_change[146], h_change[147], h_change[148], h_change[149], h_change[150], h_change[151], h_change[152], h_change[153], h_change[154], h_change[155], h_change[156], h_change[157], h_change[158], h_change[159], h_change[160], h_change[161], h_change[162], h_change[163], h_change[164], h_change[165], h_change[166], h_change[167], h_change[168], h_change[169], h_change[170], h_change[171], h_change[172], h_change[173], h_change[174], h_change[175], h_change[176], h_change[177], h_change[178], h_change[179], h_change[180], h_change[181], h_change[182], h_change[183], h_change[184], h_change[185], h_change[186], h_change[187], h_change[188], h_change[189], h_change[190], h_change[191]],
-               10,
-               ...pad(21, "Change entry 4 of 6: "),
-               ...[h_change[192], h_change[193], h_change[194], h_change[195], h_change[196], h_change[197], h_change[198], h_change[199], h_change[200], h_change[201], h_change[202], h_change[203], h_change[204], h_change[205], h_change[206], h_change[207], h_change[208], h_change[209], h_change[210], h_change[211], h_change[212], h_change[213], h_change[214], h_change[215], h_change[216], h_change[217], h_change[218], h_change[219], h_change[220], h_change[221], h_change[222], h_change[223], h_change[224], h_change[225], h_change[226], h_change[227], h_change[228], h_change[229], h_change[230], h_change[231], h_change[232], h_change[233], h_change[234], h_change[235], h_change[236], h_change[237], h_change[238], h_change[239], h_change[240], h_change[241], h_change[242], h_change[243], h_change[244], h_change[245], h_change[246], h_change[247], h_change[248], h_change[249], h_change[250], h_change[251], h_change[252], h_change[253], h_change[254], h_change[255]],
-               10,
-               ...pad(21, "Change entry 5 of 6: "),
-               ...[h_change[256], h_change[257], h_change[258], h_change[259], h_change[260], h_change[261], h_change[262], h_change[263], h_change[264], h_change[265], h_change[266], h_change[267], h_change[268], h_change[269], h_change[270], h_change[271], h_change[272], h_change[273], h_change[274], h_change[275], h_change[276], h_change[277], h_change[278], h_change[279], h_change[280], h_change[281], h_change[282], h_change[283], h_change[284], h_change[285], h_change[286], h_change[287], h_change[288], h_change[289], h_change[290], h_change[291], h_change[292], h_change[293], h_change[294], h_change[295], h_change[296], h_change[297], h_change[298], h_change[299], h_change[300], h_change[301], h_change[302], h_change[303], h_change[304], h_change[305], h_change[306], h_change[307], h_change[308], h_change[309], h_change[310], h_change[311], h_change[312], h_change[313], h_change[314], h_change[315], h_change[316], h_change[317], h_change[318], h_change[319]],
-               10,
-               ...pad(21, "Change entry 6 of 6: "),
-               ...[h_change[320], h_change[321], h_change[322], h_change[323], h_change[324], h_change[325], h_change[326], h_change[327], h_change[328], h_change[329], h_change[330], h_change[331], h_change[332], h_change[333], h_change[334], h_change[335], h_change[336], h_change[337], h_change[338], h_change[339], h_change[340], h_change[341], h_change[342], h_change[343], h_change[344], h_change[345], h_change[346], h_change[347], h_change[348], h_change[349], h_change[350], h_change[351], h_change[352], h_change[353], h_change[354], h_change[355], h_change[356], h_change[357], h_change[358], h_change[359], h_change[360], h_change[361], h_change[362], h_change[363], h_change[364], h_change[365], h_change[366], h_change[367], h_change[368], h_change[369], h_change[370], h_change[371], h_change[372], h_change[373], h_change[374], h_change[375], h_change[376], h_change[377], h_change[378], h_change[379], h_change[380], h_change[381], h_change[382], h_change[383]],
-               10,
-               ...pad(18, "Change entry key: "),
-               ...h_enc_pk,
-               10,
-               ...sol_coin_lines(coin, amount, h_coin_nonce, c),
-               ...sol_grant_tail(label, slot, issued_at, nonce_value, g, show.nonce)];
+  return sol_grantee_message<64, 1130, 1596>(self_addr, key, label, slot, issued_at, nonce_value, sol_title_withdraw_shielded_to_contract_with_grant(), sol_body_withdraw_shielded_to_contract_with_grant(recipient, color, amount, change_entry, enc_pk, coin, a, c, hex), show, g, frame);
 }

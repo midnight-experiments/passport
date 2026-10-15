@@ -353,12 +353,13 @@ export const solScopeShow = (o: { maxCoinValue: bigint; perCallCap: bigint; cap:
   expires: digitsOf(o.expiresAt, 20), window: digitsOf(o.windowLen, 20), window_cap: digitsOf(o.windowCap, 39),
 });
 
-// ── The hex display input: nibbles of every value a message shows in hex ────
+// ── The hex display inputs ───────────────────────────────────────────────
 //
-// In the order of the layout table (SOL-ED25519.md): the account, the signing
-// key, then the operation's values; each value in its stored byte order
-// (curve coordinates little-endian; Field values as their canonical 32-byte
-// little-endian encoding), each byte as its high then low nibble.
+// `frame`: the nibbles of the account and the signing key (the seam renders
+// them). `hex`: the nibbles of every other value the message shows in hex, in
+// the order of the layout table (SOL-ED25519.md), each value in its stored
+// byte order (curve coordinates little-endian; Field values as their
+// canonical 32-byte little-endian encoding), each byte high nibble first.
 
 const le32 = (v: bigint) => { const o = new Uint8Array(32); let x = v; for (let i = 0; i < 32; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } if (x) throw new Error('sol message: value above 32 bytes'); return o; };
 /** The nibbles of byte strings, concatenated (high nibble first). */
@@ -367,9 +368,11 @@ export function nibblesOf(...values: Uint8Array[]): bigint[] {
   for (const v of values) for (const b of v) out.push(BigInt(b >> 4), BigInt(b & 15));
   return out;
 }
-/** The values a device-role message shows in hex, in its layout order. */
-export function solDeviceHexValues(c: { account: Uint8Array; key: Uint8Array }, o: SolDeviceOperation): Uint8Array[] {
-  const head = [c.account, c.key];
+/** The frame's nibbles: the account and the signing key. */
+export const solFrameNibbles = (account: Uint8Array, key: Uint8Array) => nibblesOf(account, key);
+/** The other values a device-role message shows in hex, in its layout order. */
+export function solDeviceHexValues(o: SolDeviceOperation): Uint8Array[] {
+  const head: Uint8Array[] = [];
   const t = (x: SolTargetFields) => [x.address ?? new Uint8Array(20), x.a ?? new Uint8Array(32), x.b ?? new Uint8Array(32), x.c ?? new Uint8Array(32)];
   const g = (x: SolGranteeFields) => [x.address ?? new Uint8Array(20), x.a ?? new Uint8Array(32), x.b ?? new Uint8Array(32), x.originHash ?? new Uint8Array(32)];
   switch (o.op) {
@@ -388,10 +391,10 @@ export function solDeviceHexValues(c: { account: Uint8Array; key: Uint8Array }, 
     case 'publish_recovery_session': return [...head, le32(o.recoveryPk.x), le32(o.recoveryPk.y), o.sessionNonce, ...o.phi.map(le32), o.wrap];
   }
 }
-/** The values a grantee-role message shows in hex, in its layout order. */
-export function solGranteeHexValues(c: { account: Uint8Array; key: Uint8Array }, o: SolGranteeOperation): Uint8Array[] {
-  if (o.op === 'withdraw_unshielded_with_grant') return [c.account, c.key, o.amount.color, o.recipient];
-  return [c.account, c.key, o.amount.color, o.recipient, o.changeEntry, o.encPk, o.coin.nonce];
+/** The other values a grantee-role message shows in hex, in its layout order. */
+export function solGranteeHexValues(o: SolGranteeOperation): Uint8Array[] {
+  if (o.op === 'withdraw_unshielded_with_grant') return [o.amount.color, o.recipient];
+  return [o.amount.color, o.recipient, o.changeEntry, o.encPk, o.coin.nonce];
 }
 
 /** The circuit's SolTarget for a device target (unused fields zero). */

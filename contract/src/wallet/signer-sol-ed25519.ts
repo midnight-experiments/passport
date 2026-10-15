@@ -26,7 +26,7 @@ import { pureCircuits } from './contract.js';
 import { base58Encode, parseSolanaPublicKey, solDescriptor, type SolDescriptor } from './descriptors.js';
 import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind } from './blind.js';
 import {
-  assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
+  assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solFrameNibbles, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
   solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solTargetArg,
   solTargetShow, type SolDeviceOperation, type SolGranteeOperation,
 } from './sol-ed25519-message.js';
@@ -334,34 +334,35 @@ export function solDeviceMessageCircuit(key: Uint8Array, ctx: SolCallContext, si
   const pc: any = pureCircuits;
   const self = { bytes: ctx.contractAddress };
   const show = solShow(site, ctx.authNonce);
-  const hex = nibblesOf(...solDeviceHexValues({ account: ctx.contractAddress, key }, o));
+  const frame = solFrameNibbles(ctx.contractAddress, key);
+  const hex = nibblesOf(...solDeviceHexValues(o));
   const base = [self, key, ctx.authNonce];
   let shows: unknown[];
   let bytes: Uint8Array;
   switch (o.op) {
-    case 'rotate_enc_key': shows = [show]; bytes = pc.sol_message_rotate_enc_key(...base, o.newKey, show, hex); break;
-    case 'append_inbox': shows = [show]; bytes = pc.sol_message_append_inbox(...base, o.entry, show, hex); break;
+    case 'rotate_enc_key': shows = [show]; bytes = pc.sol_message_rotate_enc_key(...base, o.newKey, show, frame, hex); break;
+    case 'append_inbox': shows = [show]; bytes = pc.sol_message_append_inbox(...base, o.entry, show, frame, hex); break;
     case 'withdraw_unshielded': {
       const a = solAmountShow(o.amount); shows = [a, show];
-      bytes = pc.sol_message_withdraw_unshielded(...base, o.amount.color, o.amount.amount, { bytes: o.recipient }, a, show, hex); break;
+      bytes = pc.sol_message_withdraw_unshielded(...base, o.amount.color, o.amount.amount, { bytes: o.recipient }, a, show, frame, hex); break;
     }
     case 'withdraw_shielded': case 'withdraw_shielded_to_contract': {
       const a = solAmountShow(o.amount), c = solCoinShow(o.coin, o.amount.amount); shows = [a, c, show];
       const f = o.op === 'withdraw_shielded' ? pc.sol_message_withdraw_shielded : pc.sol_message_withdraw_shielded_to_contract;
-      bytes = f(...base, { bytes: o.recipient }, o.amount.color, o.amount.amount, o.coin, a, c, show, hex); break;
+      bytes = f(...base, { bytes: o.recipient }, o.amount.color, o.amount.amount, o.coin, a, c, show, frame, hex); break;
     }
     case 'add_device': {
       const ts = solTargetShow(o.target); shows = [ts, show];
-      bytes = pc.sol_message_add_device(...base, solTargetArg(o.target), ts, show, hex); break;
+      bytes = pc.sol_message_add_device(...base, solTargetArg(o.target), ts, show, frame, hex); break;
     }
     case 'remove_device': {
       if (o.literal) {
         const ts = solTargetShow({ tag: '' }); shows = [ts, show];
-        bytes = pc.sol_message_remove_device(...base, true, solTargetArg({ tag: '' }), 0n, 0n, (o as Extract<SolDeviceOperation, { literal: true }>).entry, ts, show, hex);
+        bytes = pc.sol_message_remove_device(...base, true, solTargetArg({ tag: '' }), 0n, 0n, (o as Extract<SolDeviceOperation, { literal: true }>).entry, ts, show, frame, hex);
       } else {
         const d = o as Extract<SolDeviceOperation, { literal: false }>;
         const ts = solTargetShow(d.target, d.counter, d.epoch); shows = [ts, show];
-        bytes = pc.sol_message_remove_device(...base, false, solTargetArg(d.target), d.counter, d.epoch, new Uint8Array(32), ts, show, hex);
+        bytes = pc.sol_message_remove_device(...base, false, solTargetArg(d.target), d.counter, d.epoch, new Uint8Array(32), ts, show, frame, hex);
       }
       break;
     }
@@ -369,36 +370,38 @@ export function solDeviceMessageCircuit(key: Uint8Array, ctx: SolCallContext, si
       const gs = solGranteeShow(o.grantee), ss = solScopeShow(o); shows = [gs, ss, show];
       bytes = pc.sol_message_issue_grant(...base, solGranteeArg(o.grantee), o.opWithdrawUnshielded, o.opWithdrawShielded,
         o.opWithdrawShieldedToContract, o.read, o.color, o.recipientKind, o.recipient, o.maxCoinValue, o.perCallCap, o.cap, o.expiresAt,
-        o.rpIdHash, o.readPk, o.windowLen, o.windowCap, { is_some: o.caller !== null, value: { bytes: o.caller ?? new Uint8Array(32) } }, gs, ss, show, hex);
+        o.rpIdHash, o.readPk, o.windowLen, o.windowCap, { is_some: o.caller !== null, value: { bytes: o.caller ?? new Uint8Array(32) } }, gs, ss, show, frame, hex);
       break;
     }
     case 'revoke_grant': {
       const gs = solGranteeShow(o.grantee); shows = [gs, show];
-      bytes = pc.sol_message_revoke_grant(...base, solGranteeArg(o.grantee), gs, show, hex); break;
+      bytes = pc.sol_message_revoke_grant(...base, solGranteeArg(o.grantee), gs, show, frame, hex); break;
     }
-    case 'revoke_all_grants': shows = [show]; bytes = pc.sol_message_revoke_all_grants(...base, show, hex); break;
+    case 'revoke_all_grants': shows = [show]; bytes = pc.sol_message_revoke_all_grants(...base, show, frame); break;
     case 'publish_recovery_session': {
       const d = digitsOf(o.phiLen, 3); shows = [d, show];
-      bytes = pc.sol_message_publish_recovery_session(...base, o.recoveryPk, o.sessionNonce, ...o.phi, o.phiLen, o.wrap, d, show, hex); break;
+      bytes = pc.sol_message_publish_recovery_session(...base, o.recoveryPk, o.sessionNonce, ...o.phi, o.phiLen, o.wrap, d, show, frame, hex); break;
     }
-    case 'recover_cancel': shows = [show]; bytes = pc.sol_message_recover_cancel(...base, show, hex); break;
+    case 'recover_cancel': shows = [show]; bytes = pc.sol_message_recover_cancel(...base, show, frame); break;
   }
-  return { bytes, showArgs: [...shows, hex] };
+  const noHex = o.op === 'revoke_all_grants' || o.op === 'recover_cancel';
+  return { bytes, showArgs: noHex ? [...shows, frame] : [...shows, frame, hex] };
 }
 
 /** The message of a grantee-role operation as the CONTRACT renders it. */
 export function solGranteeMessageCircuit(key: Uint8Array, ctx: SolGrantCallContext, site: string, o: SolGranteeOperation): { bytes: Uint8Array; showArgs: unknown[] } {
   const pc: any = pureCircuits;
   const show = solShow(site, ctx.grantNonce), g = solGrantShow(ctx.label, ctx.slot, ctx.issuedAt);
-  const hex = nibblesOf(...solGranteeHexValues({ account: ctx.contractAddress, key }, o));
+  const frame = solFrameNibbles(ctx.contractAddress, key);
+  const hex = nibblesOf(...solGranteeHexValues(o));
   const base = [{ bytes: ctx.contractAddress }, key, labelBytes(ctx.label), ctx.slot, ctx.issuedAt, ctx.grantNonce];
   const a = solAmountShow(o.amount);
   if (o.op === 'withdraw_unshielded_with_grant') {
-    return { showArgs: [a, show, g, hex], bytes: pc.sol_message_withdraw_unshielded_with_grant(...base, o.amount.color, o.amount.amount, { bytes: o.recipient }, a, show, g, hex) };
+    return { showArgs: [a, show, g, frame, hex], bytes: pc.sol_message_withdraw_unshielded_with_grant(...base, o.amount.color, o.amount.amount, { bytes: o.recipient }, a, show, g, frame, hex) };
   }
   const c = solCoinShow(o.coin, o.amount.amount);
   const f = o.op === 'withdraw_shielded_with_grant' ? pc.sol_message_withdraw_shielded_with_grant : pc.sol_message_withdraw_shielded_to_contract_with_grant;
-  return { showArgs: [a, c, show, g, hex], bytes: f(...base, { bytes: o.recipient }, o.amount.color, o.amount.amount, o.changeEntry, o.encPk, o.coin, a, c, show, g, hex) };
+  return { showArgs: [a, c, show, g, frame, hex], bytes: f(...base, { bytes: o.recipient }, o.amount.color, o.amount.amount, o.changeEntry, o.encPk, o.coin, a, c, show, g, frame, hex) };
 }
 
 const asText = (b: Uint8Array) => String.fromCharCode(...b);
