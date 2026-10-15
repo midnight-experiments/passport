@@ -147,7 +147,7 @@ for (const [scheme, g, idOf] of grantees) {
   const sc = baseScope({ read: true, readPk, rpIdHash: scheme === 'p256' ? pass.policy.rp_id_hash : Z32 });
   const nonce = sim.L().auth_nonce;
   const a = await sim.auth({ op: 'issue_grant', grantee: g, ...sc });
-  ok(G1, `${scheme}: the message (1673 bytes) shows the consequence and the grantee scheme`, a.message.length === 1673
+  ok(G1, `${scheme}: the message (1726 bytes) shows the consequence and the grantee scheme`, a.message.length === 1726
     && a.text.includes('Consequence: lets the grantee key below spend from this account within these limits.\n') && a.text.includes(`Grantee scheme: ${DESCRIPTOR_TAGS['grant-id'][scheme as 'k256']}`));
   await sim.call('issue_grant_with_sol_ed25519', ...issueArgs(g, sc, rnd(), a));
   const id = idOf();
@@ -229,7 +229,7 @@ const unsh = async (s: Sim, n: bigint, to: Uint8Array, spent: bigint, a?: SolEd2
 {
   const before = twinSim.L();
   const a1 = await authoriseSolGrantee(T.device, gctx(twinSim), SITE, { op: 'withdraw_unshielded_with_grant', amount: amt(200n), recipient: pin });
-  ok(G4, 'the grantee message (746 bytes) shows the grant label, slot, issued-at nonce and use nonce', a1.message.length === 746
+  ok(G4, 'the grantee message (762 bytes) shows the grant label, slot, issued-at nonce and use nonce', a1.message.length === 762
     && a1.text.includes('Role: grantee of a scoped grant\n') && a1.text.includes('Grant label: Example dApp') && a1.text.includes('Grant use nonce: 0'));
   await unsh(twinSim, 200n, pin, 0n, a1);
   const after = twinSim.L();

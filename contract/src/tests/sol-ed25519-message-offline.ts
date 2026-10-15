@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { pureCircuits } from '../wallet/contract.js';
+import { magnitudeText, NEVER_TEXT, NOT_APPLICABLE_TEXT } from '../wallet/rendering.js';
 import { COORDINATE_DISPLAY_ORDER, coordinateHex } from '../wallet/descriptors.js';
 import { solDeviceMessageCircuit, solGranteeMessageCircuit } from '../wallet/signer-sol-ed25519.js';
 import {
@@ -107,6 +108,8 @@ TARGETS.forEach((t) => {
   devOps.push([`add_device ${t.tag}`, { op: 'add_device', target: t }]);
   devOps.push([`remove_device ${t.tag}`, { op: 'remove_device', literal: false, target: t, counter: 4n, epoch: 1n }]);
 });
+// Q43: a passkey target whose RP hash is all zero shows "not applicable" in the device block.
+devOps.push(['add_device passkey with an all-zero RP hash (Q43 word)', { op: 'add_device', target: { ...TARGETS[4], c: new Uint8Array(32) } }]);
 devOps.push(['remove_device max counter/epoch', { op: 'remove_device', literal: false, target: TARGETS[2], counter: MAX64, epoch: 0xffffffffn }]);
 devOps.push(['remove_device literal', { op: 'remove_device', literal: true, entry: det('lit', 32) }]);
 GRANTEES.forEach((g, i) => {
@@ -204,7 +207,7 @@ const LINE_STARTS = [
   'Signing envelope: ', 'Passkey key x: ', 'Passkey key y: ', 'Passkey origin: ', 'Passkey RP (hash): ', 'Device use counter: ', 'Device epoch: ',
   'Removes a device this wallet cannot identify', 'Device entry: ', 'Grantee scheme: ', 'Grantee label: ', 'Grantee site label (hash): ',
   'Grantee slot: ', 'May withdraw unshielded: ', 'May withdraw shielded: ', 'May withdraw shielded to a contract: ', 'May read the inbox: ',
-  'Recipient kind: ', 'Recipient: ', 'Max coin value: ', 'Per-call cap: ', 'Total cap: ', 'Expires at (block time, seconds; 0 = never): ',
+  'Recipient kind: ', 'Recipient: ', 'Max coin value: ', 'Per-call cap: ', 'Total cap: ', 'Expires at (block time, seconds): ',
   'Inbox read key: ', 'Window length: ', 'Window cap: ', 'Caller restricted to a contract: ', 'Caller: ', 'Recovery key x: ', 'Recovery key y: ',
   'Session nonce: ', 'Backup vector value ', 'Backup vector length: ', 'Key wrap part ', 'Change entry ', 'Grant label: ', 'Grant slot: ',
   'Grant issued at nonce: ', 'Grant use nonce: ',
@@ -308,7 +311,7 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   const asc = (s: string, w: number) => [...Buffer.from(s.padEnd(w, ' '), 'ascii')].map(BigInt);
   const site = (s: string) => { const o = new Array(32).fill(0n); [...Buffer.from(s, 'latin1')].forEach((c, i) => { if (i < 32) o[i] = BigInt(c); }); return o; };
   const base = solShow(ctx.site, ctx.nonce);
-  ok(G, 'positive control: the honest inputs render', run(base, good).length === 620);
+  ok(G, 'positive control: the honest inputs render', run(base, good).length === 636);
   const bad: [string, any, any, bigint[] | undefined, RegExp, bigint[]?][] = [
     ['amount digits of another value', base, { ...good, units: asc('1000001', 39) }, undefined, /digits do not match/],
     ['amount with a leading zero', base, { ...good, units: asc('01000000', 39) }, undefined, /leading zero|digits do not match/],
@@ -363,6 +366,43 @@ function parsesAsTransaction(b: Uint8Array): boolean {
       solShow(c0.site, c0.nonce), nibblesOf(c0.account, c0.key), nibblesOf(AMOUNTS[0].color, det('x', 32), coin.nonce)));
     refused(G, 'withdrawal above the spent coin: renderer', 'client', /above the spent coin/, () => solDeviceMessageText(c0, { op: 'withdraw_shielded', amount: AMOUNTS[0], recipient: det('x', 32), coin }));
   }
+}
+
+// ── 6. Q43 = A': magnitudes and exact words (the base's rendering) ──────────
+{
+  const G = '6 Q43 magnitudes and words';
+  const MAG = /^(Amount \(base units\): |Spent coin value: |Change back to this account: |Max coin value: |Per-call cap: |Total cap: |Window cap: )(.{13}) = ([0-9]+) *$/;
+  let lines = 0, good = true, oldForm = 0;
+  for (const c of corpus) {
+    for (const line of c.text.split('\n')) {
+      const m = MAG.exec(line);
+      if (m) { lines++; if (m[2] !== magnitudeText(BigInt(m[3])).padEnd(13, ' ') || line.length !== m[1].length + 13 + 3 + 39) { good = false; ok(G, `magnitude line in ${c.name}`, false, JSON.stringify(line)); } }
+      else if (/^(Amount \(base units\)|Spent coin value|Change back to this account|Max coin value|Per-call cap|Total cap|Window cap): /.test(line)) { oldForm++; ok(G, `amount line without a magnitude in ${c.name}`, false, JSON.stringify(line)); }
+    }
+  }
+  ok(G, `every amount and cap line shows "<magnitude 13> = <base units 39>" with the base's magnitude (${lines} lines)`, good && oldForm === 0 && lines > 0);
+  const show = (v: bigint) => magnitudeText(v);
+  ok(G, 'edge magnitudes: 2^128 - 1 and 2^128 - 2 read "~3.40 x 10^38", 0 reads "0", 5 reads "~5.00 x 10^0", 999 "~9.99 x 10^2", 10^37 "~1.00 x 10^37"',
+    show(MAX128) === '~3.40 x 10^38' && show(MAX128 - 1n) === '~3.40 x 10^38' && show(0n) === '0' && show(5n) === '~5.00 x 10^0' && show(999n) === '~9.99 x 10^2' && show(10n ** 37n) === '~1.00 x 10^37');
+  const issue = corpus.filter((c) => c.op === 'issue_grant');
+  const expiryOf = (t: string) => /\nExpires at \(block time, seconds\): (.{20})\n/.exec(t)?.[1];
+  ok(G, 'issue_grant: an expiry of 0 reads "never", every other expiry its seconds (the label no longer carries "; 0 = never")',
+    issue.length === 5 && expiryOf(issue[0].text) === NEVER_TEXT.padEnd(20) && expiryOf(issue[4].text) === NEVER_TEXT.padEnd(20)
+    && expiryOf(issue[1].text) === '1800000000'.padEnd(20) && expiryOf(issue[3].text) === '1'.padEnd(20) && issue.every((c) => !c.text.includes('0 = never')));
+  const rpOf = (t: string) => /\nPasskey RP \(hash\): (.{64})\n/.exec(t)?.[1];
+  ok(G, 'issue_grant: an all-zero passkey RP hash reads "not applicable"; a passkey grantee\'s hash its 64 hex digits',
+    issue.slice(0, 4).every((c) => rpOf(c.text) === NOT_APPLICABLE_TEXT.padEnd(64)) && rpOf(issue[4].text) === hex(det('rph', 32)));
+  const addPk = corpus.find((c) => c.name === 'add_device midnight:account:device:r1:v2')!, addZero = corpus.find((c) => c.name.startsWith('add_device passkey with an all-zero RP hash'))!;
+  ok(G, 'device block: a passkey target shows its RP hash in hex, and "not applicable" for an all-zero one (same 705-byte layout)',
+    rpOf(addPk.text) === hex(det('rp', 32)) && rpOf(addZero.text) === NOT_APPLICABLE_TEXT.padEnd(64) && addZero.text.length === 705 && addPk.text.length === 705);
+  // the magnitude has no input of its own: digit texts that would shift it are refused by the digit checks (group 4: leading zero, right-aligned, another value)
+  const ctx = devCtx(1), a = { ...AMOUNTS[0], amount: 10n ** 37n };
+  const runA = (units: bigint[]) => pc.sol_message_withdraw_unshielded({ bytes: ctx.account }, ctx.key, ctx.nonce, a.color, a.amount, { bytes: det('r', 32) },
+    { ...solAmountShow(a), units }, solShow(ctx.site, ctx.nonce), nibblesOf(ctx.account, ctx.key), nibblesOf(a.color, det('r', 32)));
+  const asc = (t: string) => [...Buffer.from(t.padEnd(39, ' '), 'ascii')].map(BigInt);
+  ok(G, 'positive control: 10^37 renders "~1.00 x 10^37" in the circuit', Buffer.from(runA(asc((10n ** 37n).toString()))).toString('latin1').includes('Amount (base units): ~1.00 x 10^37 = 1' + '0'.repeat(37)));
+  refused(G, 'a leading zero (would show 10^37 as "0") refused by the digit check', 'runtime', /leading zero/, () => runA(asc('0' + (10n ** 37n).toString())));
+  refused(G, 'a digit after the padding (would shift the exponent) refused by the digit check', 'runtime', /not a left-aligned decimal|digits do not match/, () => runA(asc('1' + '0'.repeat(36) + ' 0')));
 }
 
 // ── 5. The frozen corpus ────────────────────────────────────────────────────
