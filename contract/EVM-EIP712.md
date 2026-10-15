@@ -9,7 +9,7 @@ An ordinary Ethereum account, for example MetaMask, acts as a Passport device or
 | Circuits | `contracts/account-evm-eip712.compact` (the arm), `contracts/modules/EvmEip712.compact` (the codec) |
 | Client | `src/wallet/signer-evm-eip712.ts` (wallet, device, blind, roster), `src/wallet/evm-eip712-codec.ts` (typed data) |
 | Frozen vectors | `src/tests/vectors/evm-eip712-v2.json`: 53 positive and 14 negative vectors, hashes computed by ethers 6.17.0 |
-| Tests | `src/tests/evm-eip712-offline.ts` (`npm run test:evm_eip712-offline`), `src/tests/evm-eip712-ethers.ts` (needs ethers, see section 8), `src/tests/evm-eip712-prover.ts` (constraint-level negatives) |
+| Tests | `src/tests/evm-eip712-offline.ts`, `src/tests/evm-eip712-grants-offline.ts` and `src/tests/evm-eip712-recovery-sim.ts` (all three: `npm run test:evm_eip712-offline`), `src/tests/evm-eip712-ethers.ts` (needs ethers, see section 8), `src/tests/evm-eip712-prover.ts` (constraint-level negatives) |
 
 ## 1. Identity
 
@@ -166,7 +166,7 @@ Ledger-pinned private openings are not shown: the signer's own blind and use cou
 - the passkey origin;
 - the 32-byte Solana key (shown as hex; the client shows the base58 form beside it).
 
-**Shown only**: `k256`, `jubjub` and passkey public keys.
+**Shown only**: `k256`, `jubjub` and passkey public keys, and the recovery material of `PublishRecoverySession` (the new recovery key, the session identifier, the phi values and the wrap). The material comes from the client's own guardian ceremony; that it is the intended guardians' is a client obligation, not something the user can check by eye (the Q18 residual, section 12).
 
 **Length bound per layout**:
 
@@ -289,5 +289,37 @@ Built so far:
 | `withdraw_unshielded_with_grant_evm_eip712` | 18 | 137,116 | 3,321 B | 570.5 MB | |
 | `withdraw_shielded_with_grant_evm_eip712` | 18 | 179,620 | 3,321 B | 570.5 MB | |
 | `withdraw_shielded_to_contract_with_grant_evm_eip712` | 18 | 185,343 | 3,321 B | 570.5 MB | |
+| `publish_recovery_session_with_evm_eip712` | 17 | 118,341 | 3,465 B | 297.8 MB | prove ≈ 12–14 s; prove + submit ≈ 36 s |
+| `recover_cancel_with_evm_eip712` | 17 | 99,158 | 3,465 B | 297.8 MB | prove ≈ 11–13 s; prove + submit ≈ 36 s |
 
-Moving the frame into the seam (G1E-1) changed no row count. Every verifier key is 3,321 bytes. Proving times go into the per-circuit report at S10.
+Moving the frame into the seam (G1E-1) changed no row count. The verifier keys are 3,321 bytes, except the two recovery circuits' (3,465 bytes). `publish_recovery_session` came in 12 rows above its S3E spike. Proving times go into the per-circuit report at S10.
+
+## 12. Recovery
+
+Two device-gated circuits use upstream's shared recovery chips through the seam:
+
+- `publish_recovery_session_with_evm_eip712(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap, auth)` runs `do_publish_recovery_session`;
+- `recover_cancel_with_evm_eip712(auth)` runs `do_recover_cancel`.
+
+The recovery gate (`recover_submit`) and finalisation (`recover_finalise`) have no arm. The gate is opened by the recovery secret and the successor's co-signature, and finalisation is permissionless after the veto window.
+
+**What the session approval shows** (FR-004, FR-023). `PublishRecoverySession` carries the fixed line "Sets this account's recovery key". It also carries every operand in full:
+
+- the new recovery key's JubJub coordinates (`recoveryKeyX`, `recoveryKeyY`);
+- the four phi values (`phi1`…`phi4`; unused slots are shown as zero);
+- the session identifier, `phiLength`, and the 64-byte `wrap` as `bytes`.
+
+Coordinates and phi values are 32 bytes little-endian each, as the contract encodes them (Q29). The circuit recomputes the digest from exactly the values it then stores. The test `evm-eip712-recovery-sim.ts` checks that the stored recovery key, session identifier, phi values and wrap equal the shown ones. `CancelRecovery` is the bare frame (`account`, `device`, `authNonce`). Its type hash keeps it apart from `RevokeAllGrants`, which has the same members.
+
+**The shared chip's rules apply as on every arm**, under a valid signature:
+
+- no session while a recovery is pending;
+- a phi length of 1 to 4, with unused slots zero;
+- a non-zero, fresh session identifier;
+- a fresh recovery commitment that is not the identity and not of small order;
+- nothing to cancel is refused.
+
+The client facade (`evmEip712RecoverySession`) refuses the same values before the wallet is asked to sign.
+
+**Finalisation retires every `evm_eip712` device** (upstream #183). `recover_finalise` clears the device set before it installs the successor's entry. Every old entry is gone afterwards, including an `evm_eip712` entry that an upstream arm's raw `add_device` planted at `device_epoch + 1` before the recovery (README erratum 7). That plant equals the planted device's entry at the new epoch and counter 0, so the bump alone would have left it live. After finalisation it is refused together with every other old device: in the simulator, at the proof server (with the generated JavaScript's checks bypassed), and on the shared stack against the finalised account's state (refused before submission by the generated JavaScript). This arm's own `add_device` cannot plant such an entry (section 9).
+
