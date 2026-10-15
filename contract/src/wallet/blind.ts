@@ -1,5 +1,5 @@
-// The blind of a readable device — the request message and the canonical
-// signature forms.
+// The blind of a readable device or grantee — the request messages and the
+// canonical signature forms.
 //
 // A readable arm's device entries and grant ids bind a per-account secret,
 // the BLIND, so that a public wallet identity (an Ethereum address, a Solana
@@ -7,11 +7,16 @@
 //
 //   blind = SHA-256(pad32(blind tag) || canonical signature)
 //
-// The signature is the wallet's own, over the readable request message built
+// The signature is the wallet's own, over a readable request message built
 // here. The wallet signs deterministically (RFC 6979 ECDSA, RFC 8032 Ed25519),
-// so the blind can be derived again from the wallet alone: a restored client
-// derives blind_0, blind_1, ... for account indexes 0, 1, ... and finds its
-// accounts by testing entries. The message:
+// so the blind can be derived again from the wallet alone. There are two
+// requests, signed under the same blind tag; they differ from their first
+// line on, so a wallet's two kinds of blind are never equal.
+//
+// The DEVICE request (blindMessage) gives the blind of a device of the
+// wallet's own Passport account. A restored client derives blind_0, blind_1,
+// ... for account indexes 0, 1, ... and finds its accounts by testing
+// entries. The message:
 //
 //   - names Midnight Passport, the network, the wallet identity, and the
 //     account index, so that one signature reveals one account's blind on one
@@ -20,6 +25,23 @@
 //   - says what the signature reveals and that it authorises nothing. No
 //     circuit accepts it: an arm's authorisation messages have their own,
 //     different first line (and on EVM another signing envelope).
+//
+// The GRANTEE request (granteeBlindMessage) gives the blind of the wallet as
+// a grantee of another Passport account, the issuing account. The issuer must
+// know a grantee's blind: it derives the grant id and is shown in the
+// issuer's IssueGrant and RevokeGrant approvals. A grantee therefore never
+// uses a device blind, which would let the issuer find the wallet's own
+// account and recognise every call it makes there (FR-013; AA 00067 audit
+// G2(E), G2E-3). The message:
+//
+//   - names Midnight Passport, the role "grantee", the network, the wallet
+//     identity, and the issuing account's full 32-byte address (it exists at
+//     grant time), so that each issuing account gets its own blind, and no
+//     issuer learns a blind another issuer holds;
+//   - has no account index: a restored client derives the grantee blind
+//     again from the wallet and the issuing account's address;
+//   - says that the issuing account's owner learns it, what it reveals, and
+//     that it authorises nothing.
 //
 // The canonical forms make the blind independent of signature malleability:
 // EVM signatures are reduced to low-S r || s (big-endian, 32 bytes each, the
@@ -36,7 +58,7 @@ import { BLIND_TAGS, padTag, evmChecksumAddress, base58Encode, parseSolanaPublic
 
 export type BlindScheme = 'evm_eip712' | 'sol_ed25519';
 
-/** The request message's format version, named on its first line. */
+/** The device request message's format version, named on its first line. */
 export const BLIND_MESSAGE_VERSION = 1;
 
 /** Network names: lower-case letters, digits, and hyphens (for example
@@ -55,22 +77,29 @@ export interface BlindRequest {
   accountIndex: bigint | number;
 }
 
-/** The readable request message (ASCII, lines separated by LF, no trailing
- *  newline). Deterministic: equal requests give equal bytes. */
+function checkNetwork(network: string): void {
+  if (!NETWORK.test(network)) throw new Error('blind: the network name is lower-case letters, digits, and hyphens');
+}
+
+/** The wallet line's value: the EIP-55 address, or the base58 Ed25519 key. */
+function walletText(scheme: BlindScheme, identity: Uint8Array): string {
+  if (scheme === 'evm_eip712') {
+    if (identity.length !== 20 || identity.every((b) => b === 0)) throw new Error('blind: an Ethereum address is 20 bytes, not zero');
+    return `Ethereum address ${evmChecksumAddress(identity)}`;
+  }
+  if (scheme === 'sol_ed25519') return `Solana public key ${base58Encode(parseSolanaPublicKey(identity))}`;
+  throw new Error('blind: unknown scheme');
+}
+
+/** The DEVICE request message (ASCII, lines separated by LF, no trailing
+ *  newline). Deterministic: equal requests give equal bytes. A grantee never
+ *  signs it: see granteeBlindMessage. */
 export function blindMessage(req: BlindRequest): string {
-  if (!NETWORK.test(req.network)) throw new Error('blind: the network name is lower-case letters, digits, and hyphens');
+  checkNetwork(req.network);
   if (typeof req.accountIndex === 'number' && !Number.isSafeInteger(req.accountIndex)) throw new Error('blind: the account index is an integer');
   const index = BigInt(req.accountIndex);
   if (index < 0n || index > MAX_ACCOUNT_INDEX) throw new Error('blind: the account index is 0 to 4294967295');
-  let wallet: string;
-  if (req.scheme === 'evm_eip712') {
-    if (req.identity.length !== 20 || req.identity.every((b) => b === 0)) throw new Error('blind: an Ethereum address is 20 bytes, not zero');
-    wallet = `Ethereum address ${evmChecksumAddress(req.identity)}`;
-  } else if (req.scheme === 'sol_ed25519') {
-    wallet = `Solana public key ${base58Encode(parseSolanaPublicKey(req.identity))}`;
-  } else {
-    throw new Error('blind: unknown scheme');
-  }
+  const wallet = walletText(req.scheme, req.identity);
   return [
     `Midnight Passport account privacy key (v${BLIND_MESSAGE_VERSION})`,
     `Network: ${req.network}`,
@@ -86,6 +115,54 @@ export function blindMessage(req: BlindRequest): string {
 /** The message's bytes (ASCII). */
 export function blindMessageBytes(req: BlindRequest): Uint8Array {
   return new TextEncoder().encode(blindMessage(req));
+}
+
+/** The grantee request's format version, named on its first line. */
+export const GRANTEE_BLIND_MESSAGE_VERSION = 1;
+
+export interface GranteeBlindRequest {
+  scheme: BlindScheme;
+  /** The network the issuing account lives on, by its Midnight network name. */
+  network: string;
+  /** The grantee wallet's identity: the 20-byte Ethereum address, or the
+   *  32-byte Ed25519 public key. */
+  identity: Uint8Array;
+  /** The issuing account: the 32-byte contract address of the Passport
+   *  account that issues the grant (the address its grant ids bind). */
+  issuingAccount: Uint8Array;
+}
+
+/** The GRANTEE request message (ASCII, lines separated by LF, no trailing
+ *  newline): the readable, non-authorising request whose signature gives the
+ *  wallet's blind as a grantee of `issuingAccount`. Signed under the same
+ *  blind tag as the device request (deriveBlind is unchanged). Its first two
+ *  lines differ from the device request's, so a grantee blind is never a
+ *  device blind; the issuing account's address makes it one blind per issuer.
+ *  Deterministic: equal requests give equal bytes. */
+export function granteeBlindMessage(req: GranteeBlindRequest): string {
+  checkNetwork(req.network);
+  if (!(req.issuingAccount instanceof Uint8Array) || req.issuingAccount.length !== 32) throw new Error('blind: the issuing account address is 32 bytes');
+  if (req.issuingAccount.every((b) => b === 0)) throw new Error('blind: the issuing account address is not zero');
+  const wallet = walletText(req.scheme, req.identity);
+  const account = Array.from(req.issuingAccount, (x) => x.toString(16).padStart(2, '0')).join('');
+  return [
+    `Midnight Passport grantee privacy key (v${GRANTEE_BLIND_MESSAGE_VERSION})`,
+    'Role: grantee',
+    `Network: ${req.network}`,
+    `Wallet: ${wallet}`,
+    `Issuing account: ${account}`,
+    'Warning: this signature reveals this wallet\'s privacy key for grants from that account.',
+    'The owner of that account learns it when issuing a grant to this wallet.',
+    'Anyone who obtains it can link this wallet to its grants from that account.',
+    'It is not the privacy key of any Passport account this wallet controls.',
+    'Sign it only in a Midnight Passport client you trust.',
+    'It authorises nothing: no transfer, no new device, no grant.',
+  ].join('\n');
+}
+
+/** The grantee message's bytes (ASCII). */
+export function granteeBlindMessageBytes(req: GranteeBlindRequest): Uint8Array {
+  return new TextEncoder().encode(granteeBlindMessage(req));
 }
 
 const N_K1 = secp256k1.Point.Fn.ORDER;

@@ -21,6 +21,12 @@
 //   blind        golden request messages, input refusals, low-S EVM and
 //                strict Ed25519 canonical forms, the sign-twice check against
 //                a deterministic and a hedged signer, and derive_blind
+//   grantee      the grantee blind request (AA 00067 G2E-3, Q39): golden
+//                text, input refusals, first lines unlike the device
+//                request's; for one wallet per scheme, no grantee blind
+//                equals any of its device blinds, and each issuing account
+//                (and network) gives its own grantee blind, under the same
+//                blind tag
 //
 // Writes $EVIDENCE_DIR/wallet-arms-client-offline.json when EVIDENCE_DIR is
 // set; never writes into the repository.
@@ -46,7 +52,8 @@ import {
 } from '../wallet/descriptors.js';
 import {
   blindMessage, blindMessageBytes, canonicalEvmSignature, canonicalEd25519Signature,
-  sameCanonicalSignature, deriveBlind, blindCall,
+  sameCanonicalSignature, deriveBlind, blindCall, granteeBlindMessage, granteeBlindMessageBytes,
+  canonicalSignature, type GranteeBlindRequest, type BlindScheme,
 } from '../wallet/blind.js';
 
 const SEED = 'aa00067/s1/wallet-arms-client-offline/v1';
@@ -418,6 +425,72 @@ refused('blind message', () => blindMessage({ ...req, identity: rnd(21) }), /20 
 refused('blind message', () => blindMessage({ scheme: 'sol_ed25519', network: 'preprod', identity: unhex(ED25519_TORSION_SUBGROUP[0]), accountIndex: 0 }), /small order|canonical/, 'a Solana identity key');
 console.log(`  ✓ blind message: golden EVM text, Solana text, deterministic; ${tally['blind message'].refused} bad requests refused`);
 
+// ── Blind: the grantee request (G2E-3, Q39) ──────────────────────────────────
+
+const ISSUER_1 = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+const GOLDEN_EVM_GRANTEE = [
+  'Midnight Passport grantee privacy key (v1)',
+  'Role: grantee',
+  'Network: undeployed',
+  'Wallet: Ethereum address 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf',
+  'Issuing account: 0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20',
+  'Warning: this signature reveals this wallet\'s privacy key for grants from that account.',
+  'The owner of that account learns it when issuing a grant to this wallet.',
+  'Anyone who obtains it can link this wallet to its grants from that account.',
+  'It is not the privacy key of any Passport account this wallet controls.',
+  'Sign it only in a Midnight Passport client you trust.',
+  'It authorises nothing: no transfer, no new device, no grant.',
+].join('\n');
+const greq: GranteeBlindRequest = { scheme: 'evm_eip712', network: 'undeployed', identity: evmWallet, issuingAccount: ISSUER_1 };
+assert.equal(granteeBlindMessage(greq), GOLDEN_EVM_GRANTEE);
+const solGranteeMsg = granteeBlindMessage({ scheme: 'sol_ed25519', network: 'preprod', identity: solWallet, issuingAccount: ISSUER_1 });
+{
+  const lines = solGranteeMsg.split('\n');
+  assert.equal(lines[2], 'Network: preprod');
+  assert.equal(lines[3], `Wallet: Solana public key ${base58Encode(solWallet)}`);
+  assert.equal(lines[4], `Issuing account: ${hex(ISSUER_1)}`, 'the issuing account in full, 64 hex digits');
+  assert.ok(/^[\x20-\x7e\n]+$/.test(solGranteeMsg) && !solGranteeMsg.endsWith('\n'), 'printable ASCII, LF lines, no trailing newline');
+  assert.ok(eq(granteeBlindMessageBytes({ scheme: 'sol_ed25519', network: 'preprod', identity: solWallet, issuingAccount: ISSUER_1 }), new TextEncoder().encode(solGranteeMsg)), 'deterministic');
+}
+// Every required element is named: Midnight Passport, the network, the role, the issuing account, the warning.
+for (const m of [GOLDEN_EVM_GRANTEE, solGranteeMsg]) {
+  const lines = m.split('\n');
+  assert.ok(lines[0].startsWith('Midnight Passport '));
+  assert.equal(lines[1], 'Role: grantee');
+  assert.ok(lines[2].startsWith('Network: '));
+  assert.ok(lines[4].startsWith('Issuing account: ') && /^[0-9a-f]{64}$/.test(lines[4].slice('Issuing account: '.length)));
+  assert.ok(lines.some((l) => l.startsWith('Warning: this signature reveals')));
+  assert.ok(lines.includes('It authorises nothing: no transfer, no new device, no grant.'));
+  assert.ok(!lines.some((l) => l.startsWith('Account index')), 'no account index');
+  ok('grantee message');
+}
+// The first lines differ from the device request's (title and second line), for every index and network.
+for (const network of ['undeployed', 'preprod']) {
+  for (const accountIndex of [0, 1, 7, 2 ** 31, 2 ** 32 - 1]) {
+    for (const [scheme, identity] of [['evm_eip712', evmWallet], ['sol_ed25519', solWallet]] as const) {
+      const d = blindMessage({ scheme, network, identity, accountIndex }).split('\n');
+      const g = granteeBlindMessage({ scheme, network, identity, issuingAccount: ISSUER_1 }).split('\n');
+      assert.notEqual(g[0], d[0], 'the first line differs from the device request');
+      assert.notEqual(g[1], d[1], 'the second line differs from the device request');
+      assert.ok(!d.join('\n').startsWith(g[0]) && !g.join('\n').startsWith(d[0]), 'neither title is a prefix of the other message');
+      ok('grantee first lines');
+    }
+  }
+}
+assert.notEqual(granteeBlindMessage({ ...greq, network: 'preview' }), GOLDEN_EVM_GRANTEE, 'the network changes the message');
+assert.notEqual(granteeBlindMessage({ ...greq, issuingAccount: ISSUER_1.map((b) => b ^ 0x80) }), GOLDEN_EVM_GRANTEE, 'the issuing account changes the message');
+refused('grantee message', () => granteeBlindMessage({ ...greq, network: 'Mainnet' }), /network name/, 'an upper-case network');
+refused('grantee message', () => granteeBlindMessage({ ...greq, network: '' }), /network name/, 'an empty network');
+refused('grantee message', () => granteeBlindMessage({ ...greq, issuingAccount: new Uint8Array(32) }), /not zero/, 'the zero issuing account');
+refused('grantee message', () => granteeBlindMessage({ ...greq, issuingAccount: ISSUER_1.subarray(0, 31) }), /32 bytes/, 'a 31-byte issuing account');
+refused('grantee message', () => granteeBlindMessage({ ...greq, issuingAccount: new Uint8Array(33).fill(1) }), /32 bytes/, 'a 33-byte issuing account');
+refused('grantee message', () => granteeBlindMessage({ ...greq, issuingAccount: hex(ISSUER_1) as unknown as Uint8Array }), /32 bytes/, 'an issuing account given as text');
+refused('grantee message', () => granteeBlindMessage({ ...greq, identity: new Uint8Array(20) }), /not zero/, 'the zero address');
+refused('grantee message', () => granteeBlindMessage({ ...greq, identity: ISSUER_1.subarray(0, 21) }), /20 bytes/, 'a 21-byte address');
+refused('grantee message', () => granteeBlindMessage({ scheme: 'sol_ed25519', network: 'preprod', identity: unhex(ED25519_TORSION_SUBGROUP[0]), issuingAccount: ISSUER_1 }), /small order|canonical/, 'a Solana identity key');
+refused('grantee message', () => granteeBlindMessage({ ...greq, scheme: 'k256' as any }), /unknown scheme/, 'another scheme');
+console.log(`  ✓ grantee message: golden EVM text, Solana text, deterministic; Midnight Passport, network, role, issuing account in full, warning; first two lines unlike the device request's (${tally['grantee first lines'].pass} index × network × scheme cases); ${tally['grantee message'].refused} bad requests refused`);
+
 // ── Blind: canonical signatures and the sign-twice check ─────────────────────
 
 const N = secp256k1.Point.Fn.ORDER;
@@ -474,7 +547,66 @@ const personalSign = (sk: Uint8Array, msg: Uint8Array, hedged = false): Uint8Arr
   console.log(`  ✓ Ed25519 canonical form: raw R || S; deterministic; ${tally['ed25519 canonical'].refused} malformed signatures refused`);
 }
 
-const report = { suite: 'wallet-arms-client-offline', seed: SEED, ranAt: new Date().toISOString(), tally, goldenEvmMessage: GOLDEN_EVM, solanaMessage: solMsg, verdict: 'PASS' };
+// ── Blind: a grantee blind is never a device blind (G2E-3, Q39) ──────────────
+//
+// For each wallet: its device blinds over two networks and 34 account indexes
+// (0-31, 2^31, 2^32 - 1), against its grantee blinds over the same networks
+// and 10 issuing accounts (incl. 0x00…01 and 0xff…ff). Same blind tag, same
+// derive_blind; only the request differs.
+
+const separation: Record<string, unknown>[] = [];
+{
+  const NETWORKS = ['undeployed', 'preprod'];
+  const INDICES = [...Array.from({ length: 32 }, (_, i) => i), 2 ** 31, 2 ** 32 - 1];
+  const lowAccount = new Uint8Array(32); lowAccount[31] = 1;
+  const ISSUERS = [ISSUER_1, ...Array.from({ length: 7 }, () => rnd(32)), lowAccount, new Uint8Array(32).fill(0xff)];
+  const evmSk = rnd(32), solSeed = rnd(32);
+  const wallets: { name: string; scheme: BlindScheme; identity: Uint8Array; sign: (m: Uint8Array) => Uint8Array }[] = [
+    { name: 'evm key 1', scheme: 'evm_eip712', identity: evmWallet, sign: (m) => personalSign(be(1n), m) },
+    { name: 'evm seeded key', scheme: 'evm_eip712', identity: evmAddressOf(secp256k1.Point.fromBytes(secp256k1.getPublicKey(evmSk, false)).toAffine()), sign: (m) => personalSign(evmSk, m) },
+    { name: 'sol seeded key', scheme: 'sol_ed25519', identity: ed25519.getPublicKey(solSeed), sign: (m) => { const s = ed25519.sign(m, solSeed); assert.ok(ed25519.verify(s, m, ed25519.getPublicKey(solSeed), { zip215: false })); return s; } },
+  ];
+  for (const w of wallets) {
+    const device = new Set<string>();
+    for (const network of NETWORKS) {
+      for (const accountIndex of INDICES) {
+        const c = canonicalSignature(w.scheme, w.sign(blindMessageBytes({ scheme: w.scheme, network, identity: w.identity, accountIndex })));
+        device.add(hex(deriveBlind(w.scheme, c)));
+      }
+    }
+    assert.equal(device.size, NETWORKS.length * INDICES.length, `${w.name}: device blinds are distinct`);
+    const grantee = new Set<string>();
+    let first: Uint8Array | undefined;
+    for (const network of NETWORKS) {
+      for (const issuingAccount of ISSUERS) {
+        const msg = granteeBlindMessageBytes({ scheme: w.scheme, network, identity: w.identity, issuingAccount });
+        const s1 = w.sign(msg), s2 = w.sign(msg);
+        assert.ok(sameCanonicalSignature(w.scheme, s1, s2), `${w.name}: the grantee request passes the sign-twice check (restorable)`);
+        const c = canonicalSignature(w.scheme, s1);
+        const blind = deriveBlind(w.scheme, c);
+        assert.ok(eq(blind, probe.derive_blind(padTag(BLIND_TAGS[w.scheme]), c)), `${w.name}: the same blind tag and derive_blind as a device`);
+        assert.ok(eq(blind, sha(padTag(BLIND_TAGS[w.scheme]), c)));
+        assert.ok(!device.has(hex(blind)), `${w.name}: a grantee blind is never one of the wallet's device blinds`);
+        assert.ok(!grantee.has(hex(blind)), `${w.name}: two issuing accounts (or networks) give two grantee blinds`);
+        grantee.add(hex(blind));
+        first ??= blind;
+        ok('grantee blind');
+      }
+    }
+    // Restore: the same wallet and issuing account give the same grantee blind again.
+    const again = deriveBlind(w.scheme, canonicalSignature(w.scheme, w.sign(granteeBlindMessageBytes({ scheme: w.scheme, network: NETWORKS[0], identity: w.identity, issuingAccount: ISSUERS[0] }))));
+    assert.ok(first && eq(again, first), `${w.name}: re-derived grantee blind equals the first`);
+    separation.push({ wallet: w.name, scheme: w.scheme, deviceBlinds: device.size, granteeBlinds: grantee.size, issuingAccounts: ISSUERS.length, networks: NETWORKS, granteeEqualsDevice: 0, granteeCollisions: 0 });
+  }
+  console.log(`  ✓ grantee blind: ${wallets.length} wallets; ${tally['grantee blind'].pass} grantee blinds, none equal to any of the wallet's ${NETWORKS.length * INDICES.length} device blinds; ${ISSUERS.length} issuing accounts × ${NETWORKS.length} networks give ${ISSUERS.length * NETWORKS.length} distinct blinds per wallet; same tag and derive_blind; restorable`);
+}
+
+const report = {
+  suite: 'wallet-arms-client-offline', seed: SEED, ranAt: new Date().toISOString(), tally,
+  goldenEvmMessage: GOLDEN_EVM, solanaMessage: solMsg,
+  goldenEvmGranteeMessage: GOLDEN_EVM_GRANTEE, solanaGranteeMessage: solGranteeMsg, granteeBlindSeparation: separation,
+  verdict: 'PASS',
+};
 if (process.env.EVIDENCE_DIR) {
   const file = path.join(process.env.EVIDENCE_DIR, 'wallet-arms-client-offline.json');
   fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });
