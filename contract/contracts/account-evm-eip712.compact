@@ -216,3 +216,16 @@ export circuit rotate_enc_key_with_evm_eip712(new_key: Bytes<32>, auth: EvmEip71
     evm_eip712_struct_rotate_enc_key(kernel.self().bytes, address, auth_nonce, new_key));
   do_rotate_enc_key(new_key);
 }
+
+// ── Custody: the inbox ──────────────────────────────────────────────────────
+//
+// The change-coin backfill (MIP-0012 §6.2), gated as on every arm. The
+// approval shows the 192-byte InboxEntry v1 ciphertext in full, as `bytes`.
+
+// AppendInbox(bytes32 account,address device,uint64 authNonce,bytes entry)
+export circuit append_inbox_with_evm_eip712(entry: Bytes<192>, auth: EvmEip712Auth): [] {
+  const address = evm_eip712_address(auth.pk);
+  require_authorised_with_evm_eip712(auth, address,
+    evm_eip712_struct_append_inbox(kernel.self().bytes, address, auth_nonce, entry));
+  do_append_inbox(entry);
+}
