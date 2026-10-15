@@ -1,6 +1,6 @@
 # The `evm_eip712` authorisation arm
 
-**Byte contract AUTH-EIP712-PASSPORT-EVM-V2: draft.** Signing bytes frozen 2026/10/15. The seam (section 9) and the measurement report (section 11) are completed as the arm's circuits land.
+**Byte contract AUTH-EIP712-PASSPORT-EVM-V2: draft.** Signing bytes frozen 2026/10/15. The seam is in place (section 9); the measurement report (section 11) grows as the arm's circuits land.
 
 An ordinary Ethereum account, for example MetaMask, acts as a Passport device or as a grantee. It authorises every operation by signing EIP-712 typed data. In that typed data, every operand and every consumed witness value is a member, shown by the wallet in full and recomputed by the circuit from exactly the values it executes. Nothing opaque is signed: there is no challenge hash and no fingerprint. Four labelled values are the only exception (section 6). The wallet needs no ETH and sends no Ethereum transaction.
 
@@ -198,15 +198,30 @@ npm i --no-save ethers@6.17.0 && npx tsx src/tests/evm-eip712-ethers.ts
 
 That script also checks that `signTypedData` is byte-identical to ethers'.
 
-## 9. The seam (completed at S5E)
+## 9. The seam and the acceptance policy
 
-The acceptance policy is as follows.
+`require_authorised_with_evm_eip712(auth, address, struct_hash)` follows upstream `p256`'s order (FR-007):
 
-- **Signature scalars.** Both S forms are accepted, as on `k256`; the single-use rolling entry makes a malleated twin inert. `r ≠ 0` and `s ≠ 0` are asserted.
-- **Key.** The point at infinity is refused in both encodings. The address is always derived from the presented point.
-- **Order.** Upstream `p256`'s order applies: membership, verification, roll, nonce.
+1. membership of the single-use entry at the active epoch;
+2. `r ≠ 0` and `s ≠ 0`;
+3. ECDSA verification of `digest(account, struct_hash)`;
+4. the entry rolled to its successor;
+5. `auth_nonce` advanced and `round` bumped.
 
-Each rule's refusing layer is recorded with its constraint-level negative.
+Any failure aborts the whole call. The trailing argument `EvmEip712Auth { pk, use_counter, blind, sig }` is internal. The export derives `address` from `pk` with `evm_eip712_address` and uses it both in the message (`device`) and in the entry.
+
+The table below gives the acceptance policy. Each rule's refusing layer was measured with the JavaScript checks bypassed, after a proved positive control (`evm-eip712-prover.ts`, 37 cases, 2026/10/15).
+
+| Rule | Enforced by | Refused at (simulator / prover) |
+|---|---|---|
+| The signature covers exactly the executed values (binding: `newKey`, `account`, `device`, `authNonce`, `effect`, the domain's name, version and verifyingContract, the type name, a member name) | the in-circuit digest + `secp256k1EcdsaVerify` | "invalid signature" / `/check` 400 "Failed direct assertion" |
+| The key, blind and counter open a live entry (an unenrolled key, another blind, a wrong counter) | the entry membership assert | "unknown device entry" / `/check` 400 |
+| `r ≠ 0`, `s ≠ 0`, and `(r, s) = (0, 0)` | the arm's zero-scalar assert (and ZKIR's inverse) | the arm's assert / `/check` 400. `(0, 0)` verifies in the generated JavaScript once inverses of 0 are taken as 0, so only the arm's assert fires there, and the proof still fails |
+| Both S forms accepted | `secp256k1EcdsaVerify` (FIPS 186-5) | the high-S twin proves and lands. The low-S original is then refused: "unknown device entry" (simulator), `/check` 400 (prover), and node `1010: Invalid Transaction: Custom error 104` for its proof made before the twin landed (three submissions; a fresh call from the same wallet landed in between) |
+| The point at infinity (flagged) | ZKIR coordinate extraction; the arm's coordinate guard and the stdlib's struct guard (defence in depth) | "cannot extract the x-coordinate" / "Cannot extract coordinates of the Secp256k1 identity" |
+| The unflagged `(0, 0)` | the runtime validator; the proof server's on-curve decoding | type error / "Failed to decode" |
+| A coordinate not reduced below `p` (QA-1) | the runtime's foreign-field encoder; the proof server's input decoding | type error / "The encoded value of type Secp256k1Point is not in canonical form" |
+| Replay across accounts, arms (`k256` ↔ `evm_eip712` with the same key), operations (`CancelRecovery`, `RevokeAllGrants`), roles (a grantee type) and nonces | the domain and type hash in the digest; the arm-specific digest rule | "invalid signature" (or "unknown device entry" for a consumed entry) / `/check` 400 |
 
 ## 10. Network (Q4, FR-015)
 
@@ -229,4 +244,9 @@ Mock-compile rows of the worst-case layouts:
 | `withdraw_shielded_to_contract_with_grant` | 18 | 185,330 |
 | `issue_grant` | 18 | 232,006 |
 
-`activate_initial_device` is built: k 16, 42,289 rows, verifier key 3,321 bytes.
+Built so far:
+
+| Circuit | k | rows | verifier key | prover key | measured on the shared stack |
+|---|---|---|---|---|---|
+| `activate_initial_device_with_evm_eip712` | 16 | 42,289 | 3,321 B | 142.6 MB | prove + submit ≈ 23 s |
+| `rotate_enc_key_with_evm_eip712` | 17 | 102,705 | 3,321 B | 285.2 MB | prove ≈ 14–16 s |
