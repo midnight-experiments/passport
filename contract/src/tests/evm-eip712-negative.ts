@@ -41,25 +41,10 @@ export const Original: any = await import(pathToFileURL(ACCOUNT_JS).href);
 export const zk = new NodeZkConfigProvider(zkConfigPath);
 export const proofLog: ProofServerRequest[] = [];
 
-// Transport (diagnosed at S6E, evidence e/s6/logs/diag-epipe.log): the
-// recording provider posts with fetch, whose pooled keep-alive connections
-// the proof server (through the runner's forwarder) has sometimes closed by
-// the time a prover key of several hundred MB is uploaded on them, and the
-// upload then breaks with EPIPE before the proof server sees the request.
-// The same proof over a fresh connection per request always went through.
-// So this process's fetch dispatcher keeps no idle connection (keep-alive
-// 1 ms): every request opens its own. Requests, answers and verdicts are
-// unchanged; only connection reuse is.
-{
-  const KEY = Symbol.for('undici.globalDispatcher.1');
-  try { await fetch(new URL('/health', CONFIG.proofServer), { signal: AbortSignal.timeout(5000) }); } catch { /* creates the dispatcher either way */ }
-  const current: any = (globalThis as any)[KEY];
-  if (current && !current.aa00067FreshConnections) {
-    const fresh = new current.constructor({ keepAliveTimeout: 1, keepAliveMaxTimeout: 1 });
-    fresh.aa00067FreshConnections = true;
-    (globalThis as any)[KEY] = fresh;
-  }
-}
+// Transport: the base helper's recording provider sends every proof-server
+// request over its own connection (constraint-negative.ts freshConnection; a
+// reused keep-alive connection can break the upload of a large prover key
+// with EPIPE before the proof server sees it).
 export const proofProvider = recordingProofProvider(CONFIG.proofServer, zk, proofLog);
 const coinPublicKey = '00'.repeat(32);
 const encryptionPublicKey = '00'.repeat(32);
