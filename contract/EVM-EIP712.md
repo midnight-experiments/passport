@@ -126,6 +126,17 @@ The nested descriptor types follow Q28, one per target scheme. The parent's type
 
 The circuit derives the target's entry or grant id from exactly these values, with the target scheme's own recipe (FR-005). An unregistered tag is refused (the S1 tightening).
 
+Two members are shown as numbers (Q35; a labelled `string` member is a `v3` candidate). A client shows the meaning beside each:
+
+| Member | Value | Meaning |
+|---|---|---|
+| `IssueGrant.recipientKind` | 0 | any recipient (no pin) |
+| | 1 | pinned to a user address (unshielded) |
+| | 2 | pinned to a Zswap coin public key (shielded) |
+| | 3 | pinned to a contract (direct transfer) |
+| `K256Device.envelope`, `K256Grantee.envelope` | 0 | the key signs SHA-256 of the challenge |
+| | 1 | the key signs through a connector's `signData` prefix (read-only grants only) |
+
 The effect lines (FR-023, Q20) are circuit constants:
 
 | Type | `effect` |
@@ -211,6 +222,17 @@ That script also checks that `signTypedData` is byte-identical to ethers'.
 
 Any failure aborts the whole call. The trailing argument `EvmEip712Auth { pk, use_counter, blind, sig }` is internal.
 
+There are three entry points, and one internal core that only they call: `require_authorised_with_evm_eip712<T>` (one message type), `require_authorised_with_evm_eip712_either<T, U>` (`remove_device`'s two forms: it builds both struct hashes from its own frame and verifies the one the call selects) and `require_authorised_with_evm_eip712_bare` (a type with no members of its own, `RevokeAllGrants` and `CancelRecovery`). Each derives the address and builds its frame, then hands the address and the struct hash to `evm_eip712_verify_and_roll`. Each returns the caller's post-roll entry, which `remove_device`'s S13 guard needs.
+
+**The grant seam** (`require_grant_with_evm_eip712<T>`, grantee role) applies the same rule to the grantee frame (`account`, `grantee`, `siteLabel`, `slot`, `issuedAt`, `grantNonce`). It derives the grantee's address from the presented point, then the grant id from that address, the blind, H(origin tag ‖ label) and the slot. It reads `issuedAt` and the nonce from the record, never `auth_nonce`, and touches no device entry (FR-008). The MIP's steps run in order: the record by id; liveness (active, epoch, generation, expiry); upstream's shared `check_spend_scope` (operation, caller pin, object, per-call cap, spent opening, cumulative cap, recipient pin); `r ≠ 0`, `s ≠ 0`; the signature; the record written back with its nonce advanced and the new spent commitment; `round` bumped. The shielded twins assert `coin.color == color` and run upstream's `check_shielded_grant_bounds` (coin value, live `enc_key`) first.
+
+**The arm's own rules on top of upstream's chips.**
+
+- Every shielded spend asserts `coin.color == color` (FR-010) and `amount ≤ coin.value`.
+- `add_device` derives the new entry at the current `device_epoch` and counter 0, so the arm cannot plant a future-epoch entry.
+- `remove_device` takes the target's epoch and counter (removal only reduces authority, so a planted `device_epoch + 1` entry can be evicted), or a literal entry under the Q20 line. The Maybe that selects the form must be canonical when absent.
+- `issue_grant` hashes the read key as zero, and requires it to be zero, when `read` is off (audit G1E-7). It requires a non-zero key when `read` is on. It admits an RP hash only for a passkey grantee, so that no other hash-like value ever appears in an approval. It stores SHA-256 of the shown read key as `read_pk_hash`, as the grants MIP defines it.
+
 **The seam owns the frame** (audit G1E-1, G0 C9). An export passes only its operation's type hash and tail, from the module's `evm_eip712_parts_<operation>` circuit. The seam supplies every frame value itself: `account` is `kernel.self()`, `device` is the address of the presented point, and `authNonce` is the ledger's (read before this call advances it). No export can name an account, a device or a nonce, so an entry is matched and a signature verified only for the address of the key that signed. The exported struct-hash oracles `evm_eip712_struct_<operation>` are built from the same frame builders (`evm_eip712_device_struct<T>`, `evm_eip712_grantee_struct<T>`) and the same parts, so an oracle and its export cannot diverge. `keccak256` over a tuple whose last member is a generic tuple hashes that member flat (QA-A1; all 53 frozen vectors still agree with ethers), and the refactor cost no rows. A malicious-prover mutant that forges the derived address in the generated JavaScript (so that the victim's entry matches while the attacker's key signs) is refused at the proof server (`evm-eip712-prover.ts`, section `frame`).
 
 The table below gives the acceptance policy. Each rule's refusing layer was measured with the JavaScript checks bypassed, after a proved positive control (`evm-eip712-prover.ts`, 37 cases, 2026/10/15).
@@ -255,3 +277,17 @@ Built so far:
 |---|---|---|---|---|---|
 | `activate_initial_device_with_evm_eip712` | 16 | 42,289 | 3,321 B | 142.6 MB | prove + submit ≈ 23 s |
 | `rotate_enc_key_with_evm_eip712` | 17 | 102,705 | 3,321 B | 285.2 MB | prove ≈ 14–16 s |
+| `append_inbox_with_evm_eip712` | 17 | 111,562 | 3,321 B | 285.2 MB | |
+| `withdraw_unshielded_with_evm_eip712` | 17 | 107,686 | 3,321 B | 285.2 MB | |
+| `withdraw_shielded_with_evm_eip712` | 18 | 138,652 | 3,321 B | 570.5 MB | contract proof ≈ 19 s |
+| `withdraw_shielded_to_contract_with_evm_eip712` | 18 | 144,375 | 3,321 B | 570.5 MB | |
+| `add_device_with_evm_eip712` | 18 | 167,206 | 3,321 B | 570.5 MB | |
+| `remove_device_with_evm_eip712` | 18 | 181,730 | 3,321 B | 570.5 MB | |
+| `issue_grant_with_evm_eip712` | 18 | 235,442 | 3,321 B | 570.5 MB | |
+| `revoke_grant_with_evm_eip712` | 18 | 175,193 | 3,321 B | 570.5 MB | |
+| `revoke_all_grants_with_evm_eip712` | 17 | 98,457 | 3,321 B | 285.2 MB | |
+| `withdraw_unshielded_with_grant_evm_eip712` | 18 | 137,116 | 3,321 B | 570.5 MB | |
+| `withdraw_shielded_with_grant_evm_eip712` | 18 | 179,620 | 3,321 B | 570.5 MB | |
+| `withdraw_shielded_to_contract_with_grant_evm_eip712` | 18 | 185,343 | 3,321 B | 570.5 MB | |
+
+Moving the frame into the seam (G1E-1) changed no row count. Every verifier key is 3,321 bytes. Proving times go into the per-circuit report at S10.
