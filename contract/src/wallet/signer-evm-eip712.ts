@@ -37,7 +37,7 @@ import {
   sameCanonicalSignature,
 } from './blind.js';
 import { evmAddressOf, evmChecksumAddress, parseEvmAddress } from './descriptors.js';
-import { typedDataDigest, type Eip712TypedData } from './evm-eip712-codec.js';
+import { typedDataDigest, evmEip712Messages, type Eip712TypedData } from './evm-eip712-codec.js';
 
 // ── Signatures ───────────────────────────────────────────────────────────────
 
@@ -289,6 +289,26 @@ export class EvmEip712Device {
     return pureCircuits.derive_grant_id_with_evm_eip712({ bytes: contractAddress }, this.address, this.blind, originHash, slot);
   }
 
+  /**
+   * Signs `typedData` with the device's wallet (`eth_signTypedData_v4`) and
+   * returns the circuit's authorising material. Refuses a signature that does
+   * not recover to this device's point (a wallet that signed with another
+   * account). The signature is passed on as the wallet produced it; the
+   * contract accepts both S forms.
+   */
+  async authorise(typedData: Eip712TypedData, useCounter: bigint): Promise<EvmEip712Authorisation> {
+    if (!this.wallet) throw new Error('evm_eip712: this device has no wallet');
+    return this.authorisationFrom(typedData, await this.wallet.signTypedData(typedData), useCounter);
+  }
+
+  /** The authorising material of an existing wallet signature over `typedData`. */
+  authorisationFrom(typedData: Eip712TypedData, signature: Uint8Array, useCounter: bigint): EvmEip712Authorisation {
+    const sig = parseEvmSignature(signature);
+    const pk = recoverEvmPoint(typedDataDigest(typedData), sig);
+    if (pk.x !== this.pk.x || pk.y !== this.pk.y) throw new Error('evm_eip712: the signature does not recover to this device');
+    return { arm: 'evm_eip712', pk: this.pk, use_counter: useCounter, blind: this.blind, sig: { r: sig.r, s: sig.s } };
+  }
+
   /** The arguments of `activate_initial_device_with_evm_eip712`. */
   activationArgs(salt: Uint8Array): [Secp256k1Point, Uint8Array, Uint8Array] {
     return [this.pk, salt, this.blind];
@@ -341,4 +361,39 @@ export async function restoreEvmDevices(
     }
   }
   return found;
+}
+
+// ── Calls (the arm-owned facade, Q19) ────────────────────────────────────────
+//
+// The account client (account.ts) routes authorised calls by the
+// Authorisation's arm through the registered authArgs branch, so the
+// `*WithAuth` methods of a CustodyAccount reach this arm's circuits unchanged.
+// What it cannot do for this arm is build the readable message and find the
+// device's use counter; these helpers do.
+
+/** The surface of a CustodyAccount these helpers use. */
+export interface EvmEip712AccountSurface {
+  addressBytes: Uint8Array;
+  ledgerState(): Promise<{ auth_nonce: bigint; device_epoch: bigint; devices: { member(e: Uint8Array): boolean } }>;
+  rotateEncKeyWithAuth(newKey: Uint8Array, a: EvmEip712Authorisation): Promise<{ txId: string }>;
+}
+
+/** The device's current use counter: the first counter whose entry is live at
+ *  the current epoch (MIP-0013 S11 rescan). */
+export async function resolveEvmEip712Counter(account: EvmEip712AccountSurface, device: EvmEip712Device, limit = 4096n): Promise<bigint> {
+  const l = await account.ledgerState();
+  for (let k = 0n; k < limit; k++) {
+    if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k))) return k;
+  }
+  throw new Error('evm_eip712: no live entry for this device (rescan limit reached)');
+}
+
+/** rotate_enc_key_with_evm_eip712: the RotateEncKey message, signed by the
+ *  device's wallet, then the call. */
+export async function rotateEncKeyWithEvmEip712(account: EvmEip712AccountSurface, device: EvmEip712Device, newKey: Uint8Array) {
+  const l = await account.ledgerState();
+  const counter = await resolveEvmEip712Counter(account, device);
+  const typedData = evmEip712Messages.rotateEncKey({ account: account.addressBytes, device: device.address, authNonce: l.auth_nonce }, newKey);
+  const auth = await device.authorise(typedData, counter);
+  return { typedData, auth, ...(await account.rotateEncKeyWithAuth(newKey, auth)) };
 }
