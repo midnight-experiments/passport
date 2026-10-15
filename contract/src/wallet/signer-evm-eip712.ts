@@ -37,6 +37,7 @@ import {
   sameCanonicalSignature,
 } from './blind.js';
 import { evmAddressOf, evmChecksumAddress, parseEvmAddress } from './descriptors.js';
+import { typedDataDigest, type Eip712TypedData } from './evm-eip712-codec.js';
 
 // ── Signatures ───────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ export interface EvmWallet {
   /** EIP-191 `personal_sign` over the raw message bytes: 65 bytes r || s || v. */
   personalSign(message: Uint8Array): Promise<Uint8Array>;
   /** EIP-712 `eth_signTypedData_v4` over typed data: 65 bytes r || s || v. */
-  signTypedData(typedData: unknown): Promise<Uint8Array>;
+  signTypedData(typedData: Eip712TypedData): Promise<Uint8Array>;
 }
 
 /**
@@ -131,8 +132,6 @@ export interface EvmWallet {
 export class SoftwareEvmWallet implements EvmWallet {
   readonly pk: Secp256k1Point;
   readonly addressBytes: Uint8Array;
-  /** Typed-data hashing, provided by the arm's EIP-712 codec. */
-  static typedDataDigest: ((typedData: unknown) => Uint8Array) | null = null;
 
   constructor(readonly sk: bigint, readonly hedged = false) {
     if (sk <= 0n || sk >= SECP256K1_ORDER) throw new Error('evm_eip712: a secret key is in [1, n)');
@@ -165,10 +164,10 @@ export class SoftwareEvmWallet implements EvmWallet {
     return this.signDigest(personalMessageDigest(message));
   }
 
-  async signTypedData(typedData: unknown): Promise<Uint8Array> {
-    const digest = SoftwareEvmWallet.typedDataDigest;
-    if (!digest) throw new Error('evm_eip712: no EIP-712 codec registered');
-    return this.signDigest(digest(typedData));
+  /** Signs the EIP-712 digest of `typedData` (the client codec's general
+   *  encoder, as a wallet hashes it). */
+  async signTypedData(typedData: Eip712TypedData): Promise<Uint8Array> {
+    return this.signDigest(typedDataDigest(typedData));
   }
 }
 
