@@ -15,6 +15,10 @@ import {
 import { padTag } from '../wallet/descriptors.js';
 
 export const VECTOR_SEED = 'aa00067/e/s4/evm-eip712-vectors/v2';
+/** The frozen file (src/tests/vectors/). */
+export const VECTOR_FILE = 'evm-eip712-v2.json';
+/** The blind's tag text (the descriptor module's registered tag). */
+export const BLIND_TAG_TEXT = 'midnight:account:blind:evm:v2';
 
 /** One vector's inputs, JSON-safe: hex strings for bytes, decimal strings for integers. */
 export interface VectorInput {
