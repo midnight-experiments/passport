@@ -1315,10 +1315,10 @@ if (SECTIONS.includes('recovery')) {
   // J plants an evm_eip712 entry for W at device_epoch + 1 (erratum 7)
   const jub = JubjubDevice.generate();
   const jIn = evmEip712DescriptorInput({ scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y });
-  const AJ = (await execute(Original.Contract, A1, 'add_device_with_evm_eip712', [jIn, await signBy(device, evmEip712Messages.addDevice(frame(A1), jIn), 1n)])).after;
+  const AJ = (await execute(Original.Contract, A1, 'add_device_with_evm_eip712', [jIn, solArg(jIn), await signBy(device, evmEip712Messages.addDevice(frame(A1), jIn), 1n)])).after;
   const e2 = await EvmEip712Device.enrol(new SoftwareEvmWallet(0xe2e2n), 'undeployed', 0);
   const e2In = evmEip712DescriptorInput(evmDeviceDescriptor(e2));
-  const AE = (await execute(Original.Contract, AJ, 'add_device_with_evm_eip712', [e2In, await signBy(device, evmEip712Messages.addDevice(frame(AJ), e2In), 2n)])).after;
+  const AE = (await execute(Original.Contract, AJ, 'add_device_with_evm_eip712', [e2In, solArg(e2In), await signBy(device, evmEip712Messages.addDevice(frame(AJ), e2In), 2n)])).after;
   const W = await EvmEip712Device.enrol(new SoftwareEvmWallet(0x3a38n), 'undeployed', 0);
   const plant = W.entryAt(AE.addressBytes, 1n, 0n);
   const jPlant = jub.sign(jubjubChallenges.addDevice({ contractAddress: AE.addressBytes, authNonce: ledgerOf(AE).auth_nonce }, jub.pk, plant), 0n);
