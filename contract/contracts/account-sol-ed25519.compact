@@ -241,6 +241,26 @@ export circuit rotate_enc_key_with_sol_ed25519(
   do_rotate_enc_key(new_key);
 }
 
+// ── Custody (MIP-0012) ──────────────────────────────────────────────────────
+//
+// Deposits are upstream's permissionless deposit_unshielded and
+// deposit_shielded. Each export below renders its message from exactly the
+// values it executes on (the operands, and for a shielded spend the coin the
+// held_coin witness returned) and hands the seam only its title and body.
+
+// The change-coin backfill (MIP-0012 §6.2): the approval shows the 192-byte
+// InboxEntry v1 ciphertext in full, six lines of 64 hex digits.
+export circuit append_inbox_with_sol_ed25519(
+  entry: Bytes<192>,
+  show:  SolShow,
+  frame: Vector<128, Uint<0..16>>,
+  hex:   Vector<384, Uint<0..16>>,
+  auth:  SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<33, 510, 833>(sol_title_append_inbox(), sol_body_append_inbox(entry, hex), show, frame, auth);
+  do_append_inbox(entry);
+}
+
 // ── Signed messages, format sol v1 (spec FR-S02, FR-S03, FR-004, FR-023) ────
 //
 // A Solana wallet's `signMessage` signs the raw bytes it is given, so the
