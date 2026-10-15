@@ -463,6 +463,54 @@ export circuit revoke_all_grants_with_sol_ed25519(
   do_revoke_all_grants();
 }
 
+// ── Recovery: the device role (recovery MIP §5, §6 step 5) ──────────────────
+//
+// The artefact-publishing session and the veto, through the device seam
+// (over auth_nonce); the recovery gate itself (recover_submit,
+// recover_finalise) is upstream's, arm-independent and unchanged. The
+// session's approval shows every operand in full (FR-004): the new recovery
+// key's JubJub coordinates and the four backup vector values as 64 hex
+// digits each, little-endian (Q29/Q33: upstream's Field and JubJub byte
+// order), the session identifier, the vector length in decimal, and the
+// 64-byte key wrap in two lines; under the circuit-fixed consequence line
+// "sets this account's recovery key" (FR-023). The chip's own asserts (no
+// pending recovery, the length and the zero slots, a fresh non-zero session
+// identifier, a fresh live recovery key) are upstream's
+// do_publish_recovery_session. Finalisation clears every device entry
+// (upstream #183), sol entries included.
+export circuit publish_recovery_session_with_sol_ed25519(
+  new_recovery_pk: JubjubPoint,
+  session_nonce:   Bytes<32>,
+  phi_1:           Field,
+  phi_2:           Field,
+  phi_3:           Field,
+  phi_4:           Field,
+  phi_len:         Uint<8>,
+  wrap:            Bytes<64>,
+  phi_len_digits:  Vector<3, Uint<8>>,
+  show:            SolShow,
+  frame:           Vector<128, Uint<0..16>>,
+  hex:             Vector<576, Uint<0..16>>,
+  auth:            SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<38, 922, 1250>(sol_title_publish_recovery_session(),
+    sol_body_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap, phi_len_digits, hex),
+    show, frame, auth);
+  do_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+}
+
+// The veto (recovery MIP §6 step 5): any live device clears a pending
+// recovery inside the window; the approval carries the frame and the
+// circuit-fixed consequence line only (the operation has no operand).
+export circuit recover_cancel_with_sol_ed25519(
+  show:  SolShow,
+  frame: Vector<128, Uint<0..16>>,
+  auth:  SolEd25519Auth,
+): [] {
+  require_authorised_with_sol_ed25519<37, 64, 391>(sol_title_recover_cancel(), sol_body_recover_cancel(), show, frame, auth);
+  do_recover_cancel();
+}
+
 // ── The grant seam (grantee role) ───────────────────────────────────────────
 //
 // A Solana key as a GRANTEE: its grant id is
