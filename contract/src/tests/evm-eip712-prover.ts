@@ -369,7 +369,7 @@ if (SECTIONS.includes('seam')) {
     ['authNonce: n + 1', mutate((t) => { t.message.authNonce = '1'; })],
     ['effect line: another text', mutate((t) => { t.message.effect = 'Sets nothing'; })],
     ['domain name', mutate((t) => { t.domain.name = 'Midnight Passport Accounts'; })],
-    ['domain version', mutate((t) => { t.domain.version = '1'; })],
+    ['domain version ("2", not the frozen "1")', mutate((t) => { t.domain.version = '2'; })],
     ['domain verifyingContract', mutate((t) => { t.domain.verifyingContract = '0x' + Buffer.from(rnd(20)).toString('hex'); })],
     ['primary type name', mutate((t) => rename(t, 'RotateEncKey', 'RotateEncryptionKey'))],
     ['a member renamed (newKey -> key)', mutate((t) => { t.types.RotateEncKey = t.types.RotateEncKey.map((f: any) => (f.name === 'newKey' ? { ...f, name: 'key' } : f)); t.message.key = t.message.newKey; delete t.message.newKey; })],
