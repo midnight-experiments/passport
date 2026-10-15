@@ -33,6 +33,25 @@
 //   custody     (S6E) append_inbox and withdraw_unshielded: positives,
 //               binding (each operand changed after signing), a cross-
 //               operation replay, and the mirror's over-withdrawal;
+//   devices     (S7E) add_device and remove_device with readable descriptors:
+//               every target scheme enrolled at the current epoch and
+//               counter 0, its entry equal to the target scheme's own
+//               derivation; binding of each descriptor field and of the
+//               scheme; an unregistered tag (or another recipe's tag) refused
+//               at the constraint level under a valid signature (the FR-005
+//               tightening); removal by descriptor and by literal entry (Q20),
+//               the form swap, S13 in both forms, the last device, an entry
+//               planted at device_epoch + 1 by an upstream arm evicted by
+//               descriptor at that epoch;
+//   grants      (S8E) issue_grant (k256, evm_eip712 and passkey grantees),
+//               revoke_grant, revoke_all_grants and the grantee twins:
+//               binding of scope fields, the caller pin, the grantee's
+//               descriptor and the labelled origin hash (Q17); the arm's
+//               issue rules (a read key only with read, an RP hash only for
+//               a passkey) under a valid signature; the grantee twins'
+//               binding, the stale grant nonce, the grant seam's forged
+//               address (G1E-1), a wrong blind, and the shielded twins'
+//               witness substitution (colour, value);
 //   witness     (S6E) withdraw_shielded and withdraw_shielded_to_contract on
 //               a local Zswap tree: partial and full spends as positives, then
 //               a valid signature over one coin with the held_coin witness
@@ -56,7 +75,13 @@ import { createHash } from 'node:crypto';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { CONFIG } from '../node/wallet.js';
 import { JubjubDevice, K256Device, k256Challenges } from '../wallet/signer.js';
-import { SoftwareEvmWallet, EvmEip712Device, highSTwin, parseEvmSignature, serialiseEvmSignature } from '../wallet/signer-evm-eip712.js';
+import { SoftwareEvmWallet, EvmEip712Device, EvmEip712Grantee, highSTwin, parseEvmSignature, serialiseEvmSignature, evmEip712DescriptorInput, evmDeviceDescriptor, EVM_EIP712_UNUSED_DESCRIPTOR, evmEip712GranteeInput, evmEip712IssueArgs } from '../wallet/signer-evm-eip712.js';
+import { grantLabel, grantOriginHash } from '../wallet/descriptors.js';
+import { K256Grantee, originHash as upstreamOriginHash, grantAuthArgs, RECIPIENT_USER_ADDRESS, type GrantOpening } from '../wallet/signer.js';
+import type { IssueScope } from '../wallet/evm-eip712-codec.js';
+import { DESCRIPTOR_TAGS, padTag, type Descriptor } from '../wallet/descriptors.js';
+import { softwarePasskey } from './p256-fixtures.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { evmEip712Messages, typedDataDigest, type Eip712TypedData } from '../wallet/evm-eip712-codec.js';
 import { expectRefusal, expectSuccess, type NegativeResult, type PositiveResult } from './constraint-negative.js';
 import {
@@ -65,7 +90,7 @@ import {
 } from './evm-eip712-negative.js';
 import type { BypassedContractModule } from './constraint-negative.js';
 
-const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness'];
+const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness', 'devices', 'grants'];
 const SEED = 'aa00067/e/s5/evm-eip712-prover/v1';
 let ctr = 0;
 const rnd = (n: number) => {
@@ -489,6 +514,273 @@ if (SECTIONS.includes('witness')) {
       shieldedArgs(circuit, 300n, authH), AMOUNT_ABOVE,
       "with the arm's assert and the checked subtraction bypassed, the generated JavaScript's type encoder refuses the negative change ('expected UnsignedInteger'), which is not an assert; in-circuit, the assert, the subtraction's range check and the signature over the shown value refuse it");
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// S7E: device lifecycle with readable descriptors
+// ═════════════════════════════════════════════════════════════════════════════
+
+if (SECTIONS.includes('devices')) {
+  const ADD = 'add_device_with_evm_eip712';
+  const REMOVE = 'remove_device_with_evm_eip712';
+  const NOT_DEVICE_TAG = 'evm_eip712: not a registered device tag';
+  const W117 = 'descriptor: not a 117-byte device tag';
+  const LAST = 'cannot remove last device';
+  const SELF = 'cannot remove the authorising device';
+  const NONCANON = 'noncanonical absent entry';
+  const A0 = (await execute(Original.Contract, await dormant(device.bootCommitment(salt), recoveryPk), ACTIVATE, device.activationArgs(salt))).after;
+  const frame = (a: LocalAccount) => ({ account: a.addressBytes, device: device.address, authNonce: ledgerOf(a).auth_nonce as bigint });
+  const signAs = (t: Eip712TypedData, counter: bigint) => { const p = parseEvmSignature(wallet.signDigest(typedDataDigest(t))); return { pk: device.pk, use_counter: counter, blind: device.blind, sig: { r: p.r, s: p.s } }; };
+  const counterOf = (a: LocalAccount) => { for (let k = 0n; k < 64n; k++) if (ledgerOf(a).devices.member(device.entryAt(a.addressBytes, ledgerOf(a).device_epoch, k))) return k; throw new Error('device not live'); };
+  const NONE = { is_some: false, value: new Uint8Array(32) };
+  // targets, one per scheme
+  const jub = JubjubDevice.generate();
+  const k1 = new K256Device(0x5eed1n);
+  const pass = softwarePasskey();
+  const evm2 = await EvmEip712Device.enrol(new SoftwareEvmWallet(0xe2n), 'undeployed', 0);
+  const solSk = new Uint8Array(32).fill(0x51);
+  const solKey = ed25519.getPublicKey(solSk);
+  const targets: [string, Descriptor, (acc: LocalAccount, epoch: bigint) => Uint8Array][] = [
+    ['jubjub', { scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y }, (acc, ep) => jub.entryAt(acc.addressBytes, ep, 0n)],
+    ['k256', { scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: 0 }, (acc, ep) => k1.entryAt(acc.addressBytes, ep, 0n)],
+    ['p256', { scheme: 'p256', x: pass.pk.x, y: pass.pk.y, policy: { rpIdHash: pass.policy.rp_id_hash, origin: pass.policy.origin } }, (acc, ep) => pass.device.entryAt(acc.addressBytes, ep, 0n)],
+    ['evm_eip712', evmDeviceDescriptor(evm2), (acc, ep) => evm2.entryAt(acc.addressBytes, ep, 0n)],
+    ['sol_ed25519', { scheme: 'sol_ed25519', key: solKey, blind: rnd(32) }, () => new Uint8Array(0)],
+  ];
+  const posPath = await loadPatched([INVALID, UNKNOWN, NOT_DEVICE_TAG, W117, SELF, LAST, NONCANON]);
+  // add_device: every target scheme; the enrolled entry is the target
+  // scheme's own derivation (upstream's derive_device_entry_with_<arm> for
+  // jubjub, k256 and p256; the descriptor recipe for the new arms) at the
+  // current epoch and counter 0
+  for (const [scheme, d, upstreamEntry] of targets) {
+    const input = evmEip712DescriptorInput(d);
+    const td = evmEip712Messages.addDevice(frame(A0), input);
+    const args = [input, signAs(td, 0n)];
+    await positive('devices', `add_device: a ${scheme} target (patched path)`, posPath, A0, ADD, args);
+    const after = (await execute(Original.Contract, A0, ADD, args)).after;
+    const l = ledgerOf(after);
+    const expected = scheme === 'sol_ed25519'
+      ? pc.derive_descriptor_entry_w64(padTag(DESCRIPTOR_TAGS.device.sol_ed25519), { bytes: A0.addressBytes }, input.key, input.key2, 0n, 0n)
+      : upstreamEntry(A0, 0n);
+    const ok = l.devices.member(expected) && l.device_count === 2n && !l.devices.member(scheme === 'sol_ed25519' ? new Uint8Array(32) : upstreamEntry(A0, 1n));
+    const r: Result = { section: 'devices', circuit: ADD, case: `add_device: the ${scheme} entry equals ${scheme === 'sol_ed25519' ? 'the descriptor recipe' : `upstream's derive_device_entry_with_${scheme}`} at epoch 0, counter 0; nothing at epoch 1`, kind: 'positive' };
+    r.positive = { name: r.case, verdict: ok ? 'PASS' : 'FAIL', reason: ok ? 'state checked' : 'entry missing or wrong', proofServer: [], startedAt: new Date().toISOString(), ms: 0 };
+    tally(r.positive); results.push(r); line(r);
+  }
+  // binding of descriptor fields and of the scheme
+  const kIn = evmEip712DescriptorInput(targets[1][1]);
+  const kTd = evmEip712Messages.addDevice(frame(A0), kIn);
+  const flip = (b: Uint8Array) => { const c = new Uint8Array(b); c[0] ^= 1; return c; };
+  await negative('devices', 'add_device binding: k256 x changed after signing', A0, ADD, [{ ...kIn, key: flip(kIn.key) }, signAs(kTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: k256 envelope changed after signing', A0, ADD, [{ ...kIn, envelope: 1n }, signAs(kTd, 0n)], INVALID, [INVALID]);
+  const pIn = evmEip712DescriptorInput(targets[2][1]);
+  const pTd = evmEip712Messages.addDevice(frame(A0), pIn);
+  const o2 = new Uint8Array(pIn.origin); o2[20] = 0x39;
+  await negative('devices', 'add_device binding: passkey origin changed after signing', A0, ADD, [{ ...pIn, origin: o2 }, signAs(pTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: passkey RP hash changed after signing', A0, ADD, [{ ...pIn, rp_id_hash: flip(pIn.rp_id_hash) }, signAs(pTd, 0n)], INVALID, [INVALID]);
+  const eIn = evmEip712DescriptorInput(targets[3][1]);
+  const eTd = evmEip712Messages.addDevice(frame(A0), eIn);
+  await negative('devices', 'add_device binding: EVM target privacy salt changed after signing', A0, ADD, [{ ...eIn, key2: flip(eIn.key2) }, signAs(eTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: EVM target address changed after signing', A0, ADD, [{ ...eIn, address: flip(eIn.address) }, signAs(eTd, 0n)], INVALID, [INVALID]);
+  // the circuit-fixed consequence line (FR-023): a message whose effect line
+  // says something else is not this circuit's message
+  const softer = JSON.parse(JSON.stringify(kTd)); softer.message.effect = 'Adds a helper key';
+  await negative('devices', 'add_device: the effect line changed in the signed message', A0, ADD, [kIn, signAs(softer, 0n)], INVALID, [INVALID]);
+  const jIn = evmEip712DescriptorInput(targets[0][1]);
+  await negative('devices', 'add_device binding: a JubjubDevice signature executed under the Solana tag (same 64 payload bytes)', A0, ADD,
+    [{ ...jIn, tag: padTag(DESCRIPTOR_TAGS.device.sol_ed25519) }, signAs(evmEip712Messages.addDevice(frame(A0), jIn), 0n)], INVALID, [INVALID]);
+  // unregistered tag under a VALID signature: the passkey branch's struct hash
+  // names the scheme by its constant, not by the tag bytes, so a signature
+  // over a PasskeyDevice message verifies; only the tag checks refuse
+  for (const [label, tag] of [['an unregistered tag', padTag('midnight:account:device:zz:v9')], ["another recipe's tag (k256 boot)", padTag(DESCRIPTOR_TAGS.boot.k256)]] as const) {
+    await negative('devices', `add_device: ${label}, valid signature over the passkey fields`, A0, ADD,
+      [{ ...pIn, tag }, signAs(pTd, 0n)], NOT_DEVICE_TAG, [NOT_DEVICE_TAG, W117]);
+  }
+  // remove_device: an account with the device D and a k256 device K
+  const AK = (await execute(Original.Contract, A0, ADD, [kIn, signAs(kTd, 0n)])).after; // D now at counter 1
+  const kEntry = k1.entryAt(AK.addressBytes, 0n, 0n);
+  const remTd = (a: LocalAccount, input: typeof kIn, ep: bigint, ctr: bigint) => evmEip712Messages.removeDevice(frame(a), input, ep, ctr);
+  await positive('devices', 'remove_device: the k256 device by descriptor (epoch 0, counter 0)', posPath, AK, REMOVE,
+    [kIn, 0n, 0n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)]);
+  await positive('devices', 'remove_device: the k256 entry by the literal form (Q20)', posPath, AK, REMOVE,
+    [EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: kEntry }, signAs(evmEip712Messages.removeUnknownDevice(frame(AK), kEntry), 1n)]);
+  await negative('devices', 'remove_device binding: targetCounter signed 0, executed 1', AK, REMOVE, [kIn, 0n, 1n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)], INVALID, [INVALID, UNKNOWN]);
+  await negative('devices', 'remove_device binding: the literal entry changed after signing', AK, REMOVE,
+    [EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: flip(kEntry) }, signAs(evmEip712Messages.removeUnknownDevice(frame(AK), kEntry), 1n)], INVALID, [INVALID, UNKNOWN]);
+  await negative('devices', 'remove_device form swap: a RemoveUnknownDevice signature executed in the descriptor form', AK, REMOVE,
+    [kIn, 0n, 0n, NONE, signAs(evmEip712Messages.removeUnknownDevice(frame(AK), kEntry), 1n)], INVALID, [INVALID]);
+  await negative('devices', 'remove_device form swap: a RemoveDevice signature executed in the literal form', AK, REMOVE,
+    [EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: kEntry }, signAs(remTd(AK, kIn, 0n, 0n), 1n)], INVALID, [INVALID]);
+  const unkTd = JSON.parse(JSON.stringify(evmEip712Messages.removeUnknownDevice(frame(AK), kEntry))); unkTd.message.effect = 'Removes a device';
+  await negative('devices', 'remove_device (Q20): the fixed revocation line changed in the signed message', AK, REMOVE,
+    [EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: kEntry }, signAs(unkTd, 1n)], INVALID, [INVALID]);
+  await negative('devices', 'remove_device: a non-canonical absent literal entry', AK, REMOVE,
+    [kIn, 0n, 0n, { is_some: false, value: kEntry }, signAs(remTd(AK, kIn, 0n, 0n), 1n)], NONCANON, [NONCANON]);
+  // S13: the caller's own post-roll entry (D at counter 1 rolls to 2)
+  const self = evmEip712DescriptorInput(evmDeviceDescriptor(device));
+  const selfPost = device.entryAt(AK.addressBytes, 0n, 2n);
+  await negative('devices', 'S13: the device removes its own post-roll entry by descriptor', AK, REMOVE,
+    [self, 0n, 2n, NONE, signAs(remTd(AK, self, 0n, 2n), 1n)], SELF, [SELF]);
+  await negative('devices', 'S13: the device removes its own post-roll entry by the literal form', AK, REMOVE,
+    [EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: selfPost }, signAs(evmEip712Messages.removeUnknownDevice(frame(AK), selfPost), 1n)], SELF, [SELF]);
+  // the last device: only D (A0); a literal entry of nothing
+  await negative('devices', 'the last device cannot be removed (account with one device)', A0, REMOVE,
+    [EVM_EIP712_UNUSED_DESCRIPTOR, 0n, 0n, { is_some: true, value: device.entryAt(A0.addressBytes, 0n, 1n) },
+     signAs(evmEip712Messages.removeUnknownDevice(frame(A0), device.entryAt(A0.addressBytes, 0n, 1n)), 0n)], LAST, [LAST, SELF]);
+  // the future-epoch plant (README erratum 7): K (an upstream arm) enrols a
+  // raw entry derived at device_epoch + 1; D evicts it by descriptor at
+  // that epoch. add_device_with_evm_eip712 itself takes no epoch.
+  const W = await EvmEip712Device.enrol(new SoftwareEvmWallet(0x3a37n), 'undeployed', 0);
+  const plant = W.entryAt(AK.addressBytes, 1n, 0n);
+  const kAuth = k1.sign(k256Challenges.addDevice({ contractAddress: AK.addressBytes, authNonce: ledgerOf(AK).auth_nonce }, k1.pk, plant), 0n);
+  const AP = (await execute(Original.Contract, AK, 'add_device_with_k256', [plant, kAuth.pk, 0n, kAuth.sig, 0n])).after;
+  const planted: Result = { section: 'devices', circuit: 'add_device_with_k256', case: 'the upstream residual: a k256 device plants an evm_eip712 entry at device_epoch + 1 (raw entry)', kind: 'positive' };
+  const plantedOk = ledgerOf(AP).devices.member(plant) && ledgerOf(AP).device_count === 3n;
+  planted.positive = { name: planted.case, verdict: plantedOk ? 'PASS' : 'FAIL', reason: plantedOk ? 'the planted entry is in the set (simulator)' : 'not planted', proofServer: [], startedAt: new Date().toISOString(), ms: 0 };
+  tally(planted.positive); results.push(planted); line(planted);
+  const wIn = evmEip712DescriptorInput(evmDeviceDescriptor(W));
+  await positive('devices', 'remove_device: the planted entry evicted by descriptor at target epoch 1 (= device_epoch + 1)', posPath, AP, REMOVE,
+    [wIn, 1n, 0n, NONE, signAs(remTd(AP, wIn, 1n, 0n), counterOf(AP))]);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// S8E: grants
+// ═════════════════════════════════════════════════════════════════════════════
+
+if (SECTIONS.includes('grants')) {
+  const ISSUE = 'issue_grant_with_evm_eip712', REVOKE = 'revoke_grant_with_evm_eip712', REVOKE_ALL = 'revoke_all_grants_with_evm_eip712';
+  const GWU = 'withdraw_unshielded_with_grant_evm_eip712', GWS = 'withdraw_shielded_with_grant_evm_eip712';
+  const READ_KEY = 'evm_eip712: a read key without read';
+  const RP_ONLY = 'evm_eip712: an RP hash belongs to a passkey grantee';
+  const GINVALID = 'invalid grant signature';
+  const UNKNOWN_GRANT = 'unknown grant';
+  const COLOUR_G = 'held coin colour does not match the withdrawn colour';
+  const A0 = (await execute(Original.Contract, await dormant(device.bootCommitment(salt), recoveryPk), ACTIVATE, device.activationArgs(salt))).after;
+  const frame = (a: LocalAccount) => ({ account: a.addressBytes, device: device.address, authNonce: ledgerOf(a).auth_nonce as bigint });
+  const signAs = (t: Eip712TypedData, counter: bigint) => { const p = parseEvmSignature(wallet.signDigest(typedDataDigest(t))); return { pk: device.pk, use_counter: counter, blind: device.blind, sig: { r: p.r, s: p.s } }; };
+  const counterOf = (a: LocalAccount) => { for (let k = 0n; k < 64n; k++) if (ledgerOf(a).devices.member(device.entryAt(a.addressBytes, ledgerOf(a).device_epoch, k))) return k; throw new Error('device not live'); };
+  const scopeOf = (o: Partial<IssueScope>): IssueScope => ({ opWithdrawUnshielded: false, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: false,
+    color: new Uint8Array(32), recipientKind: 0n, recipient: new Uint8Array(32), maxCoinValue: 0n, perCallCap: 0n, cap: 0n, expiresAt: 0n,
+    rpIdHash: new Uint8Array(32), readPk: new Uint8Array(32), windowLen: 0n, windowCap: 0n, caller: null, ...o });
+  const issueArgs = (a: LocalAccount, gin: any, sc: IssueScope, sSalt: Uint8Array, signed: IssueScope = sc, rawReadPk?: Uint8Array) => {
+    const args = evmEip712IssueArgs(sc, sSalt);
+    if (rawReadPk) args[12] = rawReadPk;
+    return [gin, ...args, signAs(evmEip712Messages.issueGrant(frame(a), gin, signed), counterOf(a))];
+  };
+  // grantees
+  const label = grantLabel('bank.example');
+  const gWallet = new SoftwareEvmWallet(0x6a17een);
+  const eg = await EvmEip712Grantee.enrol(gWallet, 'undeployed', 0, label, 0n);
+  const kg = K256Grantee.generate();
+  const kOrigin = upstreamOriginHash('https://bank.example');
+  const pass = softwarePasskey();
+  const egIn = eg.descriptor();
+  const kgIn = evmEip712GranteeInput({ scheme: 'k256', x: kg.pk.x, y: kg.pk.y, envelope: 0 }, { originHash: kOrigin }, 0n);
+  const pgIn = evmEip712GranteeInput({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y }, { origin: pass.policy.origin }, 0n);
+  const COL = fill(32, 0xc7), RCPT = fill(32, 0x7e);
+  const unsh = scopeOf({ opWithdrawUnshielded: true, color: COL, cap: 450n, perCallCap: 300n, maxCoinValue: 300n, recipientKind: RECIPIENT_USER_ADDRESS, recipient: RCPT });
+  const sSalt = fill(32, 0x5a);
+  const posPath = await loadPatched([INVALID, UNKNOWN, READ_KEY, RP_ONLY, GINVALID, UNKNOWN_GRANT, COLOUR_G]);
+
+  // issue_grant positives: an evm_eip712, a k256 and a passkey grantee (with its RP)
+  await positive('grants', 'issue_grant: an evm_eip712 grantee, unshielded scope (patched path)', posPath, A0, ISSUE, issueArgs(A0, egIn, unsh, sSalt));
+  await positive('grants', 'issue_grant: a k256 grantee (labelled origin hash, Q17), pinned caller', posPath, A0, ISSUE, issueArgs(A0, kgIn, { ...unsh, caller: fill(32, 0xca) }, sSalt));
+  const rd = fill(32, 0x9d);
+  await positive('grants', 'issue_grant: a passkey grantee with its RP hash, read-only', posPath, A0, ISSUE,
+    issueArgs(A0, pgIn, scopeOf({ read: true, readPk: rd, rpIdHash: pass.policy.rp_id_hash }), sSalt));
+  // binding: a scope field, the caller pin, the grantee descriptor, Q17's label
+  const signedUnsh = issueArgs(A0, egIn, unsh, sSalt);
+  await negative('grants', 'issue_grant binding: cap signed 450, executed 451', A0, ISSUE, [egIn, ...evmEip712IssueArgs({ ...unsh, cap: 451n }, sSalt), signedUnsh.at(-1)], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant binding: a caller pin added after signing', A0, ISSUE, [egIn, ...evmEip712IssueArgs({ ...unsh, caller: fill(32, 0xca) }, sSalt), signedUnsh.at(-1)], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant binding: the grantee\'s site label changed after signing', A0, ISSUE, [{ ...egIn, label: grantLabel('evil.example') }, ...evmEip712IssueArgs(unsh, sSalt), signedUnsh.at(-1)], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant binding: the grantee slot changed after signing', A0, ISSUE, [{ ...egIn, slot: 1n }, ...evmEip712IssueArgs(unsh, sSalt), signedUnsh.at(-1)], INVALID, [INVALID]);
+  const signedK = issueArgs(A0, kgIn, unsh, sSalt);
+  await negative('grants', 'issue_grant binding: a k256 grantee\'s labelled origin hash changed after signing (Q17)', A0, ISSUE,
+    [{ ...kgIn, origin_hash: upstreamOriginHash('https://evil.example') }, ...evmEip712IssueArgs(unsh, sSalt), signedK.at(-1)], INVALID, [INVALID]);
+  const issueSoft = JSON.parse(JSON.stringify(evmEip712Messages.issueGrant(frame(A0), egIn, unsh))); issueSoft.message.effect = 'Lets this site read your balance';
+  await negative('grants', 'issue_grant: the effect line changed in the signed message', A0, ISSUE, [egIn, ...evmEip712IssueArgs(unsh, sSalt), signAs(issueSoft, counterOf(A0))], INVALID, [INVALID]);
+  // the arm's issue rules under a VALID signature
+  await negative('grants', 'issue_grant: a read key without read (signed with readKey zero, executed with a key)', A0, ISSUE,
+    issueArgs(A0, egIn, unsh, sSalt, unsh, fill(32, 0x11)), READ_KEY, [READ_KEY]);
+  const rpScope = { ...unsh, rpIdHash: fill(32, 0x3f) };
+  await negative('grants', 'issue_grant: an RP hash for a non-passkey grantee, honestly signed', A0, ISSUE, issueArgs(A0, egIn, rpScope, sSalt), RP_ONLY, [RP_ONLY]);
+  // revoke_grant / revoke_all over an account holding the evm grant
+  const AG = (await execute(Original.Contract, A0, ISSUE, issueArgs(A0, egIn, unsh, sSalt))).after;
+  await positive('grants', 'revoke_grant: the evm_eip712 grantee by descriptor', posPath, AG, REVOKE, [egIn, signAs(evmEip712Messages.revokeGrant(frame(AG), egIn), counterOf(AG))]);
+  // a second live grant (slot 1): the signed slot 0, the executed slot 1
+  const eg1In = { ...egIn, slot: 1n };
+  const AG2 = (await execute(Original.Contract, AG, ISSUE, issueArgs(AG, eg1In, unsh, sSalt))).after;
+  await negative('grants', 'revoke_grant binding: signed for slot 0, executed for the live slot-1 grant', AG2, REVOKE,
+    [eg1In, signAs(evmEip712Messages.revokeGrant(frame(AG2), egIn), counterOf(AG2))], INVALID, [INVALID]);
+  await positive('grants', 'revoke_all_grants', posPath, AG, REVOKE_ALL, [signAs(evmEip712Messages.revokeAllGrants(frame(AG)), counterOf(AG))]);
+  await negative('grants', 'revoke_all_grants replay/operation: a CancelRecovery signature (same bare frame)', AG, REVOKE_ALL,
+    [signAs(evmEip712Messages.cancelRecovery(frame(AG)), counterOf(AG))], INVALID, [INVALID]);
+
+  // the grantee twins
+  const AU = (await execute(Original.Contract, AG, 'deposit_unshielded', [COL, 1000n])).after;
+  const rec = (a: LocalAccount) => ledgerOf(a).grants.lookup(eg.grantId(a.addressBytes));
+  const gframe = (a: LocalAccount, nonce?: bigint) => ({ account: a.addressBytes, grantee: eg.address, label, slot: 0n, issuedAt: rec(a).issued_at, grantNonce: nonce ?? rec(a).nonce });
+  const opening: GrantOpening = { originHash: eg.originHash, slot: 0n, scopeSalt: sSalt, recipientKind: RECIPIENT_USER_ADDRESS, pinnedRecipient: RCPT, maxCoinValue: 300n, spentPrev: 0n };
+  const gSign = (t: Eip712TypedData, w = gWallet, pk = eg.pk) => { const p = parseEvmSignature(w.signDigest(typedDataDigest(t))); return { arm: 'evm_eip712' as const, pk, blind: eg.blind, label, sig: { r: p.r, s: p.s } }; };
+  const tdU = (a: LocalAccount, amt: bigint, nonce?: bigint) => evmEip712Messages.withdrawUnshieldedAsGrantee(gframe(a, nonce), COL, amt, RCPT);
+  const twinArgs = (amt: bigint, auth: any, o: GrantOpening = opening) => [COL, amt, { bytes: RCPT }, ...grantAuthArgs(o, auth)];
+  await positive('grants', 'withdraw_unshielded_with_grant: 200 by the evm_eip712 grantee (patched path)', posPath, AU, GWU, twinArgs(200n, gSign(tdU(AU, 200n))));
+  // auth_nonce and every device entry untouched (simulator state check)
+  const AU1 = (await execute(Original.Contract, AU, GWU, twinArgs(200n, gSign(tdU(AU, 200n))))).after;
+  const untouched: Result = { section: 'grants', circuit: GWU, case: 'the grant call advanced only its record (nonce +1), never auth_nonce or a device entry (FR-008)', kind: 'positive' };
+  const okU = ledgerOf(AU1).auth_nonce === ledgerOf(AU).auth_nonce && rec(AU1).nonce === rec(AU).nonce + 1n
+    && [...ledgerOf(AU1).devices].map((d: Uint8Array) => Buffer.from(d).toString('hex')).sort().join() === [...ledgerOf(AU).devices].map((d: Uint8Array) => Buffer.from(d).toString('hex')).sort().join();
+  untouched.positive = { name: untouched.case, verdict: okU ? 'PASS' : 'FAIL', reason: okU ? 'state checked' : 'auth_nonce or a device entry changed', proofServer: [], startedAt: new Date().toISOString(), ms: 0 };
+  tally(untouched.positive); results.push(untouched); line(untouched);
+  await negative('grants', 'grantee binding: amount signed 200, executed 201', AU, GWU, twinArgs(201n, gSign(tdU(AU, 200n))), GINVALID, [GINVALID]);
+  await negative('grants', 'grantee replay: the approval of the first call after the record nonce advanced', AU1, GWU, twinArgs(200n, gSign(tdU(AU, 200n)), { ...opening, spentPrev: 200n }), GINVALID, [GINVALID]);
+  await runtimeOnly('grants', 'grantee: another blind (a grant id with no record)', AU, GWU, twinArgs(200n, { ...gSign(tdU(AU, 200n)), blind: fill(32, 0x13) }), UNKNOWN_GRANT,
+    "the blind is a ledger-pinned opening (not in the signed frame): another blind names a grant id with no record; with the membership assert bypassed the generated JavaScript's map lookup throws ('expected a cell'), which is not an assert; in-circuit the membership assert refuses it");
+  await negative('grants', 'grantee replay/role: a device-role WithdrawUnshielded signature by the grantee key', AU, GWU,
+    twinArgs(200n, gSign(evmEip712Messages.withdrawUnshielded({ account: AU.addressBytes, device: eg.address, authNonce: ledgerOf(AU).auth_nonce }, COL, 200n, RCPT))), GINVALID, [GINVALID]);
+  // the grant seam's forged address (G1E-1): the attacker presents its own
+  // point with the victim grantee's blind and label; the copy derives the
+  // victim's address from it
+  const forging = await loadPatched([], FORGE_ADDRESS_OVERRIDES);
+  const attacker = new SoftwareEvmWallet(0xbad6n);
+  forgery.set({ pk: attacker.pk, address: eg.address });
+  await negative('grants', 'grant seam: the attacker\'s key with the grantee\'s address forged into the derivation', AU, GWU,
+    twinArgs(200n, gSign(tdU(AU, 200n), attacker, attacker.pk)), UNKNOWN_GRANT, [], '',
+    { module: forging, mutant: 'forged-address mutant (keccak256 override) on the grant seam', check: () => (forgery.fired > 0 ? undefined : 'the forgery never fired'),
+      control: { a: AU, args: twinArgs(200n, gSign(tdU(AU, 200n))) } });
+  forgery.set(undefined);
+  // the shielded grantee twin on a local Zswap tree: a valid approval over
+  // coin H, the witness answering another coin
+  const shScope = scopeOf({ opWithdrawShielded: true, read: true, readPk: fill(32, 0x77), color: COL_A, cap: 2000n, perCallCap: 1000n, maxCoinValue: 1000n });
+  const AS0 = (await execute(Original.Contract, A0, ISSUE, issueArgs(A0, egIn, shScope, sSalt))).after;
+  const shOpening: GrantOpening = { originHash: eg.originHash, slot: 0n, scopeSalt: sSalt, recipientKind: 0n, pinnedRecipient: new Uint8Array(32), maxCoinValue: 1000n, spentPrev: 0n };
+  const shAccount = (coins: { nonce: Uint8Array; color: Uint8Array; value: bigint }[], pick: number) => {
+    const { account, coins: placed } = withLocalCoins(AS0, coins);
+    return { a: { ...account, privateState: coinStoreAnswering([{ key: COL_A, coin: placed[pick] }]) } as LocalAccount, coin: placed[pick] };
+  };
+  const tree = [{ nonce: FILLER(0), color: COL_A, value: 5n }, { nonce: NONCE_H, color: COL_A, value: 1000n }];
+  const H = shAccount(tree, 1);
+  const change = fill(192, 0x2c);
+  const enc = ledgerOf(AS0).enc_key;
+  const rS = (ledgerOf(AS0).grants.lookup(eg.grantId(AS0.addressBytes)));
+  const tdS = evmEip712Messages.withdrawShieldedAsGrantee({ account: AS0.addressBytes, grantee: eg.address, label, slot: 0n, issuedAt: rS.issued_at, grantNonce: rS.nonce },
+    COL_A, 300n, localCoinPublicKeyBytes(), change, enc, { nonce: NONCE_H, value: 1000n, mtIndex: H.coin.mtIndex });
+  const sArgs = (auth: any) => [{ bytes: localCoinPublicKeyBytes() }, COL_A, 300n, change, enc, ...grantAuthArgs(shOpening, auth)];
+  await positive('grants', 'withdraw_shielded_with_grant: 300 of a 1000 coin (change appended, patched path)', posPath, H.a, GWS, sArgs(gSign(tdS)));
+  // the colour: upstream's scope check binds the SPENT coin's colour to the
+  // grant's object commitment, so the FR-010 assert is isolated with a grant
+  // whose scope colour is B: the grantee's valid approval names colour A, the
+  // witness coin is B (admitted by the scope); only coin.color == color refuses
+  const shScopeB = { ...shScope, color: COL_B };
+  const ASB = (await execute(Original.Contract, A0, ISSUE, issueArgs(A0, egIn, shScopeB, sSalt))).after;
+  const { account: treeB, coins: placedB } = withLocalCoins(ASB, [tree[0], { nonce: NONCE_H, color: COL_B, value: 1000n }]);
+  const colourB = { ...treeB, privateState: coinStoreAnswering([{ key: COL_A, coin: placedB[1] }]) } as LocalAccount;
+  const rB = ledgerOf(ASB).grants.lookup(eg.grantId(ASB.addressBytes));
+  const tdSB = evmEip712Messages.withdrawShieldedAsGrantee({ account: ASB.addressBytes, grantee: eg.address, label, slot: 0n, issuedAt: rB.issued_at, grantNonce: rB.nonce },
+    COL_A, 300n, localCoinPublicKeyBytes(), change, enc, { nonce: NONCE_H, value: 1000n, mtIndex: placedB[1].mtIndex });
+  await negative('grants', 'grantee shielded: valid approval for colour A, witness coin of colour B (a grant scoped to B)', colourB, GWS, sArgs(gSign(tdSB)), COLOUR_G, [COLOUR_G]);
+  const value999 = shAccount([tree[0], { nonce: NONCE_H, color: COL_A, value: 999n }], 1);
+  await negative('grants', 'grantee shielded: valid approval for coin value 1000, witness coin of value 999', value999.a, GWS, sArgs(gSign(tdS)), GINVALID, [GINVALID]);
 }
 
 const verdict = errors ? 'ERROR' : failures ? 'FAIL' : 'PASS';
