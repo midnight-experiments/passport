@@ -476,7 +476,7 @@
     {
       "name": "hex nibble 16 (not a nibble): circuit",
       "layer": "runtime",
-      "refusal": "type error: sol_message_withdraw_unshielded argument 9 at account-sol-ed25519.compact line 766 char 1; expected value of"
+      "refusal": "type error: sol_message_withdraw_unshielded argument 9; expected value of type Vector<256, Uint<0..16>> but recei"
     },
     {
       "name": "site label with a line break: renderer",

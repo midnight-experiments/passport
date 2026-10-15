@@ -314,7 +314,10 @@ function parsesAsTransaction(b: Uint8Array): boolean {
 {
   const G = '5 frozen corpus';
   // Negative vectors: every refusal of section 4, with its refusing layer.
-  const negatives = cases.filter((c) => c.layer).map((c) => ({ name: c.name, layer: c.layer, refusal: (c.detail ?? '').replace(/^.*?(failed assert: |sol message: |type error: )/, '$1').slice(0, 120) }));
+  // Source positions ("at <file> line N char M") are stripped: they move with
+  // unrelated edits of the contract and are not part of the refusal.
+  const negatives = cases.filter((c) => c.layer).map((c) => ({ name: c.name, layer: c.layer,
+    refusal: (c.detail ?? '').replace(/^.*?(failed assert: |sol message: |type error: )/, '$1').replace(/ at [\w./-]+\.compact line \d+ char \d+/g, '').slice(0, 120) }));
   const frozen = { format: 'sol v1', lengths, calls: corpus.map((c) => ({ name: c.name, op: c.op, bytes: c.text.length, sha256: createHash('sha256').update(c.circuit).digest('hex'), text: c.text })), negatives };
   if (process.env.SOL_MESSAGES_WRITE === '1') {
     fs.writeFileSync(FROZEN, JSON.stringify(frozen, null, 2) + '\n');
