@@ -28,7 +28,7 @@ import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind
 import {
   assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solFrameNibbles, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
   solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solTargetArg,
-  solTargetShow, type SolDeviceOperation, type SolGranteeOperation,
+  solTargetShow, type SolAmount, type SolDeviceOperation, type SolGranteeOperation,
 } from './sol-ed25519-message.js';
 import type { GrantOpening } from './signer.js';
 
@@ -430,4 +430,96 @@ export async function authoriseSolGrantee(device: SolEd25519Device, ctx: SolGran
   assertSafeSolMessage(bytes);
   const { sig } = await device.signBytes(bytes);
   return { arm: 'sol_ed25519', pk: device.pk, blind: device.blind, label: labelBytes(ctx.label), sig, showArgs, message: bytes, text };
+}
+
+// ── CustodyAccount helpers (S6S) ───────────────────────────────────────────
+//
+// CustodyAccount (account.ts) routes each `*WithAuth` call to
+// `<operation>_with_sol_ed25519` through the registered authArgs branch, so
+// the operands go first and this arm's display inputs and authorisation
+// follow. What it cannot do for this arm is render the message and find the
+// device's use counter; these helpers do (Q19: no account.ts edit).
+
+/** The surface of a CustodyAccount these helpers use. */
+export interface SolEd25519AccountSurface {
+  addressBytes: Uint8Array;
+  ledgerState(): Promise<{ auth_nonce: bigint; device_epoch: bigint; devices: { member(e: Uint8Array): boolean } }>;
+}
+
+/** The custody surface (S6S): CustodyAccount's `*WithAuth` calls and its
+ *  coin store's `heldCoin` (the coin the held_coin witness will return). */
+export interface SolEd25519CustodySurface extends SolEd25519AccountSurface {
+  rotateEncKeyWithAuth(newKey: Uint8Array, a: SolEd25519Authorisation): Promise<{ txId: string }>;
+  appendInboxWithAuth(entry: Uint8Array, a: SolEd25519Authorisation): Promise<{ txId: string }>;
+  withdrawUnshieldedWithAuth(color: Uint8Array, amount: bigint, recipient: Uint8Array, a: SolEd25519Authorisation): Promise<{ txId: string }>;
+  withdrawShieldedWithAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, a: SolEd25519Authorisation): Promise<{ txId: string; change: unknown }>;
+  withdrawShieldedToContractWithAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, a: SolEd25519Authorisation): Promise<{ txId: string; sent: unknown; change: unknown }>;
+  heldCoin(color: Uint8Array): Promise<{ nonce: Uint8Array; color: Uint8Array; value: bigint; mt_index: bigint }>;
+}
+
+/** How far the restore scan and the counter resolver look (one bound). */
+export const SOL_ED25519_COUNTER_SCAN = 4096n;
+
+/** The device's current use counter: the first counter whose entry is live
+ *  at the current epoch (MIP-0013 S11 rescan). */
+export async function resolveSolEd25519Counter(account: SolEd25519AccountSurface, device: SolEd25519Device, limit = SOL_ED25519_COUNTER_SCAN): Promise<bigint> {
+  const l = await account.ledgerState();
+  for (let k = 0n; k < limit; k++) {
+    if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k))) return k;
+  }
+  throw new Error('sol_ed25519: no live entry for this device (rescan limit reached)');
+}
+
+/** Authorises the next device-gated call of `device` on `account`: the
+ *  ledger's auth_nonce, the resolved counter, the message, the signature. */
+export async function authoriseSolDeviceOn(account: SolEd25519AccountSurface, device: SolEd25519Device, site: string, o: SolDeviceOperation): Promise<SolEd25519Authorisation> {
+  const l = await account.ledgerState();
+  const counter = await resolveSolEd25519Counter(account, device);
+  return authoriseSolDevice(device, { contractAddress: account.addressBytes, authNonce: l.auth_nonce }, site, o, counter);
+}
+
+/** The coin a shielded spend will consume, as the message shows it. Refuses
+ *  a stored coin of another colour at the client (FR-010; the circuit
+ *  asserts it too). */
+export async function solSpentCoin(account: SolEd25519CustodySurface, color: Uint8Array) {
+  const c = await account.heldCoin(color);
+  if (!equalBytes(c.color, color)) throw new Error('sol_ed25519: the held coin is not of the withdrawn colour');
+  return { nonce: c.nonce, color: c.color, value: c.value, mt_index: c.mt_index };
+}
+
+/** rotate_enc_key_with_sol_ed25519 through a CustodyAccount. */
+export async function rotateEncKeyWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, newKey: Uint8Array) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'rotate_enc_key', newKey });
+  return { auth, ...(await account.rotateEncKeyWithAuth(newKey, auth)) };
+}
+
+/** append_inbox_with_sol_ed25519: the 192-byte entry in full. */
+export async function appendInboxWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, entry: Uint8Array) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'append_inbox', entry });
+  return { auth, ...(await account.appendInboxWithAuth(entry, auth)) };
+}
+
+/** withdraw_unshielded_with_sol_ed25519 to a 32-byte user address. `amount`
+ *  carries the site's decimals and symbol (shown as the site's claim). */
+export async function withdrawUnshieldedWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipient: Uint8Array) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_unshielded', amount, recipient });
+  return { auth, ...(await account.withdrawUnshieldedWithAuth(amount.color, amount.amount, recipient, auth)) };
+}
+
+/** withdraw_shielded_with_sol_ed25519 to a Zswap coin public key: the
+ *  message shows the coin the store holds for the colour (nonce, value,
+ *  Merkle index) and the change. */
+export async function withdrawShieldedWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipient: Uint8Array) {
+  const coin = await solSpentCoin(account, amount.color);
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_shielded', amount, recipient, coin });
+  return { auth, coin, ...(await account.withdrawShieldedWithAuth(recipient, amount.color, amount.amount, auth)) };
+}
+
+/** withdraw_shielded_to_contract_with_sol_ed25519 (direct transfer, MIP-0012
+ *  §6.6): the authorisation only, because the call must be composed with the
+ *  recipient contract's claim in one transaction. */
+export async function authoriseWithdrawShieldedToContractSol(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipientContract: Uint8Array) {
+  const coin = await solSpentCoin(account, amount.color);
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_shielded_to_contract', amount, recipient: recipientContract, coin });
+  return { auth, coin };
 }
