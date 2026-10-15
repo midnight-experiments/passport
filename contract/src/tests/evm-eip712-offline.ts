@@ -379,6 +379,107 @@ const CLASS: Record<string, string> = {
 }
 console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (contract == client == ethers), ${tally['type strings'].pass} type strings == ethers; ${tally['codec negatives'].refused} negatives refused by every named layer; descriptor derivations == the width-class circuits (${tally['descriptor derivations'].pass}); no-blob: only the four labelled values`);
 
+// ── G2E-2: the seam's call sites (a static check of the arm's source) ─────
+//
+// The shared core evm_eip712_verify_and_roll takes the address and the
+// struct hash from its callers, and the module's frame builders take the
+// frame values as arguments; only the call sites make them the derived
+// address, kernel.self() and the ledger's auth_nonce (G1E-1). This reads
+// contracts/account-evm-eip712.compact as text and holds every call site to
+// that shape, so a future export that calls the core or a frame builder
+// itself fails here.
+{
+  // (EVM_EIP712_ARM_SOURCE: another copy of the file, for the check's own mutant runs)
+  const src = fs.readFileSync(process.env.EVM_EIP712_ARM_SOURCE ?? new URL('../../contracts/account-evm-eip712.compact', import.meta.url), 'utf8')
+    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
+  interface Circuit { name: string; exported: boolean; params: string; body: string }
+  const circuits: Circuit[] = [];
+  const head = /(export\s+)?circuit\s+([A-Za-z0-9_]+)\s*(<[^>]*>)?\s*\(/g;
+  for (let m; (m = head.exec(src)); ) {
+    let i = m.index + m[0].length, depth = 1;
+    while (depth) { const c = src[i++]; if (c === '(') depth++; else if (c === ')') depth--; }
+    const params = src.slice(m.index + m[0].length, i - 1);
+    const open = src.indexOf('{', i);
+    let j = open + 1; depth = 1;
+    while (depth) { const c = src[j++]; if (c === '{') depth++; else if (c === '}') depth--; }
+    circuits.push({ name: m[2], exported: Boolean(m[1]), params, body: src.slice(open + 1, j - 1) });
+    head.lastIndex = j;
+  }
+  const byName = new Map(circuits.map((c) => [c.name, c]));
+  const calls = (fn: string) => circuits.filter((c) => new RegExp(`\\b${fn}\\s*(<[^(]*>)?\\(`).test(c.body)).map((c) => c.name).sort();
+  /** Top-level arguments of the first call of `fn` in `body`. */
+  const argsOf = (body: string, fn: string): string[] => {
+    const m = new RegExp(`\\b${fn}\\s*(<[\\s\\S]*?>)?\\(`).exec(body);
+    assert.ok(m, `no call of ${fn}`);
+    let i = m!.index + m![0].length, depth = 1, cur = '';
+    const out: string[] = [];
+    while (depth) {
+      const c = body[i++];
+      if ('([<{'.includes(c)) depth++;
+      if (')]>}'.includes(c)) depth--;
+      if (depth === 1 && c === ',') { out.push(cur.trim()); cur = ''; } else if (depth) cur += c;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out.map((x) => x.replace(/\s+/g, ' '));
+  };
+  const ENTRY = ['require_authorised_with_evm_eip712', 'require_authorised_with_evm_eip712_either', 'require_authorised_with_evm_eip712_bare'];
+  const SEAMS = [...ENTRY, 'require_grant_with_evm_eip712'];
+  const firstStatement = (c: Circuit) => c.body.trim().split(';')[0].replace(/\s+/g, ' ');
+  // 1. the core: defined once, called exactly by the three device entry points
+  assert.ok(byName.has('evm_eip712_verify_and_roll') && !byName.get('evm_eip712_verify_and_roll')!.exported, 'the core exists and is not exported');
+  assert.deepEqual(calls('evm_eip712_verify_and_roll'), [...ENTRY].sort(), 'the core is called by the three device entry points only');
+  for (const e of ENTRY) {
+    const c = byName.get(e)!;
+    assert.equal(firstStatement(c), 'const address = evm_eip712_address(auth.pk)', `${e} derives the address from the presented point first`);
+    assert.equal((c.body.match(/\bevm_eip712_verify_and_roll\s*\(/g) ?? []).length, 1, `${e} calls the core once`);
+    assert.deepEqual(argsOf(c.body, 'evm_eip712_verify_and_roll').slice(0, 2), ['auth', 'address'], `${e} hands the core the presented auth and the derived address`);
+    for (const b of ['evm_eip712_device_struct', 'evm_eip712_device_struct_bare']) {
+      for (const m of c.body.matchAll(new RegExp(`\\b${b}\\s*(<[^(]*>)?\\(`, 'g'))) {
+        const a = argsOf(c.body.slice(m.index), b);
+        assert.deepEqual(a.slice(1, 4), ['kernel.self().bytes', 'address', 'auth_nonce'], `${e}: the frame is kernel.self(), the derived address and the ledger auth_nonce`);
+      }
+    }
+  }
+  // 2. the frame builders: only the seams build frames
+  assert.deepEqual([...new Set([...calls('evm_eip712_device_struct'), ...calls('evm_eip712_device_struct_bare')])].sort(), [...ENTRY].sort(), 'device frames are built only by the entry points');
+  assert.deepEqual(calls('evm_eip712_grantee_struct'), ['require_grant_with_evm_eip712'], 'grantee frames are built only by the grant seam');
+  {
+    const g = byName.get('require_grant_with_evm_eip712')!;
+    assert.equal(firstStatement(g), 'const address = evm_eip712_address(auth.pk)', 'the grant seam derives the grantee address first');
+    assert.deepEqual(argsOf(g.body, 'evm_eip712_grantee_struct').slice(1, 7), ['kernel.self().bytes', 'address', 'label', 'slot', 'g.issued_at', 'g.nonce'],
+      'the grantee frame is kernel.self(), the derived address, the label and slot of the grant id, and the record\'s issued_at and nonce');
+    assert.ok(/derive_grant_id_with_evm_eip712\(kernel\.self\(\), address, auth\.blind/.test(g.body.replace(/\s+/g, ' ')), 'the grant id is derived from the derived address');
+  }
+  // 3. every gated export goes through exactly one seam; nothing else is gated
+  const gated = circuits.filter((c) => c.exported && /\bauth\s*:/.test(c.params));
+  assert.equal(gated.length, 15, '15 gated exports');
+  for (const c of gated) {
+    const used = SEAMS.filter((s) => new RegExp(`\\b${s}\\s*(<[\\s\\S]*?>)?\\(`).test(c.body));
+    assert.equal(used.length, 1, `${c.name} calls exactly one seam (${used.join(', ')})`);
+    assert.equal((c.body.match(new RegExp(`\\b${used[0]}\\s*(<[\\s\\S]*?>)?\\(`, 'g')) ?? []).length, 1, `${c.name} calls its seam once`);
+    assert.ok(!/\bevm_eip712_(verify_and_roll|device_struct|device_struct_bare|grantee_struct)\s*(<[^(]*>)?\(/.test(c.body), `${c.name} builds no frame and calls no core itself`);
+  }
+  // 4. each grantee twin hands the seam the values its signed tail shows
+  const TWIN_OP: Record<string, string> = { withdraw_unshielded_with_grant_evm_eip712: '1', withdraw_shielded_with_grant_evm_eip712: '2', withdraw_shielded_to_contract_with_grant_evm_eip712: '3' };
+  for (const [twin, op] of Object.entries(TWIN_OP)) {
+    const c = byName.get(twin)!;
+    const parts = argsOf(c.body, `evm_eip712_parts_${twin.replace('_with_grant_evm_eip712', '')}_as_grantee`);
+    const seam = argsOf(c.body, 'require_grant_with_evm_eip712');
+    // seam: auth, label, slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev, op, obj_color, amount, recipient_bytes, type_hash, tail
+    assert.equal(seam[8], op, `${twin}: the op constant`);
+    assert.equal(seam[10], parts[1], `${twin}: the amount the seam checks is the signed one`);
+    assert.equal(seam[11], parts[2], `${twin}: the recipient the seam checks is the signed one`);
+    if (op === '1') assert.equal(seam[9], parts[0], `${twin}: the colour the seam checks is the signed one`);
+    else {
+      assert.equal(seam[9], 'coin.color', `${twin}: the scope colour is the spent coin's`);
+      assert.ok(/assert\(coin\.color == color,/.test(c.body.replace(/\s+/g, ' ')) && parts[0] === 'color', `${twin}: coin.color == color (FR-010), so the scope colour is the signed one`);
+      assert.deepEqual(parts.slice(5, 8), ['coin.nonce', 'coin.value', 'coin.mt_index'], `${twin}: the signed coin is the spent coin`);
+    }
+  }
+  ok('seam call sites (G2E-2)', 1);
+  console.log(`  ✓ seam call sites: the core called only by the 3 device entry points (each derives the address first; frame = kernel.self(), the derived address, auth_nonce); frames built only by the seams; 15 gated exports, each through exactly one seam; the 3 grantee twins hand the seam the signed colour, amount and recipient`);
+}
+
 const report = { suite: 'evm-eip712-offline', step: 'S2E+S4E', seed: SEED, ranAt: new Date().toISOString(), tally, vectors, frozen: { file: 'src/tests/vectors/evm-eip712-v2.json', vectors: FROZEN.vectors.length, negatives: negativeResults, hashesBy: FROZEN.hashesBy }, noBlob: CLASS, verdict: 'PASS' };
 if (process.env.EVIDENCE_DIR) {
   const file = path.join(process.env.EVIDENCE_DIR, 'evm-eip712-offline.json');
