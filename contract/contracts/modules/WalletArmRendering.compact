@@ -1,0 +1,173 @@
+// ---------------------------------------------------------------------------
+// Readable rendering — the shared text helpers of the readable authorisation
+// arms (`evm_eip712`, `sol_ed25519`).
+//
+// A readable arm's signed bytes show every operand in full, and the circuit
+// recomputes those bytes from exactly the values it executes on. These
+// helpers turn values into the printable ASCII a wallet displays:
+//
+//   decimal   a Uint<8>, <32>, <64>, or <128> in decimal: one or more digits,
+//             no leading zero (except "0"), left-aligned and space-padded to
+//             the type's full width (3, 10, 20, or 39 bytes), so every value of
+//             the type fits and each value has exactly one valid text;
+//   hex       bytes as lowercase hexadecimal, two digits per byte, in full
+//             (no fingerprint, no truncation);
+//   labels    zero-padded ASCII (a registered tag, a grantee's origin label):
+//             visible words separated by single spaces, then zero bytes,
+//             shown with the zero bytes as spaces;
+//   visible   exact visible ASCII (a passkey origin), shown as is.
+//
+// Compact has no division, so the decimal digits are DISPLAY INPUTS: the
+// caller supplies the text and the circuit CHECKS that it reads back to the
+// value and has the canonical shape. Nothing else is accepted, so the input
+// adds no freedom. Hex digits are computed in-circuit by comparison.
+//
+// The functions are pure and return byte vectors for the arm to place in its
+// message (or to hash). An arm that shows a text MUST obtain it from these
+// helpers with the executed value, never take shown text as a free input.
+// ---------------------------------------------------------------------------
+
+module WalletArmRendering {
+  import CompactStandardLibrary;
+
+  // ── Decimal digits ────────────────────────────────────────────────────────
+  //
+  // `text` is `value` in decimal: one or more digits, then spaces only; no
+  // leading zero except the single digit "0". The value is read back over the
+  // field, which is exact while 10^n is below the field modulus (n <= 76):
+  // every instantiation below is at most 39 digits.
+  circuit decimal_text<#n>(value: Field, text: Vector<n, Uint<8>>): Vector<n, Uint<8>> {
+    // [the value read so far, the padding has begun, every byte fits]
+    const r = fold((s: [Field, Boolean, Boolean], c: Uint<8>): [Field, Boolean, Boolean] => {
+      const space = c == 32;
+      const digit = c >= 48 && c <= 57;
+      const padding = s[1] || space;
+      return [padding ? s[0] : s[0] * 10 + ((c as Field) - 48),
+              padding,
+              s[2] && (space || (digit && !s[1]))];
+    }, [0 as Field, false, true], text);
+    assert(r[2], "display: not a left-aligned decimal");
+    assert(text[0] != 32, "display: empty decimal");
+    assert(text[0] != 48 || text[1] == 32, "display: leading zero");
+    assert(r[0] == value, "display: digits do not match the value");
+    return text;
+  }
+
+  export pure circuit uint8_text(value: Uint<8>, text: Vector<3, Uint<8>>): Vector<3, Uint<8>> {
+    return decimal_text<3>(value as Field, text);
+  }
+
+  export pure circuit uint32_text(value: Uint<32>, text: Vector<10, Uint<8>>): Vector<10, Uint<8>> {
+    return decimal_text<10>(value as Field, text);
+  }
+
+  export pure circuit uint64_text(value: Uint<64>, text: Vector<20, Uint<8>>): Vector<20, Uint<8>> {
+    return decimal_text<20>(value as Field, text);
+  }
+
+  // 2^128 - 1 has 39 digits: every amount and cap is shown in full.
+  export pure circuit uint128_text(value: Uint<128>, text: Vector<39, Uint<8>>): Vector<39, Uint<8>> {
+    return decimal_text<39>(value as Field, text);
+  }
+
+  // ── Hexadecimal ───────────────────────────────────────────────────────────
+
+  circuit hex_digit(n: Uint<8>): Uint<8> {
+    return (n < 10 ? n + 48 : n + 87) as Uint<8>;
+  }
+
+  // One byte as two lowercase hex digits: the high nibble's bits by
+  // comparison, the low nibble as the remainder.
+  circuit hex_pair(b: Uint<8>): [Uint<8>, Uint<8>] {
+    const h8 = b >= 128;
+    const b7 = h8 ? b - 128 : b;
+    const h4 = b7 >= 64;
+    const b6 = h4 ? b7 - 64 : b7;
+    const h2 = b6 >= 32;
+    const b5 = h2 ? b6 - 32 : b6;
+    const h1 = b5 >= 16;
+    const lo = h1 ? b5 - 16 : b5;
+    const hi = (h8 ? 8 : 0) + (h4 ? 4 : 0) + (h2 ? 2 : 0) + (h1 ? 1 : 0);
+    return [hex_digit(hi as Uint<8>), hex_digit(lo as Uint<8>)];
+  }
+
+  export pure circuit hex_text_20(b: Bytes<20>): Vector<40, Uint<8>> {
+    const p = map(hex_pair, b as Vector<20, Uint<8>>);
+    return [...p[0],  ...p[1],  ...p[2],  ...p[3],  ...p[4],  ...p[5],  ...p[6],
+            ...p[7],  ...p[8],  ...p[9],  ...p[10], ...p[11], ...p[12], ...p[13],
+            ...p[14], ...p[15], ...p[16], ...p[17], ...p[18], ...p[19]];
+  }
+
+  export pure circuit hex_text_32(b: Bytes<32>): Vector<64, Uint<8>> {
+    const p = map(hex_pair, b as Vector<32, Uint<8>>);
+    return [...p[0],  ...p[1],  ...p[2],  ...p[3],  ...p[4],  ...p[5],  ...p[6],  ...p[7],
+            ...p[8],  ...p[9],  ...p[10], ...p[11], ...p[12], ...p[13], ...p[14], ...p[15],
+            ...p[16], ...p[17], ...p[18], ...p[19], ...p[20], ...p[21], ...p[22], ...p[23],
+            ...p[24], ...p[25], ...p[26], ...p[27], ...p[28], ...p[29], ...p[30], ...p[31]];
+  }
+
+  export pure circuit hex_text_64(b: Bytes<64>): Vector<128, Uint<8>> {
+    return [...hex_text_32(slice<32>(b, 0)), ...hex_text_32(slice<32>(b, 32))];
+  }
+
+  // The 192-byte inbox ciphertext, in full.
+  export pure circuit hex_text_192(b: Bytes<192>): Vector<384, Uint<8>> {
+    return [...hex_text_32(slice<32>(b, 0)),   ...hex_text_32(slice<32>(b, 32)),
+            ...hex_text_32(slice<32>(b, 64)),  ...hex_text_32(slice<32>(b, 96)),
+            ...hex_text_32(slice<32>(b, 128)), ...hex_text_32(slice<32>(b, 160))];
+  }
+
+  // The byte order of a little-endian coordinate reversed, so that a k256 or
+  // p256 coordinate the recipes bind little-endian can be shown in the usual
+  // big-endian form. Free in a circuit (wiring only).
+  export pure circuit reverse_32(b: Bytes<32>): Bytes<32> {
+    const v = b as Vector<32, Uint<8>>;
+    return Bytes[v[31], v[30], v[29], v[28], v[27], v[26], v[25], v[24],
+                 v[23], v[22], v[21], v[20], v[19], v[18], v[17], v[16],
+                 v[15], v[14], v[13], v[12], v[11], v[10], v[9],  v[8],
+                 v[7],  v[6],  v[5],  v[4],  v[3],  v[2],  v[1],  v[0]];
+  }
+
+  // ── Labels ────────────────────────────────────────────────────────────────
+  //
+  // A zero-padded label: one or more words of visible characters
+  // (0x21..0x7e) separated by single spaces, then zero bytes only. It starts
+  // with a visible character and its text never ends with a space, so showing
+  // the zero bytes as spaces is one-to-one: two labels with different bytes
+  // never show the same text.
+  export pure circuit label_text<#n>(label: Bytes<n>): Vector<n, Uint<8>> {
+    const v = label as Vector<n, Uint<8>>;
+    // [the previous byte was a space (true before the first byte),
+    //  the padding has begun, every byte fits]
+    const r = fold((s: [Boolean, Boolean, Boolean], c: Uint<8>): [Boolean, Boolean, Boolean] => {
+      const zero = c == 0;
+      const space = c == 32;
+      const shown = c >= 33 && c <= 126;
+      const fits = s[1] ? zero
+                 : zero ? !s[0]
+                 : shown || (space && !s[0]);
+      return [space, s[1] || zero, s[2] && fits];
+    }, [true, false, true], v);
+    assert(r[2] && !r[0], "display: not a zero-padded label");
+    return map((c: Uint<8>): Uint<8> => (c == 0 ? 32 : c) as Uint<8>, v);
+  }
+
+  // A grantee's 32-byte origin label; also renders a registered tag.
+  export pure circuit label_text_32(label: Bytes<32>): Vector<32, Uint<8>> {
+    return label_text<32>(label);
+  }
+
+  // Exact visible ASCII (0x21..0x7e), shown byte for byte.
+  export pure circuit visible_text<#n>(b: Bytes<n>): Vector<n, Uint<8>> {
+    const v = b as Vector<n, Uint<8>>;
+    for (const c of v) {
+      assert(c >= 33 && c <= 126, "display: not visible ASCII");
+    }
+    return v;
+  }
+
+  // A passkey's 21-byte origin (the wa-json134 profile).
+  export pure circuit visible_text_21(b: Bytes<21>): Vector<21, Uint<8>> {
+    return visible_text<21>(b);
+  }
+}
