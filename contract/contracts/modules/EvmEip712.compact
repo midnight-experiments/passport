@@ -648,32 +648,228 @@ module EvmEip712 {
     return [s == 0 ? h_evm : s == 3 ? h_k1 : h_six, s];
   }
 
-  // ── Struct hashes: the device role ────────────────────────────────────────
+  // ── The frames ────────────────────────────────────────────────────────────
+  //
+  // Every device-role primary type begins with the same frame,
+  //   typeHash, bytes32 account, address device, uint64 authNonce,
+  // and every grantee-role type with
+  //   typeHash, bytes32 account, address grantee, string siteLabel,
+  //   uint8 slot, uint64 issuedAt, uint64 grantNonce,
+  // followed by the operation's own members (its "tail"). The frame builders
+  // below are the only place the frame is encoded: the exported struct-hash
+  // oracles use them, and so does the arm's seam, which supplies the frame's
+  // values itself (the account is kernel.self(), the device the address of
+  // the presented point, the nonce the ledger's) — so no export can ever name
+  // a frame value (audit G1E-1, G0 C9). Each operation's type hash and tail
+  // come from its `evm_eip712_parts_*` circuit, shared by the oracle and the
+  // export. The tail is a tuple of byte atoms and is hashed in place, flat
+  // (keccak256 of a tuple encodes its elements in declaration order).
+
+  export circuit evm_eip712_device_struct<T>(
+    type_hash: Bytes<32>, account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, tail: T
+  ): Bytes<32> {
+    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, T]>([
+      type_hash, account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce), tail]);
+  }
+
+  // The device-role types with no members of their own (RevokeAllGrants,
+  // CancelRecovery): the frame alone.
+  export circuit evm_eip712_device_struct_bare(
+    type_hash: Bytes<32>, account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>
+  ): Bytes<32> {
+    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>]>([
+      type_hash, account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce)]);
+  }
+
+  export circuit evm_eip712_grantee_struct<T>(
+    type_hash: Bytes<32>, account: Bytes<32>, grantee: Bytes<20>, label: Bytes<32>, slot: Uint<8>,
+    issued_at: Uint<64>, grant_nonce: Uint<64>, tail: T
+  ): Bytes<32> {
+    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>, Bytes<31>, Bytes<1>,
+                      Bytes<24>, Bytes<8>, Bytes<24>, Bytes<8>, T]>([
+      type_hash, account, pad(12, ""), grantee, evm_eip712_site_label_hash(label), pad(31, ""), u8b(slot),
+      pad(24, ""), u64be(issued_at), pad(24, ""), u64be(grant_nonce), tail]);
+  }
+
+  // ── Parts: each operation's type hash and tail ────────────────────────────
+
+  // color, amount, recipient
+  export circuit evm_eip712_parts_withdraw_unshielded(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>]] {
+    return [evm_eip712_type_withdraw_unshielded(), [color, pad(16, ""), u128be(amount), recipient]];
+  }
+
+  // The spent coin is shown by its nonce, value and Merkle index; its colour is
+  // `color` (the exports assert coin.color == color); change = value - amount.
+  circuit coin_tail(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
+  ): [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>] {
+    const change = (coin_value - amount) as Uint<128>;
+    return [color, pad(16, ""), u128be(amount), recipient,
+            coin_nonce, pad(16, ""), u128be(coin_value), pad(24, ""), u64be(coin_mt_index), pad(16, ""), u128be(change)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded(), coin_tail(color, amount, recipient, coin_nonce, coin_value, coin_mt_index)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded_to_contract(
+    color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded_to_contract(),
+            coin_tail(color, amount, recipient_contract, coin_nonce, coin_value, coin_mt_index)];
+  }
+
+  // `bytes entry`: the 192-byte InboxEntry v1 ciphertext, shown in full hex.
+  export circuit evm_eip712_parts_append_inbox(entry: Bytes<192>): [Bytes<32>, Bytes<32>] {
+    return [evm_eip712_type_append_inbox(), keccak256<Bytes<192>>(entry)];
+  }
+
+  export circuit evm_eip712_parts_rotate_enc_key(new_key: Bytes<32>): [Bytes<32>, [Bytes<32>, Bytes<32>]] {
+    return [evm_eip712_type_rotate_enc_key(), [evm_eip712_effect_rotate_enc_key(), new_key]];
+  }
+
+  export circuit evm_eip712_parts_add_device(new_device: EvmEip712Descriptor): [Bytes<32>, [Bytes<32>, Bytes<32>]] {
+    const [child, s] = evm_eip712_device_descriptor_hash(new_device);
+    const t = s == 0 ? evm_eip712_type_add_device__evm() : s == 1 ? evm_eip712_type_add_device__solana()
+            : s == 2 ? evm_eip712_type_add_device__jubjub() : s == 3 ? evm_eip712_type_add_device__k256()
+            : evm_eip712_type_add_device__passkey();
+    return [t, [evm_eip712_effect_add_device(), child]];
+  }
+
+  export circuit evm_eip712_parts_remove_device(
+    target: EvmEip712Descriptor, target_epoch: Uint<32>, target_counter: Uint<64>
+  ): [Bytes<32>, [Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>]] {
+    const [child, s] = evm_eip712_device_descriptor_hash(target);
+    const t = s == 0 ? evm_eip712_type_remove_device__evm() : s == 1 ? evm_eip712_type_remove_device__solana()
+            : s == 2 ? evm_eip712_type_remove_device__jubjub() : s == 3 ? evm_eip712_type_remove_device__k256()
+            : evm_eip712_type_remove_device__passkey();
+    return [t, [child, pad(28, ""), u32be(target_epoch), pad(24, ""), u64be(target_counter)]];
+  }
+
+  // The revocation-only literal form (Q20): the entry under a fixed line.
+  export circuit evm_eip712_parts_remove_unknown_device(entry: Bytes<32>): [Bytes<32>, [Bytes<32>, Bytes<32>]] {
+    return [evm_eip712_type_remove_unknown_device(), [evm_eip712_effect_remove_unknown_device(), entry]];
+  }
+
+  // Every scope field, the grantee descriptor, the RP hash (a passkey grantee's
+  // labelled value; zero otherwise), the delegate's read key itself (its hash is
+  // what the record stores; zero when `read` is off), and the caller pin.
+  export circuit evm_eip712_parts_issue_grant(
+    grantee: EvmEip712GranteeDescriptor,
+    op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean,
+    read: Boolean, color: Bytes<32>, recipient_kind: Uint<8>, recipient: Bytes<32>, max_coin_value: Uint<128>,
+    per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>,
+    window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>
+  ): [Bytes<32>, [Bytes<32>, Bytes<32>,
+                  Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>,
+                  Bytes<32>, Bytes<31>, Bytes<1>, Bytes<32>,
+                  Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>,
+                  Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>,
+                  Bytes<31>, Bytes<1>, Bytes<32>]] {
+    const [child, s] = evm_eip712_grantee_descriptor_hash(grantee);
+    const t = s == 0 ? evm_eip712_type_issue_grant__evm() : s == 1 ? evm_eip712_type_issue_grant__solana()
+            : s == 2 ? evm_eip712_type_issue_grant__jubjub() : s == 3 ? evm_eip712_type_issue_grant__k256()
+            : evm_eip712_type_issue_grant__passkey();
+    return [t, [evm_eip712_effect_issue_grant(), child,
+      pad(31, ""), boolb(op_withdraw_unshielded), pad(31, ""), boolb(op_withdraw_shielded),
+      pad(31, ""), boolb(op_withdraw_shielded_to_contract), pad(31, ""), boolb(read),
+      color, pad(31, ""), u8b(recipient_kind), recipient,
+      pad(16, ""), u128be(max_coin_value), pad(16, ""), u128be(per_call_cap), pad(16, ""), u128be(cap),
+      pad(24, ""), u64be(expires_at), rp_id_hash, read ? read_pk : pad(32, ""), pad(24, ""), u64be(window_len),
+      pad(16, ""), u128be(window_cap),
+      pad(31, ""), boolb(caller.is_some), caller.is_some ? caller.value.bytes : pad(32, "")]];
+  }
+
+  export circuit evm_eip712_parts_revoke_grant(grantee: EvmEip712GranteeDescriptor): [Bytes<32>, Bytes<32>] {
+    const [child, s] = evm_eip712_grantee_descriptor_hash(grantee);
+    const t = s == 0 ? evm_eip712_type_revoke_grant__evm() : s == 1 ? evm_eip712_type_revoke_grant__solana()
+            : s == 2 ? evm_eip712_type_revoke_grant__jubjub() : s == 3 ? evm_eip712_type_revoke_grant__k256()
+            : evm_eip712_type_revoke_grant__passkey();
+    return [t, child];
+  }
+
+  export circuit evm_eip712_parts_revoke_all_grants(): Bytes<32> {
+    return evm_eip712_type_revoke_all_grants();
+  }
+
+  // JubJub coordinates and the phi Field values are shown little-endian (Q29);
+  // `bytes wrap` is the 64-byte wrap in full.
+  export circuit evm_eip712_parts_publish_recovery_session(
+    new_recovery_pk: JubjubPoint, session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field,
+    phi_len: Uint<8>, wrap: Bytes<64>
+  ): [Bytes<32>, [Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                  Bytes<31>, Bytes<1>, Bytes<32>]] {
+    return [evm_eip712_type_publish_recovery_session(), [evm_eip712_effect_publish_recovery_session(),
+      jubjubPointX(new_recovery_pk) as Bytes<32>, jubjubPointY(new_recovery_pk) as Bytes<32>, session_nonce,
+      phi_1 as Bytes<32>, phi_2 as Bytes<32>, phi_3 as Bytes<32>, phi_4 as Bytes<32>,
+      pad(31, ""), u8b(phi_len), keccak256<Bytes<64>>(wrap)]];
+  }
+
+  export circuit evm_eip712_parts_cancel_recovery(): Bytes<32> {
+    return evm_eip712_type_cancel_recovery();
+  }
+
+  // The grantee role: color, amount, recipient (+ the change entry, its key and
+  // the coin for the shielded twins).
+  export circuit evm_eip712_parts_withdraw_unshielded_as_grantee(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>]] {
+    return [evm_eip712_type_withdraw_unshielded_as_grantee(), [color, pad(16, ""), u128be(amount), recipient]];
+  }
+
+  circuit grantee_coin_tail(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
+  ): [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>,
+      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>] {
+    const change = (coin_value - amount) as Uint<128>;
+    return [color, pad(16, ""), u128be(amount), recipient, keccak256<Bytes<192>>(change_entry), enc_pk,
+            coin_nonce, pad(16, ""), u128be(coin_value), pad(24, ""), u64be(coin_mt_index), pad(16, ""), u128be(change)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded_as_grantee(
+    color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>,
+                  Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded_as_grantee(),
+            grantee_coin_tail(color, amount, recipient, change_entry, enc_pk, coin_nonce, coin_value, coin_mt_index)];
+  }
+
+  export circuit evm_eip712_parts_withdraw_shielded_to_contract_as_grantee(
+    color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
+    coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
+  ): [Bytes<32>, [Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>,
+                  Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]] {
+    return [evm_eip712_type_withdraw_shielded_to_contract_as_grantee(),
+            grantee_coin_tail(color, amount, recipient_contract, change_entry, enc_pk, coin_nonce, coin_value, coin_mt_index)];
+  }
+
+  // ── Struct hashes: the exported oracles (frame + parts) ───────────────────
 
   export pure circuit evm_eip712_struct_withdraw_unshielded(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>,
     color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>]>([
-      evm_eip712_type_withdraw_unshielded(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce),
-      color, pad(16, ""), u128be(amount), recipient]);
+    const [t, tail] = evm_eip712_parts_withdraw_unshielded(color, amount, recipient);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>]>(t, account, device, auth_nonce, tail);
   }
 
-  // The spent coin is shown by its nonce, value and Merkle index; its colour is
-  // `color` (the export asserts coin.color == color); change = value - amount.
   export pure circuit evm_eip712_struct_withdraw_shielded(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>,
     color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>,
     coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
   ): Bytes<32> {
-    const change = (coin_value - amount) as Uint<128>;
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>([
-      evm_eip712_type_withdraw_shielded(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce),
-      color, pad(16, ""), u128be(amount), recipient,
-      coin_nonce, pad(16, ""), u128be(coin_value), pad(24, ""), u64be(coin_mt_index), pad(16, ""), u128be(change)]);
+    const [t, tail] = evm_eip712_parts_withdraw_shielded(color, amount, recipient, coin_nonce, coin_value, coin_mt_index);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, device, auth_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_withdraw_shielded_to_contract(
@@ -681,69 +877,47 @@ module EvmEip712 {
     color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>,
     coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
   ): Bytes<32> {
-    const change = (coin_value - amount) as Uint<128>;
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>([
-      evm_eip712_type_withdraw_shielded_to_contract(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce),
-      color, pad(16, ""), u128be(amount), recipient_contract,
-      coin_nonce, pad(16, ""), u128be(coin_value), pad(24, ""), u64be(coin_mt_index), pad(16, ""), u128be(change)]);
+    const [t, tail] = evm_eip712_parts_withdraw_shielded_to_contract(color, amount, recipient_contract, coin_nonce, coin_value, coin_mt_index);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, device, auth_nonce, tail);
   }
 
-  // `bytes entry`: the 192-byte InboxEntry v1 ciphertext, shown in full hex.
   export pure circuit evm_eip712_struct_append_inbox(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, entry: Bytes<192>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>]>([
-      evm_eip712_type_append_inbox(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce),
-      keccak256<Bytes<192>>(entry)]);
+    const [t, tail] = evm_eip712_parts_append_inbox(entry);
+    return evm_eip712_device_struct<Bytes<32>>(t, account, device, auth_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_rotate_enc_key(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, new_key: Bytes<32>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>]>([
-      evm_eip712_type_rotate_enc_key(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce),
-      evm_eip712_effect_rotate_enc_key(), new_key]);
+    const [t, tail] = evm_eip712_parts_rotate_enc_key(new_key);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>]>(t, account, device, auth_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_add_device(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, new_device: EvmEip712Descriptor
   ): Bytes<32> {
-    const [child, s] = evm_eip712_device_descriptor_hash(new_device);
-    const t = s == 0 ? evm_eip712_type_add_device__evm() : s == 1 ? evm_eip712_type_add_device__solana()
-            : s == 2 ? evm_eip712_type_add_device__jubjub() : s == 3 ? evm_eip712_type_add_device__k256()
-            : evm_eip712_type_add_device__passkey();
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>]>([
-      t, account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce), evm_eip712_effect_add_device(), child]);
+    const [t, tail] = evm_eip712_parts_add_device(new_device);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>]>(t, account, device, auth_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_remove_device(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, target: EvmEip712Descriptor,
     target_epoch: Uint<32>, target_counter: Uint<64>
   ): Bytes<32> {
-    const [child, s] = evm_eip712_device_descriptor_hash(target);
-    const t = s == 0 ? evm_eip712_type_remove_device__evm() : s == 1 ? evm_eip712_type_remove_device__solana()
-            : s == 2 ? evm_eip712_type_remove_device__jubjub() : s == 3 ? evm_eip712_type_remove_device__k256()
-            : evm_eip712_type_remove_device__passkey();
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>,
-                      Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>]>([
-      t, account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce), child,
-      pad(28, ""), u32be(target_epoch), pad(24, ""), u64be(target_counter)]);
+    const [t, tail] = evm_eip712_parts_remove_device(target, target_epoch, target_counter);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>]>(t, account, device, auth_nonce, tail);
   }
 
-  // The revocation-only literal form (Q20): the entry under a fixed line.
   export pure circuit evm_eip712_struct_remove_unknown_device(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, entry: Bytes<32>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>]>([
-      evm_eip712_type_remove_unknown_device(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce),
-      evm_eip712_effect_remove_unknown_device(), entry]);
+    const [t, tail] = evm_eip712_parts_remove_unknown_device(entry);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>]>(t, account, device, auth_nonce, tail);
   }
 
-  // Every scope field, the grantee descriptor, the RP hash (a passkey grantee's
-  // labelled value; zero otherwise), the delegate's read key itself (its hash is
-  // what the record stores), and the caller pin.
   export pure circuit evm_eip712_struct_issue_grant(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, grantee: EvmEip712GranteeDescriptor,
     op_withdraw_unshielded: Boolean, op_withdraw_shielded: Boolean, op_withdraw_shielded_to_contract: Boolean,
@@ -751,85 +925,59 @@ module EvmEip712 {
     per_call_cap: Uint<128>, cap: Uint<128>, expires_at: Uint<64>, rp_id_hash: Bytes<32>, read_pk: Bytes<32>,
     window_len: Uint<64>, window_cap: Uint<128>, caller: Maybe<ContractAddress>
   ): Bytes<32> {
-    const [child, s] = evm_eip712_grantee_descriptor_hash(grantee);
-    const t = s == 0 ? evm_eip712_type_issue_grant__evm() : s == 1 ? evm_eip712_type_issue_grant__solana()
-            : s == 2 ? evm_eip712_type_issue_grant__jubjub() : s == 3 ? evm_eip712_type_issue_grant__k256()
-            : evm_eip712_type_issue_grant__passkey();
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>,
-                      Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>,
-                      Bytes<32>, Bytes<31>, Bytes<1>, Bytes<32>,
-                      Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>,
-                      Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>,
-                      Bytes<31>, Bytes<1>, Bytes<32>]>([
-      t, account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce), evm_eip712_effect_issue_grant(), child,
-      pad(31, ""), boolb(op_withdraw_unshielded), pad(31, ""), boolb(op_withdraw_shielded),
-      pad(31, ""), boolb(op_withdraw_shielded_to_contract), pad(31, ""), boolb(read),
-      color, pad(31, ""), u8b(recipient_kind), recipient,
-      pad(16, ""), u128be(max_coin_value), pad(16, ""), u128be(per_call_cap), pad(16, ""), u128be(cap),
-      pad(24, ""), u64be(expires_at), rp_id_hash, read ? read_pk : pad(32, ""), pad(24, ""), u64be(window_len),
-      pad(16, ""), u128be(window_cap),
-      pad(31, ""), boolb(caller.is_some), caller.is_some ? caller.value.bytes : pad(32, "")]);
+    const [t, tail] = evm_eip712_parts_issue_grant(grantee, op_withdraw_unshielded, op_withdraw_shielded,
+      op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap,
+      expires_at, rp_id_hash, read_pk, window_len, window_cap, caller);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>,
+                                     Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>,
+                                     Bytes<32>, Bytes<31>, Bytes<1>, Bytes<32>,
+                                     Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>,
+                                     Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>,
+                                     Bytes<31>, Bytes<1>, Bytes<32>]>(t, account, device, auth_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_revoke_grant(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, grantee: EvmEip712GranteeDescriptor
   ): Bytes<32> {
-    const [child, s] = evm_eip712_grantee_descriptor_hash(grantee);
-    const t = s == 0 ? evm_eip712_type_revoke_grant__evm() : s == 1 ? evm_eip712_type_revoke_grant__solana()
-            : s == 2 ? evm_eip712_type_revoke_grant__jubjub() : s == 3 ? evm_eip712_type_revoke_grant__k256()
-            : evm_eip712_type_revoke_grant__passkey();
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>]>([
-      t, account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce), child]);
+    const [t, tail] = evm_eip712_parts_revoke_grant(grantee);
+    return evm_eip712_device_struct<Bytes<32>>(t, account, device, auth_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_revoke_all_grants(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>]>([
-      evm_eip712_type_revoke_all_grants(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce)]);
+    return evm_eip712_device_struct_bare(evm_eip712_parts_revoke_all_grants(), account, device, auth_nonce);
   }
 
-  // JubJub coordinates and the phi Field values are shown little-endian (Q29);
-  // `bytes wrap` is the 64-byte wrap in full.
   export pure circuit evm_eip712_struct_publish_recovery_session(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>, new_recovery_pk: JubjubPoint,
     session_nonce: Bytes<32>, phi_1: Field, phi_2: Field, phi_3: Field, phi_4: Field,
     phi_len: Uint<8>, wrap: Bytes<64>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>, Bytes<32>,
-                      Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
-                      Bytes<31>, Bytes<1>, Bytes<32>]>([
-      evm_eip712_type_publish_recovery_session(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce),
-      evm_eip712_effect_publish_recovery_session(),
-      jubjubPointX(new_recovery_pk) as Bytes<32>, jubjubPointY(new_recovery_pk) as Bytes<32>, session_nonce,
-      phi_1 as Bytes<32>, phi_2 as Bytes<32>, phi_3 as Bytes<32>, phi_4 as Bytes<32>,
-      pad(31, ""), u8b(phi_len), keccak256<Bytes<64>>(wrap)]);
+    const [t, tail] = evm_eip712_parts_publish_recovery_session(new_recovery_pk, session_nonce,
+      phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
+    return evm_eip712_device_struct<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+                                     Bytes<31>, Bytes<1>, Bytes<32>]>(t, account, device, auth_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_cancel_recovery(
     account: Bytes<32>, device: Bytes<20>, auth_nonce: Uint<64>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<24>, Bytes<8>]>([
-      evm_eip712_type_cancel_recovery(), account, pad(12, ""), device, pad(24, ""), u64be(auth_nonce)]);
+    return evm_eip712_device_struct_bare(evm_eip712_parts_cancel_recovery(), account, device, auth_nonce);
   }
 
-  // ── Struct hashes: the grantee role ───────────────────────────────────────
-  //
-  // The grant is shown by its descriptor without the signer's own blind (a
-  // ledger-pinned opening): the grantee's address, site label and slot, then
-  // the record's issuedAt and nonce (never auth_nonce).
+  // The grantee role: the grant is shown by its descriptor without the
+  // signer's own blind (a ledger-pinned opening): the grantee's address, site
+  // label and slot, then the record's issuedAt and nonce (never auth_nonce).
 
   export pure circuit evm_eip712_struct_withdraw_unshielded_as_grantee(
     account: Bytes<32>, grantee: Bytes<20>, label: Bytes<32>, slot: Uint<8>,
     issued_at: Uint<64>, grant_nonce: Uint<64>,
     color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>
   ): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>, Bytes<31>, Bytes<1>,
-                      Bytes<24>, Bytes<8>, Bytes<24>, Bytes<8>, Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>]>([
-      evm_eip712_type_withdraw_unshielded_as_grantee(), account, pad(12, ""), grantee,
-      evm_eip712_site_label_hash(label), pad(31, ""), u8b(slot),
-      pad(24, ""), u64be(issued_at), pad(24, ""), u64be(grant_nonce),
-      color, pad(16, ""), u128be(amount), recipient]);
+    const [t, tail] = evm_eip712_parts_withdraw_unshielded_as_grantee(color, amount, recipient);
+    return evm_eip712_grantee_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>]>(
+      t, account, grantee, label, slot, issued_at, grant_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_withdraw_shielded_as_grantee(
@@ -838,16 +986,11 @@ module EvmEip712 {
     color: Bytes<32>, amount: Uint<128>, recipient: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
     coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
   ): Bytes<32> {
-    const change = (coin_value - amount) as Uint<128>;
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>, Bytes<31>, Bytes<1>,
-                      Bytes<24>, Bytes<8>, Bytes<24>, Bytes<8>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>([
-      evm_eip712_type_withdraw_shielded_as_grantee(), account, pad(12, ""), grantee,
-      evm_eip712_site_label_hash(label), pad(31, ""), u8b(slot),
-      pad(24, ""), u64be(issued_at), pad(24, ""), u64be(grant_nonce),
-      color, pad(16, ""), u128be(amount), recipient, keccak256<Bytes<192>>(change_entry), enc_pk,
-      coin_nonce, pad(16, ""), u128be(coin_value), pad(24, ""), u64be(coin_mt_index), pad(16, ""), u128be(change)]);
+    const [t, tail] = evm_eip712_parts_withdraw_shielded_as_grantee(color, amount, recipient, change_entry, enc_pk,
+      coin_nonce, coin_value, coin_mt_index);
+    return evm_eip712_grantee_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>,
+                                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, grantee, label, slot, issued_at, grant_nonce, tail);
   }
 
   export pure circuit evm_eip712_struct_withdraw_shielded_to_contract_as_grantee(
@@ -856,15 +999,10 @@ module EvmEip712 {
     color: Bytes<32>, amount: Uint<128>, recipient_contract: Bytes<32>, change_entry: Bytes<192>, enc_pk: Bytes<32>,
     coin_nonce: Bytes<32>, coin_value: Uint<128>, coin_mt_index: Uint<64>
   ): Bytes<32> {
-    const change = (coin_value - amount) as Uint<128>;
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>, Bytes<31>, Bytes<1>,
-                      Bytes<24>, Bytes<8>, Bytes<24>, Bytes<8>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>,
-                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>([
-      evm_eip712_type_withdraw_shielded_to_contract_as_grantee(), account, pad(12, ""), grantee,
-      evm_eip712_site_label_hash(label), pad(31, ""), u8b(slot),
-      pad(24, ""), u64be(issued_at), pad(24, ""), u64be(grant_nonce),
-      color, pad(16, ""), u128be(amount), recipient_contract, keccak256<Bytes<192>>(change_entry), enc_pk,
-      coin_nonce, pad(16, ""), u128be(coin_value), pad(24, ""), u64be(coin_mt_index), pad(16, ""), u128be(change)]);
+    const [t, tail] = evm_eip712_parts_withdraw_shielded_to_contract_as_grantee(color, amount, recipient_contract,
+      change_entry, enc_pk, coin_nonce, coin_value, coin_mt_index);
+    return evm_eip712_grantee_struct<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>,
+                                      Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
+      t, account, grantee, label, slot, issued_at, grant_nonce, tail);
   }
 }
