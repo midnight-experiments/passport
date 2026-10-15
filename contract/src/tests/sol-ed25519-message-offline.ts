@@ -253,14 +253,15 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   const a = AMOUNTS[0];
   const recipient = det('r', 32);
   const good = solAmountShow(a);
-  const goodHex = nibblesOf(ctx.account, ctx.key, a.color, recipient);
-  const run = (show: any, amountShow: any, hex: bigint[] = goodHex) =>
-    pc.sol_message_withdraw_unshielded(self, ctx.key, ctx.nonce, a.color, a.amount, { bytes: recipient }, amountShow, show, hex);
+  const goodFrame = nibblesOf(ctx.account, ctx.key);
+  const goodHex = nibblesOf(a.color, recipient);
+  const run = (show: any, amountShow: any, hex: bigint[] = goodHex, frame: bigint[] = goodFrame) =>
+    pc.sol_message_withdraw_unshielded(self, ctx.key, ctx.nonce, a.color, a.amount, { bytes: recipient }, amountShow, show, frame, hex);
   const asc = (s: string, w: number) => [...Buffer.from(s.padEnd(w, ' '), 'ascii')].map(BigInt);
   const site = (s: string) => { const o = new Array(32).fill(0n); [...Buffer.from(s, 'latin1')].forEach((c, i) => { if (i < 32) o[i] = BigInt(c); }); return o; };
   const base = solShow(ctx.site, ctx.nonce);
   ok(G, 'positive control: the honest inputs render', run(base, good).length === 620);
-  const bad: [string, any, any, bigint[] | undefined, RegExp][] = [
+  const bad: [string, any, any, bigint[] | undefined, RegExp, bigint[]?][] = [
     ['amount digits of another value', base, { ...good, units: asc('1000001', 39) }, undefined, /digits do not match/],
     ['amount with a leading zero', base, { ...good, units: asc('01000000', 39) }, undefined, /leading zero|digits do not match/],
     ['amount right-aligned', base, { ...good, units: asc('', 32).concat(asc('1000000', 7)) }, undefined, /not a left-aligned decimal|empty decimal/],
@@ -274,11 +275,13 @@ function parsesAsTransaction(b: Uint8Array): boolean {
     ['site label with a line break', { ...base, site: site('Example\nDevice nonce: 0') }, good, undefined, /not a zero-padded label/],
     ['site label with a byte after the padding', { ...base, site: [...site('Example'), ].map((c, i) => (i === 20 ? 65n : c)) }, good, undefined, /not a zero-padded label/],
     ['empty site label', { ...base, site: new Array(32).fill(0n) }, good, undefined, /not a zero-padded label/],
-    ['hex nibbles of another account', base, good, nibblesOf(det('other', 32), ctx.key, a.color, recipient), /hex digits do not match/],
+    ['frame nibbles of another account', base, good, undefined, /hex digits do not match/, nibblesOf(det('other', 32), ctx.key)],
+    ['frame nibbles of another signing key', base, good, undefined, /hex digits do not match/, nibblesOf(ctx.account, det('other key', 32))],
     ['hex nibbles off by one in the recipient', base, good, goodHex.map((n, i) => (i === goodHex.length - 1 ? (n + 1n) % 16n : n)), /hex digits do not match/],
     ['hex nibble 16 (not a nibble)', base, good, goodHex.map((n, i) => (i === 0 ? 16n : n)), /type error|Uint<0..16>|out of range|expected/i],
+    ['frame nibble 16 (not a nibble)', base, good, undefined, /type error|Uint<0..16>|out of range|expected/i, goodFrame.map((n, i) => (i === 0 ? 16n : n))],
   ];
-  for (const [name, show, amountShow, hex, re] of bad) refused(G, `${name}: circuit`, 'runtime', re, () => run(show, amountShow, hex));
+  for (const [name, show, amountShow, hex, re, frame] of bad) refused(G, `${name}: circuit`, 'runtime', re, () => run(show, amountShow, hex, frame));
   refused(G, 'site label with a line break: renderer', 'client', /label/, () => labelBytes('Example\nDevice'));
   refused(G, 'site label longer than 32 bytes: renderer', 'client', /at most 32/, () => labelBytes('x'.repeat(33)));
   const ig = devOps.find(([n]) => n.startsWith('issue_grant'))![1] as any;
@@ -286,26 +289,26 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   refused(G, 'unregistered target tag: circuit', 'runtime', /not a registered device tag/, () => {
     const c0 = devCtx(0); const t = { ...TARGETS[2], tag: 'midnight:account:device:ed:v1' };
     return pc.sol_message_add_device({ bytes: c0.account }, c0.key, c0.nonce, { ...solTargetArg(TARGETS[2]), tag: (() => { const o = new Uint8Array(32); o.set(Buffer.from(t.tag)); return o; })() },
-      solTargetShow(TARGETS[2]), solShow(c0.site, c0.nonce), nibblesOf(c0.account, c0.key, new Uint8Array(20), TARGETS[2].a!, TARGETS[2].b!, new Uint8Array(32)));
+      solTargetShow(TARGETS[2]), solShow(c0.site, c0.nonce), nibblesOf(c0.account, c0.key), nibblesOf(new Uint8Array(20), TARGETS[2].a!, TARGETS[2].b!, new Uint8Array(32)));
   });
   refused(G, 'passkey origin characters of another origin: circuit', 'runtime', /characters do not match/, () => {
     const c0 = devCtx(0); const t = TARGETS[4];
     return pc.sol_message_add_device({ bytes: c0.account }, c0.key, c0.nonce, solTargetArg(t), { ...solTargetShow(t), origin: [...Buffer.from('https://b.example.com')].map(BigInt) },
-      solShow(c0.site, c0.nonce), nibblesOf(c0.account, c0.key, new Uint8Array(20), t.a!, t.b!, t.c!));
+      solShow(c0.site, c0.nonce), nibblesOf(c0.account, c0.key), nibblesOf(new Uint8Array(20), t.a!, t.b!, t.c!));
   });
   refused(G, 'non-visible passkey origin: circuit', 'runtime', /not visible ASCII/, () => deviceCall(devCtx(0), { op: 'add_device', target: { ...TARGETS[4], origin: new TextEncoder().encode('https://a example.com') } }));
   refused(G, 'grant label characters of another label: circuit', 'runtime', /characters do not match/, () => {
     const c = grCtx(0), o = grOps[0][1] as any;
     return pc.sol_message_withdraw_unshielded_with_grant({ bytes: c.account }, c.key, labelBytes(c.label), c.slot, c.issuedAt, c.nonce, o.amount.color, o.amount.amount,
       { bytes: o.recipient }, solAmountShow(o.amount), solShow(c.site, c.nonce), { ...solGrantShow(c.label, c.slot, c.issuedAt), label: [...labelBytes('Another dApp')].map(BigInt) },
-      nibblesOf(c.account, c.key, o.amount.color, o.recipient));
+      nibblesOf(c.account, c.key), nibblesOf(o.amount.color, o.recipient));
   });
   {
     const c0 = devCtx(0), coin = { ...coinFor(AMOUNTS[0], 0n, 0n), value: 1n };
     const coinShow = { value: digitsOf(1n, 39), index: digitsOf(0n, 20), change: digitsOf(0n, 39) };
     refused(G, 'withdrawal above the spent coin: circuit', 'runtime', /above the spent coin/, () => pc.sol_message_withdraw_shielded(
       { bytes: c0.account }, c0.key, c0.nonce, { bytes: det('x', 32) }, AMOUNTS[0].color, AMOUNTS[0].amount, coin, solAmountShow(AMOUNTS[0]), coinShow,
-      solShow(c0.site, c0.nonce), nibblesOf(c0.account, c0.key, AMOUNTS[0].color, det('x', 32), coin.nonce)));
+      solShow(c0.site, c0.nonce), nibblesOf(c0.account, c0.key), nibblesOf(AMOUNTS[0].color, det('x', 32), coin.nonce)));
     refused(G, 'withdrawal above the spent coin: renderer', 'client', /above the spent coin/, () => solDeviceMessageText(c0, { op: 'withdraw_shielded', amount: AMOUNTS[0], recipient: det('x', 32), coin }));
   }
 }

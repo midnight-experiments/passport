@@ -464,7 +464,12 @@
       "refusal": "failed assert: display: not a zero-padded label"
     },
     {
-      "name": "hex nibbles of another account: circuit",
+      "name": "frame nibbles of another account: circuit",
+      "layer": "runtime",
+      "refusal": "failed assert: display: hex digits do not match the value"
+    },
+    {
+      "name": "frame nibbles of another signing key: circuit",
       "layer": "runtime",
       "refusal": "failed assert: display: hex digits do not match the value"
     },
@@ -476,7 +481,12 @@
     {
       "name": "hex nibble 16 (not a nibble): circuit",
       "layer": "runtime",
-      "refusal": "type error: sol_message_withdraw_unshielded argument 9; expected value of type Vector<256, Uint<0..16>> but recei"
+      "refusal": "type error: sol_message_withdraw_unshielded argument 10; expected value of type Vector<128, Uint<0..16>> but rece"
+    },
+    {
+      "name": "frame nibble 16 (not a nibble): circuit",
+      "layer": "runtime",
+      "refusal": "type error: sol_message_withdraw_unshielded argument 9; expected value of type Vector<128, Uint<0..16>> but recei"
     },
     {
       "name": "site label with a line break: renderer",

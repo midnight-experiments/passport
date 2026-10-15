@@ -116,9 +116,11 @@ await refused(G2, 'the signature of another operation (append_inbox) over the sa
   return exec(sim, k2, withSig(a2, other.sig));
 });
 const G2b = '2b display inputs inconsistent with the executed values';
-await refused(G2b, 'nonce digits of another value', 'runtime', /digits do not match/, () => rotate(sim, k2, { ...a2, showArgs: [solShow(SITE, 2n), a2.showArgs[1]] }));
+await refused(G2b, 'nonce digits of another value', 'runtime', /digits do not match/, () => rotate(sim, k2, { ...a2, showArgs: [solShow(SITE, 2n), a2.showArgs[1], a2.showArgs[2]] }));
 await refused(G2b, 'hex nibbles of the signed key while another key executes', 'runtime', /hex digits do not match/, () => rotate(sim, rnd(32), a2));
-await refused(G2b, 'hex nibbles of another account', 'runtime', /hex digits do not match/, () => rotate(sim, k2, { ...a2, showArgs: [a2.showArgs[0], nibblesOf(rnd(32), devA.key, k2)] }));
+// G1E-1: the frame (account, signing key) is the seam's; foreign frame nibbles are refused.
+await refused(G2b, 'frame nibbles of another account', 'runtime', /hex digits do not match/, () => rotate(sim, k2, { ...a2, showArgs: [a2.showArgs[0], nibblesOf(rnd(32), devA.key), a2.showArgs[2]] }));
+await refused(G2b, "frame nibbles of another device's key", 'runtime', /hex digits do not match/, () => rotate(sim, k2, { ...a2, showArgs: [a2.showArgs[0], nibblesOf(sim.bytes, devB.key), a2.showArgs[2]] }));
 
 // ── 3. Replay ───────────────────────────────────────────────────────────────
 const G3 = '3 replay';
