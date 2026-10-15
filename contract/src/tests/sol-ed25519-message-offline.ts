@@ -379,11 +379,10 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   } else {
     const f = JSON.parse(fs.readFileSync(FROZEN, 'utf8'));
     const same = JSON.stringify(f) === JSON.stringify(frozen);
-    // Q38 (AA 00067): `sol v1` is pre-release until the G3 audit gate. A byte
-    // change before G3 is recorded in SOL-ED25519.md's change log and the
-    // file rewritten (SOL_MESSAGES_WRITE=1); from G3 on, any byte change needs
-    // a new format version on the first line.
-    ok(G, `corpus equals the frozen file (${frozen.calls.length} calls)`, same, same ? undefined : 'differs: the bytes changed (before G3: record it in the change log of SOL-ED25519.md; from G3 on: a new format version)');
+    // The arm is in development: a deliberate byte change is made in place
+    // (no format versions before release, AA 00067 development rule), the
+    // file is rewritten with SOL_MESSAGES_WRITE=1, and the diff is reviewed.
+    ok(G, `corpus equals the frozen file (${frozen.calls.length} calls)`, same, same ? undefined : 'differs: the signed bytes changed; if deliberate, rewrite the frozen corpus (SOL_MESSAGES_WRITE=1) and review the diff');
   }
 }
 
