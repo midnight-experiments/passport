@@ -40,6 +40,7 @@
 // starts at v2 because the experimental fork used v1 with other preimages.
 
 import "modules/WalletArmDescriptors";
+import "modules/EvmEip712";
 
 // The descriptor module's derivations and tags, re-exported as pure circuits
 // of the account contract: a client derives any readable descriptor's entry,
@@ -61,6 +62,24 @@ export {
   derive_descriptor_grant_id_w65,
   derive_grant_origin_hash_label, derive_grant_origin_hash_origin,
   derive_blind,
+};
+
+// The arm's EIP-712 codec (modules/EvmEip712, byte contract EVM-EIP712.md):
+// the domain, the digest, the descriptor hashes and derivations, and the
+// struct hash of every operation, re-exported as pure oracles.
+export {
+  EvmEip712Descriptor, EvmEip712GranteeDescriptor,
+  evm_eip712_verifying_contract, evm_eip712_domain_separator, evm_eip712_digest,
+  evm_eip712_site_label_hash, evm_eip712_device_scheme, evm_eip712_grantee_scheme,
+  evm_eip712_device_descriptor_hash, evm_eip712_descriptor_entry,
+  evm_eip712_grantee_origin_hash, evm_eip712_grantee_grant_id, evm_eip712_grantee_descriptor_hash,
+  evm_eip712_struct_withdraw_unshielded, evm_eip712_struct_withdraw_shielded,
+  evm_eip712_struct_withdraw_shielded_to_contract, evm_eip712_struct_append_inbox,
+  evm_eip712_struct_rotate_enc_key, evm_eip712_struct_add_device, evm_eip712_struct_remove_device,
+  evm_eip712_struct_remove_unknown_device, evm_eip712_struct_issue_grant, evm_eip712_struct_revoke_grant,
+  evm_eip712_struct_revoke_all_grants, evm_eip712_struct_publish_recovery_session,
+  evm_eip712_struct_cancel_recovery, evm_eip712_struct_withdraw_unshielded_as_grantee,
+  evm_eip712_struct_withdraw_shielded_as_grantee, evm_eip712_struct_withdraw_shielded_to_contract_as_grantee,
 };
 
 // ── Keys ────────────────────────────────────────────────────────────────────
