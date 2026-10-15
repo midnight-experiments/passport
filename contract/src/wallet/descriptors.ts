@@ -241,10 +241,15 @@ export function parseK256Descriptor(key: Uint8Array | { x: bigint; y: bigint }, 
   return { scheme: 'k256', ...parseWeierstrass(secp256k1, 'secp256k1', key), envelope };
 }
 
+/** Upstream's webauthnPolicy, its refusals reported as descriptor errors. */
+function passkeyPolicy(rpId: string, origin: string) {
+  try { return webauthnPolicy(rpId, origin); } catch (e: any) { throw new Error(`descriptor: ${e?.message ?? e}`); }
+}
+
 /** A passkey: its P-256 key, RP ID, and 21-byte origin. The RP ID must be the
  *  origin's host or a registrable parent of it (upstream's webauthnPolicy). */
 export function parseP256Descriptor(key: Uint8Array | { x: bigint; y: bigint }, rpId: string, origin: string): P256Descriptor {
-  const policy = webauthnPolicy(rpId, origin);
+  const policy = passkeyPolicy(rpId, origin);
   return { scheme: 'p256', ...parseWeierstrass(p256, 'P-256', key), policy: { rpIdHash: policy.rp_id_hash, origin: policy.origin, rpId } };
 }
 
@@ -303,7 +308,7 @@ export function checkDescriptor(d: Descriptor): Descriptor {
       if (rpId !== undefined) {
         // The client knows the RP ID: it must hash to the shown value and fit
         // the origin, as upstream's webauthnPolicy requires.
-        const p = webauthnPolicy(rpId, String.fromCharCode(...origin));
+        const p = passkeyPolicy(rpId, String.fromCharCode(...origin));
         if (!equalBytes(p.rp_id_hash, rpIdHash)) throw new Error('descriptor: rp_id_hash is not SHA-256 of the RP ID');
       }
       return { scheme: 'p256', ...key, policy: { rpIdHash: new Uint8Array(rpIdHash), origin: new Uint8Array(origin), ...(rpId !== undefined ? { rpId } : {}) } };
