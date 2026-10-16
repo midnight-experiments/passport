@@ -82,11 +82,13 @@
 //                message text of the circuits with amounts, caps, an expiry or
 //                an RP hash, the honest calls proved, a forged amount, cap or
 //                word signed by the wallet, forged digits;
-//   rules        (Q46 = A, Q47 = A) a passkey's own RP hash is never zero
-//                (add_device, remove_device by descriptor, issue_grant to a
-//                passkey grantee) and an any-recipient grant carries no
-//                recipient, each refused at the constraint level under a
-//                valid signature over the contract's own bytes.
+//   rules        (Q46 = A, Q47 = A, Q49 = A) a passkey target's RP hash is
+//                never zero (add_device, remove_device by descriptor); at
+//                issue_grant the RP hash is non-zero exactly for a passkey
+//                grantee whose scope can spend (zero for a read-only grant);
+//                an any-recipient grant carries no recipient; each refused at
+//                the constraint level under a valid signature over the
+//                contract's own bytes.
 //
 // Every prover-level negative records the refusing request's circuit (it must
 // be the circuit under test) and the refusal's kind: `constraint` (the
@@ -961,8 +963,8 @@ async function sectionGrants() {
     (after) => ledgerOf(after).grants.member(G.grantId(after.addressBytes, 0n)));
   await positive('grants', 'issue_grant to a k256 grantee (the Q17 labelled origin hash)', undefined, A0, ISSUE, issueArgsOf(gK, sU, rnd(), await authFor(A0, { op: 'issue_grant', grantee: gK, ...sU })),
     (after) => ledgerOf(after).grants.member(K.grantId(after.addressBytes, ohK, 0n)));
-  const sP = scope({ opWithdrawUnshielded: false, read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash, color: Z32, maxCoinValue: 0n, perCallCap: 0n, cap: 0n });
-  await positive('grants', 'issue_grant to a passkey grantee (read-only, its RP hash)', undefined, A0, ISSUE, issueArgsOf(gP, sP, rnd(), await authFor(A0, { op: 'issue_grant', grantee: gP, ...sP })),
+  const sP = scope({ opWithdrawUnshielded: false, read: true, readPk: rnd(), rpIdHash: Z32, color: Z32, maxCoinValue: 0n, perCallCap: 0n, cap: 0n });
+  await positive('grants', 'issue_grant to a passkey grantee (read-only, so no RP hash: Q49)', undefined, A0, ISSUE, issueArgsOf(gP, sP, rnd(), await authFor(A0, { op: 'issue_grant', grantee: gP, ...sP })),
     (after) => ledgerOf(after).grants.member(pass.grantee.grantId(after.addressBytes, grantOriginHash(pass.policy.origin), 0n)));
   const cons = (signed: any, eg: any, esc: any) => issueArgsOf(eg, esc, saltU, withShow(signed, shownFor(A0, { op: 'issue_grant', grantee: eg, ...esc })));
   await negative('grants', 'issue binding: the cap changed at execution', A0, ISSUE, cons(auG, gG, { ...sU, cap: 999n }), INVALID, [INVALID], ctlIssue);
@@ -1072,12 +1074,13 @@ async function sectionGranteeScope() {
     : scopeOf({ ...(t === 'S' ? { opWithdrawShielded: true, recipientKind: RECIPIENT_ZSWAP_COIN_PUBLIC_KEY, recipient: localCoinPublicKeyBytes() }
       : { opWithdrawShieldedToContract: true, recipientKind: RECIPIENT_CONTRACT_ADDRESS, recipient: RECIPIENT_CONTRACT }),
       read: true, readPk, color: COL_A, maxCoinValue: 1000n, perCallCap: 500n, cap: 900n });
-  // slots: 0 main, 1 max coin 600, 2 caller-pinned, 3 expired, 4 colour B, 5 pinned to another key, 6 the operation not in scope
+  // slots: 0 main, 1 max coin 600, 2 caller-pinned, 3 expired, 4 colour B, 5 pinned to another key, 6 the operation not in scope,
+  // 7 caller-pinned to the ZERO contract address (G2S-9: its commitment equals the one of the default caller.value.left)
   const scopes = (t: T) => {
     const m = mainScope(t);
     const notInScope = t === 'U' ? { ...m, opWithdrawUnshielded: false, opWithdrawShielded: true, read: true, readPk }
       : t === 'S' ? { ...m, opWithdrawShielded: false, opWithdrawShieldedToContract: true } : { ...m, opWithdrawShieldedToContract: false, opWithdrawShielded: true };
-    return [m, { ...m, maxCoinValue: 600n }, { ...m, caller: CALLER_C }, { ...m, expiresAt: 1n }, { ...m, color: COL_B }, { ...m, recipient: KEY2 }, notInScope];
+    return [m, { ...m, maxCoinValue: 600n }, { ...m, caller: CALLER_C }, { ...m, expiresAt: 1n }, { ...m, color: COL_B }, { ...m, recipient: KEY2 }, notInScope, { ...m, caller: Z32 }];
   };
   const opening = (t: T, slot: bigint, spentPrev = 0n) => {
     const sc = scopes(t)[Number(slot)];
@@ -1120,7 +1123,7 @@ async function sectionGranteeScope() {
     const circuit = CIRCUIT[t], tag = TAG[t];
     console.log(`── ${tag}`);
     let AT = A0;
-    const used: Record<T, number[]> = { U: [0, 2, 3, 6], S: [0, 1, 2, 3, 4, 5, 6], C: [0, 1, 2, 3, 4, 6] };
+    const used: Record<T, number[]> = { U: [0, 2, 3, 6, 7], S: [0, 1, 2, 3, 4, 5, 6, 7], C: [0, 1, 2, 3, 4, 6, 7] };
     for (const [i, sc] of scopes(t).entries()) if (used[t].includes(i)) AT = await issue(AT, G.grantee(BigInt(i)), sc);
     const bare = AT;
     let H1: LocalCoin | undefined, H2: LocalCoin | undefined;
@@ -1161,6 +1164,24 @@ async function sectionGranteeScope() {
       await N('the caller pin (slot 2): called by another contract', AT, pinnedArgs, CALLER_MISMATCH, [CALLER_MISMATCH],
         { module: mismatchCopy, simulatorModule: callerCopyPlain, mutant: 'the caller injected into the local call context (CALLER_OVERRIDES): another contract; control: the pinned contract', hooks: { simulator: wrong, control: pinned, attempt: wrong } },
         { a: AT, args: pinnedArgs });
+      callerInjection.set(undefined);
+      // (G2S-9) each presence/type assert ON ITS OWN: a grant pinned to the
+      // zero contract address, whose commitment equals the commitment of the
+      // default `caller.value.left` (the zero address), so `grant caller
+      // mismatch` holds and only `grant requires a contract caller` refuses;
+      // the positive control on the same copy is the matched contract caller
+      // (the zero address)
+      const zeroPinnedArgs = (await call(t, AT, { ...honest, slot: 7n })).args;
+      const presenceCopy = await copyFor([NO_CALLER], CALLER_OVERRIDES);
+      const zeroContract = () => callerInjection.set(Z32);
+      await N('the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all — only the presence assert is bypassed (the commitment of the default caller matches)', AT, zeroPinnedArgs, NO_CALLER, [NO_CALLER],
+        { module: presenceCopy, mutant: 'the caller injected into the local call context (CALLER_OVERRIDES): none; control: the zero contract address (matched)', hooks: { simulator: noCaller, control: zeroContract, attempt: noCaller } },
+        { a: AT, args: zeroPinnedArgs });
+      const userCaller = () => callerInjection.setUser(fill(32, 0x5e));
+      await N('the caller pin on its own (slot 7, pinned to the zero contract address): a USER as the caller — only the type assert is bypassed (the commitment of the default caller.value.left matches)', AT, zeroPinnedArgs, NO_CALLER, [NO_CALLER],
+        { module: presenceCopy, simulatorModule: callerCopyPlain, mutant: 'the caller injected into the local call context (CALLER_OVERRIDES): a user address; control: the zero contract address (matched)', hooks: { simulator: userCaller, control: zeroContract, attempt: userCaller } },
+        { a: AT, args: zeroPinnedArgs });
+      await positive('grantee-scope', `${tag}: the caller pin (slot 7) with the matched caller, the zero contract address: proved through the presence copy`, presenceCopy, AT, circuit, zeroPinnedArgs, undefined, zeroContract);
       callerInjection.set(undefined);
     }
     await N('over the per-call cap, honestly signed', AT, (await call(t, AT, { ...honest, amount: t === 'U' ? 301n : 501n })).args, PER_CALL, [PER_CALL]);
@@ -1602,12 +1623,19 @@ async function sectionReadability() {
   await negative('readability', 'forged word: the wallet signed 64 zeros for a non-passkey grantee\'s zero RP hash', A0, ISSUE, issueArgsOf(gG, sG, saltG, await forgedAuth(aI, `Passkey RP (hash): ${NA}`, `Passkey RP (hash): ${'0'.repeat(64)}`)), INVALID, [INVALID], ctlI);
   {
     const gP = sol.solGranteeOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y } as any, { origin: pass.policy.origin }, 0n);
-    const sP = scope({ opWithdrawUnshielded: false, read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash, color: Z32, maxCoinValue: 0n, perCallCap: 0n, cap: 0n, expiresAt: 1_000n });
+    // a spending grant to a passkey carries its real RP hash (Q46, Q49)
+    const sP = scope({ read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash, maxCoinValue: 100n, perCallCap: 100n, cap: 100n, expiresAt: 1_000n });
     const saltP = rnd();
     const aP = await authFor(A0, { op: 'issue_grant', grantee: gP, ...sP });
-    textCheck('readability', 'issue_grant to a passkey grantee: the RP hash in hex, the expiry in seconds, zero caps read "0"',
-      aP.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}\n`) && aP.text.includes(`Expires at (block time, seconds): ${'1000'.padEnd(20)}\n`) && aP.text.includes(`Total cap: ${d39(0n)}\n`));
-    await positive('readability', 'issue_grant to a passkey grantee (RP hash, expiry 1000): proved', undefined, A0, ISSUE, issueArgsOf(gP, sP, saltP, aP));
+    textCheck('readability', 'issue_grant, a spending grant to a passkey grantee: the RP hash in hex, the expiry in seconds, the caps in full digits',
+      aP.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}\n`) && aP.text.includes(`Expires at (block time, seconds): ${'1000'.padEnd(20)}\n`) && aP.text.includes(`Total cap: ${d39(100n)}\n`));
+    await positive('readability', 'issue_grant, a spending grant to a passkey grantee (RP hash, expiry 1000): proved', undefined, A0, ISSUE, issueArgsOf(gP, sP, saltP, aP));
+    // a read-only grant to a passkey carries no RP hash: "not applicable" (Q49)
+    const sR = scope({ opWithdrawUnshielded: false, read: true, readPk: rnd(), rpIdHash: Z32, color: Z32, maxCoinValue: 0n, perCallCap: 0n, cap: 0n });
+    const aR0 = await authFor(A0, { op: 'issue_grant', grantee: { ...gP, slot: 1n }, ...sR });
+    textCheck('readability', 'issue_grant, a read-only grant to a passkey grantee: "Passkey RP (hash): not applicable", zero caps read "0" (Q49)',
+      aR0.text.includes(`Passkey RP (hash): ${NA}\n`) && aR0.text.includes(`Total cap: ${d39(0n)}\n`));
+    await positive('readability', 'issue_grant, a read-only grant to a passkey grantee (no RP hash): proved', undefined, A0, ISSUE, issueArgsOf({ ...gP, slot: 1n }, sR, rnd(), aR0));
     const ctlP = { a: A0, args: issueArgsOf(gP, sP, saltP, aP) };
     await negative('readability', 'forged word: the wallet signed "never" for an expiry of 1000', A0, ISSUE, issueArgsOf(gP, sP, saltP, await forgedAuth(aP, `seconds): ${'1000'.padEnd(20)}`, `seconds): ${'never'.padEnd(20)}`)), INVALID, [INVALID], ctlP);
     await negative('readability', 'forged word: the wallet signed "not applicable" for a passkey grantee\'s RP hash', A0, ISSUE, issueArgsOf(gP, sP, saltP, await forgedAuth(aP, `Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}`, `Passkey RP (hash): ${NA}`)), INVALID, [INVALID], ctlP);
@@ -1699,12 +1727,21 @@ async function sectionRules() {
   // issue_grant
   const COL = fill(32, 0xc1);
   const gP = sol.solGranteeOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y } as any, { origin: pass.policy.origin }, 0n);
-  const sP = scopeOf({ read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash });
+  // a spending grant to a passkey (the RP hash must be its real one) and a
+  // read-only one (it must be zero) (Q46, Q49)
+  const sP = scopeOf({ opWithdrawUnshielded: true, color: COL, maxCoinValue: 100n, perCallCap: 100n, cap: 100n, read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash });
   const salt = rnd();
   const ctlIssue = { a: A0, args: issueArgsOf(gP, sP, salt, await authFor(A0, { op: 'issue_grant', grantee: gP, ...sP })) };
   const sZ = { ...sP, rpIdHash: new Uint8Array(32) };
-  await negative('rules', 'Q46: issue_grant to a passkey grantee whose RP hash is zero, under a valid signature over the contract\'s bytes', A0, ISSUE,
+  await negative('rules', 'Q46: a spending grant to a passkey grantee whose RP hash is zero, under a valid signature over the contract\'s bytes', A0, ISSUE,
     issueArgsOf(gP, sZ, salt, await circuitAuth(A0, { op: 'issue_grant', grantee: gP, ...sZ })), ZERO_GRANTEE, [ZERO_GRANTEE], ctlIssue);
+  const sRO = scopeOf({ read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash });
+  const READ_ONLY_RP = 'sol_ed25519: a read-only grant carries no RP hash';
+  const ctlRO = { a: A0, args: issueArgsOf(gP, { ...sRO, rpIdHash: Z32 }, salt, await authFor(A0, { op: 'issue_grant', grantee: gP, ...sRO, rpIdHash: Z32 })) };
+  await negative('rules', 'Q49: a read-only grant to a passkey grantee carrying its RP hash (which nothing would check), under a valid signature over the contract\'s bytes', A0, ISSUE,
+    issueArgsOf(gP, sRO, salt, await circuitAuth(A0, { op: 'issue_grant', grantee: gP, ...sRO })), READ_ONLY_RP, [READ_ONLY_RP], ctlRO);
+  await positive('rules', 'Q49: a read-only grant to a passkey grantee with a zero RP hash: proved (original module)', undefined, A0, ISSUE, ctlRO.args,
+    (after) => ledgerOf(after).grants.member(pass.grantee.grantId(after.addressBytes, grantOriginHash(pass.policy.origin), 0n)));
   const G = await sol.SolEd25519Grantee.enrol(sol.solSoftwareSigner(rnd()), { network: 'undeployed', issuingAccount: A0.addressBytes }, 'Example dApp');
   const sAny = scopeOf({ opWithdrawUnshielded: true, color: COL, maxCoinValue: 100n, perCallCap: 100n, cap: 100n, recipientKind: 0n, recipient: rnd() });
   await negative('rules', 'Q47: issue_grant to any recipient (kind 0) carrying a recipient, under a valid signature over the contract\'s bytes', A0, ISSUE,

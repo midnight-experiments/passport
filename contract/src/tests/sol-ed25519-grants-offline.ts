@@ -182,10 +182,24 @@ const G2 = '2 rules';
   };
   const gP = grantees[4][1];
   const zeroRp = baseScope({ read: true, readPk: rnd(), rpIdHash: Z32 });
-  await refused(G2, "Q46: a passkey grantee with an all-zero RP hash: the renderer refuses the message", 'client', /a passkey grantee's RP hash is zero/, () =>
+  await refused(G2, "Q46: a spending grant to a passkey grantee with an all-zero RP hash: the renderer refuses the message", 'client', /a passkey grantee's RP hash is zero/, () =>
     sim.auth({ op: 'issue_grant', grantee: gP, ...zeroRp }));
-  await refused(G2, "Q46: a passkey grantee with an all-zero RP hash under a valid signature over the contract's bytes", 'runtime', /a passkey grantee's RP hash is zero/, async () =>
+  await refused(G2, "Q46: a spending grant to a passkey grantee with an all-zero RP hash under a valid signature over the contract's bytes", 'runtime', /a passkey grantee's RP hash is zero/, async () =>
     sim.call('issue_grant_with_sol_ed25519', ...issueArgs(gP, zeroRp, rnd(), await circuitAuth({ op: 'issue_grant', grantee: gP, ...zeroRp }))));
+  // Q49: a read-only grant carries no RP hash (a passkey's included: nothing would check it)
+  const roRp = baseScope({ opWithdrawUnshielded: false, read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash, color: Z32, maxCoinValue: 0n, perCallCap: 0n, cap: 0n });
+  await refused(G2, 'Q49: a read-only grant to a passkey grantee carrying its RP hash: the renderer refuses the message', 'client', /a read-only grant carries no RP hash/, () =>
+    sim.auth({ op: 'issue_grant', grantee: gP, ...roRp }));
+  await refused(G2, "Q49: a read-only grant to a passkey grantee carrying its RP hash under a valid signature over the contract's bytes", 'runtime', /a read-only grant carries no RP hash/, async () =>
+    sim.call('issue_grant_with_sol_ed25519', ...issueArgs(gP, roRp, rnd(), await circuitAuth({ op: 'issue_grant', grantee: gP, ...roRp }))));
+  {
+    const ro0 = { ...roRp, rpIdHash: Z32 };
+    const gP6 = { ...gP, slot: 6n };
+    const a = await sim.auth({ op: 'issue_grant', grantee: gP6, ...ro0 });
+    await sim.call('issue_grant_with_sol_ed25519', ...issueArgs(gP6, ro0, rnd(), a));
+    ok(G2, 'Q49: a read-only grant to a passkey grantee with a zero RP hash lands and its message reads "Passkey RP (hash): not applicable"',
+      sim.L().grants.member(pass.grantee.grantId(sim.bytes, grantOriginHash(origin21), 6n)) && a.text.includes('Passkey RP (hash): not applicable'));
+  }
   const anyWithRecipient = baseScope({ recipientKind: 0n, recipient: rnd() });
   await refused(G2, 'Q47: an any-recipient grant (kind 0) carrying a recipient: the renderer refuses the message', 'client', /a recipient without a recipient kind/, () =>
     sim.auth({ op: 'issue_grant', grantee: g, ...anyWithRecipient }));
@@ -481,6 +495,19 @@ const G8 = '8 grantee blind';
 // the client: an unregistered grantee scheme is refused before any message
 await refused(G1, 'an unregistered grantee scheme: the facade refuses the descriptor (no message, no call)', 'client', /not a registered descriptor scheme \(zz\)/,
   () => solGranteeOf({ scheme: 'zz' } as any, { label: 'Example dApp' }, 0n));
+// (G2S-10) a passkey grantee's site origin passes the base's passkey-origin
+// rule (21 bytes, visible ASCII without quotes or backslashes); a P-256 key
+// with no policy (the grantee's RP hash is a scope field)
+{
+  const p = softwarePasskey();
+  const o21 = (t: string) => new TextEncoder().encode(t);
+  const policyless = { scheme: 'p256', x: p.pk.x, y: p.pk.y } as any;
+  ok(G1, 'G2S-10: a 21-byte visible origin is accepted (positive control)', (() => { try { solGranteeOf(policyless, { origin: o21('https://a.example.com') }, 0n); return true; } catch { return false; } })());
+  await refused(G1, 'G2S-10: a passkey grantee origin with a double quote is refused by the facade', 'client', /^descriptor: passkey origin is not visible ASCII/, () => solGranteeOf(policyless, { origin: o21('https://a.exam"le.com') }, 0n));
+  await refused(G1, 'G2S-10: a passkey grantee origin with a backslash is refused by the facade', 'client', /^descriptor: passkey origin is not visible ASCII/, () => solGranteeOf(policyless, { origin: o21('https://a.exam\\le.com') }, 0n));
+  await refused(G1, 'G2S-10: a passkey grantee origin with a space is refused by the facade', 'client', /^descriptor: passkey origin is not visible ASCII/, () => solGranteeOf(policyless, { origin: o21('https://a example.com') }, 0n));
+  await refused(G1, 'G2S-10: a passkey grantee origin of 20 bytes is refused by the facade', 'client', /^descriptor: a passkey origin is 21 bytes/, () => solGranteeOf(policyless, { origin: o21('https://a.example.co') }, 0n));
+}
 // (G2S-6) the grant facade runs the strict descriptor parsers, as the device facade does
 await refused(G1, 'a k256 grantee whose point is not on secp256k1: the facade refuses the descriptor (checkDescriptor)', 'client', /^descriptor: /,
   () => solGranteeOf({ scheme: 'k256', x: 1n, y: 1n, envelope: 0 } as any, { originHash: originHash('https://k.example') }, 0n));

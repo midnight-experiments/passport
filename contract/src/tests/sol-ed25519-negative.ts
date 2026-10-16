@@ -147,6 +147,10 @@ export const callerInjection = {
   set(contract: Uint8Array | undefined) {
     (globalThis as any)[CALLER] = contract && { tag: 'contract', address: Buffer.from(contract).toString('hex') };
   },
+  /** A USER (not a contract) as the caller (G2S-9: the type assert alone). */
+  setUser(user: Uint8Array) {
+    (globalThis as any)[CALLER] = { tag: 'user', address: Buffer.from(user).toString('hex') };
+  },
 };
 
 /** (G2S-1) The forged grant-id mutant (the grant seam's analogue of lane E's
