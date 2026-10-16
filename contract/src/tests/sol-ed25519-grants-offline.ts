@@ -14,10 +14,11 @@
 //                chip's rules reached through the arm;
 //   3 binding    every shown scope field and grantee field changed at
 //                execution (consistent display inputs): the signature refuses;
-//   4 twins      a sol_ed25519 grantee under its grant: in-scope unshielded
-//                and shielded spends (the change entry appended), never
-//                touching auth_nonce or a device entry; refused outside the
-//                scope (per-call cap, cap, recipient pin, colour, max coin
+//   4 twins      a sol_ed25519 grantee under its grant: in-scope unshielded,
+//                shielded and to-contract spends (the change entry
+//                appended), never touching auth_nonce or a device entry;
+//                refused outside the scope (the operation not in scope, both
+//                ways, per-call cap, cap, recipient pin, colour, max coin
 //                value, stale encryption key, expiry, revoked, revoke-all),
 //                the replayed approval, witness substitution (colour);
 //   5 roles      cross-role replay (audit G1(S) G1S-3): the same key's
@@ -299,6 +300,39 @@ const unsh = async (s: Sim, n: bigint, to: Uint8Array, spent: bigint, a?: SolEd2
   });
   twinSim.ps = withCoin(emptyCoinStore(), coin);
   await refused(G4, 'a stale encryption key', 'runtime', /stale encryption key/, async () => twinSim.call('withdraw_shielded_with_grant_sol_ed25519', ...(await shArgs(10n, change, rnd()))));
+  // the to-contract twin (G2(S) G2S-1): a grant for direct transfers (slot 2)
+  {
+    const scC = baseScope({ opWithdrawUnshielded: false, opWithdrawShieldedToContract: true, read: true, readPk: rnd(), color: A, perCallCap: 400n, cap: 400n, maxCoinValue: 1000n });
+    const saltC = rnd();
+    await issue(twinSim, T.grantee(2n), scC, saltC);
+    const coinC = { nonce: rnd(), color: A, value: 1000n, mtIndex: 4n };
+    const toC = rnd();
+    const cArgs = async (slot: bigint, sc: SolIssueScope, s: typeof salt, spent: bigint, n: bigint) => {
+      const au = await authoriseSolGrantee(T.device, gctx(twinSim, T, slot), SITE, { op: 'withdraw_shielded_to_contract_with_grant', amount: amt(n, A), recipient: toC, changeEntry: change, encPk,
+        coin: { nonce: coinC.nonce, color: A, value: coinC.value, mt_index: coinC.mtIndex } });
+      return [{ bytes: toC }, A, n, change, encPk, ...grantAuthArgs(opening(spent, sc, s, slot), au)];
+    };
+    twinSim.ps = withCoin(emptyCoinStore(), coinC);
+    const inbox0 = twinSim.L().inbox_count, nonce0 = twinSim.L().auth_nonce;
+    const rc: any = await twinSim.call('withdraw_shielded_to_contract_with_grant_sol_ed25519', ...(await cArgs(2n, scC, saltC, 0n, 300n)));
+    ok(G4, 'the to-contract twin in scope: 300 of the 1000 coin to a contract, the change (700) entry appended, the record nonce +1, auth_nonce untouched',
+      rc?.[1]?.is_some === true && rc[1].value.value === 700n && rc[0]?.value === 300n && twinSim.L().inbox_count === inbox0 + 1n
+      && twinSim.L().grants.lookup(T.grantId(twinSim.bytes, 2n)).nonce === 1n && twinSim.L().auth_nonce === nonce0);
+    // the operation not in the grant's scope, both ways
+    twinSim.ps = withCoin(emptyCoinStore(), coinC);
+    await refused(G4, 'the operation not in scope: the shielded-only grant (slot 1) through the to-contract twin', 'runtime', /operation not in scope/, async () =>
+      twinSim.call('withdraw_shielded_to_contract_with_grant_sol_ed25519', ...(await cArgs(1n, scS, saltS, 300n, 10n))));
+    await refused(G4, 'the operation not in scope: the to-contract grant (slot 2) through the shielded twin', 'runtime', /operation not in scope/, async () => {
+      const au = await authoriseSolGrantee(T.device, gctx(twinSim, T, 2n), SITE, { op: 'withdraw_shielded_with_grant', amount: amt(10n, A), recipient: to, changeEntry: change, encPk,
+        coin: { nonce: coinC.nonce, color: A, value: coinC.value, mt_index: coinC.mtIndex } });
+      return twinSim.call('withdraw_shielded_with_grant_sol_ed25519', { bytes: to }, A, 10n, change, encPk, ...grantAuthArgs(opening(300n, scC, saltC, 2n), au));
+    });
+    await refused(G4, 'the operation not in scope: the shielded-only grant (slot 1) through the unshielded twin', 'runtime', /operation not in scope/, async () => {
+      const au = await authoriseSolGrantee(T.device, gctx(twinSim, T, 1n), SITE, { op: 'withdraw_unshielded_with_grant', amount: amt(10n, A), recipient: pin });
+      return twinSim.call('withdraw_unshielded_with_grant_sol_ed25519', A, 10n, { bytes: pin }, ...grantAuthArgs(sOpen(300n), au));
+    });
+    twinSim.ps = withCoin(emptyCoinStore(), coin);
+  }
   // an approval built now (opening at 300), executed after revoke_all_grants
   const late = await (async () => {
     const au = await authoriseSolGrantee(T.device, gctx(twinSim, T, 1n), SITE, { op: 'withdraw_shielded_with_grant', amount: amt(10n, A), recipient: to, changeEntry: change, encPk,
