@@ -274,8 +274,8 @@
       "name": "issue_grant midnight:account:grant:id:r1:v1",
       "op": "issue_grant",
       "bytes": 1662,
-      "sha256": "f6b225ac9d1b8d99c122b4907fc8f069838fa0fe416d7f1296a2d436c891a83c",
-      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: Example Wallet                  \nRole: device of this account\nAccount: e180342f7c35331629cc326d4b1d371c686473ffefe0bf963a425545b149b849\nSigning key: 48e0020d893d600c966f41f2491effce03bf5ebce0e66fd8a10d4a85c4a04883\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:r1:v1 \nPasskey key x: 529f2e3f7652ca17de63fdcff0abf23d0de495b327c891feab6f9782f90c3762\nPasskey key y: 774a6c7ffe1c6589dbee474b3754eb6c3118ab941df48f68934961d8917f9c49\nPasskey origin: https://b.example.org                                                                                                     \nGrantee slot: 2  \nMay withdraw unshielded: no \nMay withdraw shielded: yes\nMay withdraw shielded to a contract: no \nMay read the inbox: yes\nToken: 8fcd43a06c7c3d895f1538de0abe77ef28bbcf808e0bdbf1406ce767ec97902b\nRecipient kind: any recipient           \nRecipient: 0000000000000000000000000000000000000000000000000000000000000000\nMax coin value: 0                                      \nPer-call cap: 0                                      \nTotal cap: 0                                      \nExpires at (block time, seconds): never               \nPasskey RP (hash): 308c94b67244d5a57d1625e1c18e8ce8ca22a8daef6bbb7738f351acc8efb5a7\nInbox read key: b20d384e86bb937dab22f8dae97bb2e75e24d1cdcfbbad1f08005002a17f9019\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: no \nCaller: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 0                   "
+      "sha256": "01371ed03399e014aef5f7f02e141e01a3b643e0a97e06b9d56cdab51ebc9095",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: Example Wallet                  \nRole: device of this account\nAccount: e180342f7c35331629cc326d4b1d371c686473ffefe0bf963a425545b149b849\nSigning key: 48e0020d893d600c966f41f2491effce03bf5ebce0e66fd8a10d4a85c4a04883\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:r1:v1 \nPasskey key x: 529f2e3f7652ca17de63fdcff0abf23d0de495b327c891feab6f9782f90c3762\nPasskey key y: 774a6c7ffe1c6589dbee474b3754eb6c3118ab941df48f68934961d8917f9c49\nPasskey origin: https://b.example.org                                                                                                     \nGrantee slot: 2  \nMay withdraw unshielded: yes\nMay withdraw shielded: yes\nMay withdraw shielded to a contract: no \nMay read the inbox: yes\nToken: 8fcd43a06c7c3d895f1538de0abe77ef28bbcf808e0bdbf1406ce767ec97902b\nRecipient kind: any recipient           \nRecipient: 0000000000000000000000000000000000000000000000000000000000000000\nMax coin value: 0                                      \nPer-call cap: 0                                      \nTotal cap: 0                                      \nExpires at (block time, seconds): never               \nPasskey RP (hash): 308c94b67244d5a57d1625e1c18e8ce8ca22a8daef6bbb7738f351acc8efb5a7\nInbox read key: b20d384e86bb937dab22f8dae97bb2e75e24d1cdcfbbad1f08005002a17f9019\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: no \nCaller: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 0                   "
     },
     {
       "name": "revoke_grant midnight:account:grant:id:r1:v1",
@@ -311,6 +311,13 @@
       "bytes": 391,
       "sha256": "29bf52a45b85db9d672a09ba0aa3b223f98c7927f2788378e63b6f3a737e1b01",
       "text": "Midnight Passport approval (sol v1)\nOperation: Cancel a pending recovery\nSite: Account 00 nonce 1              \nRole: device of this account\nAccount: 7eb2d86b38482ab20742cbd14dccf3d1d4405d3086839836d53b6290acb7a9d1\nSigning key: 401f59f2435737f0e660c91c67af8df025cc5ad951a984b2a05ba729ccd77100\nConsequence: the pending recovery of this account is cancelled.\nDevice nonce: 1                   "
+    },
+    {
+      "name": "issue_grant passkey read-only (no RP hash, Q49)",
+      "op": "issue_grant",
+      "bytes": 1662,
+      "sha256": "a11a0ae0b0d6b266df426943adad2295957e49f5ece33dc172173372592e747f",
+      "text": "Midnight Passport approval (sol v1)\nOperation: Issue a scoped grant\nSite: Example Wallet                  \nRole: device of this account\nAccount: bc0d1ec7f28c3815840399b242e537ccdcc20a91dcbaba533aa4b2a2a17ffc03\nSigning key: d8e1e2f31344c975c9ddcdf79c5418b44afc6c8dbb440fdcc80cfdbc96d070b5\nConsequence: lets the grantee key below spend from this account within these limits.\nGrantee scheme: midnight:account:grant:id:r1:v1 \nPasskey key x: 529f2e3f7652ca17de63fdcff0abf23d0de495b327c891feab6f9782f90c3762\nPasskey key y: 774a6c7ffe1c6589dbee474b3754eb6c3118ab941df48f68934961d8917f9c49\nPasskey origin: https://b.example.org                                                                                                     \nGrantee slot: 3  \nMay withdraw unshielded: no \nMay withdraw shielded: no \nMay withdraw shielded to a contract: no \nMay read the inbox: yes\nToken: 0000000000000000000000000000000000000000000000000000000000000000\nRecipient kind: any recipient           \nRecipient: 0000000000000000000000000000000000000000000000000000000000000000\nMax coin value: 0                                      \nPer-call cap: 0                                      \nTotal cap: 0                                      \nExpires at (block time, seconds): never               \nPasskey RP (hash): not applicable                                                  \nInbox read key: a49bb6a9e9986ba56035a2ab700aae94eee0ea3aca982d4b6b8696869a431048\nWindow length: 0                   \nWindow cap: 0                                      \nCaller restricted to a contract: no \nCaller: 0000000000000000000000000000000000000000000000000000000000000000\nDevice nonce: 17                  "
     },
     {
       "name": "withdraw_unshielded_with_grant 0",
@@ -564,9 +571,14 @@
       "refusal": "descriptor: a passkey's RP hash is zero"
     },
     {
-      "name": "Q46: issue_grant to a passkey grantee with an all-zero RP hash: renderer",
+      "name": "Q46: issue_grant, a spending grant to a passkey grantee with an all-zero RP hash: renderer",
       "layer": "client",
       "refusal": "sol_ed25519: a passkey grantee's RP hash is zero"
+    },
+    {
+      "name": "Q49: issue_grant, a read-only grant to a passkey grantee carrying an RP hash: renderer",
+      "layer": "client",
+      "refusal": "sol_ed25519: a read-only grant carries no RP hash"
     },
     {
       "name": "Q47: issue_grant to any recipient (kind 0) carrying a recipient: renderer",

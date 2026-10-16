@@ -111,7 +111,9 @@ TARGETS.forEach((t) => {
 devOps.push(['remove_device max counter/epoch', { op: 'remove_device', literal: false, target: TARGETS[2], counter: MAX64, epoch: 0xffffffffn }]);
 devOps.push(['remove_device literal', { op: 'remove_device', literal: true, entry: det('lit', 32) }]);
 GRANTEES.forEach((g, i) => {
-  const spend = i !== 4;
+  // every grantee class with a spending scope; the passkey grantee (4) shows
+  // its RP hash, the others "not applicable" (Q46, Q49)
+  const spend = true;
   devOps.push([`issue_grant ${g.tag}`, { op: 'issue_grant', grantee: g, opWithdrawUnshielded: spend, opWithdrawShielded: i % 2 === 0, opWithdrawShieldedToContract: i === 2,
     read: i % 2 === 0, color: det(`gc${i}`, 32), recipientKind: BigInt(i % 4), recipient: i % 4 === 0 ? new Uint8Array(32) : det(`gr${i}`, 32),
     maxCoinValue: [MAX128, 1000n, 1n, 50n, 0n][i], perCallCap: [MAX128, 100n, 1n, 50n, 0n][i], cap: [MAX128, 1000n, 1n, 100n, 0n][i],
@@ -123,6 +125,11 @@ devOps.push(['revoke_all_grants', { op: 'revoke_all_grants' }]);
 devOps.push(['publish_recovery_session', { op: 'publish_recovery_session', recoveryPk: pc.compute_public_point_with_jubjub(5n), sessionNonce: det('sn', 32), phi: [1n, FIELD_MAX, 0n, 0n], phiLen: 2n, wrap: det('wrap', 64) }]);
 devOps.push(['publish_recovery_session 4', { op: 'publish_recovery_session', recoveryPk: pc.compute_public_point_with_jubjub(FIELD_MAX), sessionNonce: det('sn4', 32), phi: [5n, 6n, 7n, 8n], phiLen: 4n, wrap: new Uint8Array(64) }]);
 devOps.push(['recover_cancel', { op: 'recover_cancel' }]);
+// Q49: a read-only grant to a passkey carries no RP hash ("not applicable");
+// appended last so that the earlier calls keep their contexts (devCtx(i))
+devOps.push(['issue_grant passkey read-only (no RP hash, Q49)', { op: 'issue_grant', grantee: { ...GRANTEES[4], slot: 3n }, opWithdrawUnshielded: false, opWithdrawShielded: false, opWithdrawShieldedToContract: false,
+  read: true, color: new Uint8Array(32), recipientKind: 0n, recipient: new Uint8Array(32), maxCoinValue: 0n, perCallCap: 0n, cap: 0n, expiresAt: 0n,
+  rpIdHash: new Uint8Array(32), readPk: det('rk-ro', 32), windowLen: 0n, windowCap: 0n, caller: null }]);
 const grOps: [string, SolGranteeOperation][] = [];
 AMOUNTS.forEach((a, i) => {
   grOps.push([`withdraw_unshielded_with_grant ${i}`, { op: 'withdraw_unshielded_with_grant', amount: a, recipient: det(`gru${i}`, 32) }]);
@@ -384,11 +391,11 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   const issue = corpus.filter((c) => c.op === 'issue_grant');
   const expiryOf = (t: string) => /\nExpires at \(block time, seconds\): (.{20})\n/.exec(t)?.[1];
   ok(G, 'issue_grant: an expiry of 0 reads "never", every other expiry its seconds (the label carries no "; 0 = never")',
-    issue.length === 5 && expiryOf(issue[0].text) === NEVER_TEXT.padEnd(20) && expiryOf(issue[4].text) === NEVER_TEXT.padEnd(20)
+    issue.length === 6 && expiryOf(issue[0].text) === NEVER_TEXT.padEnd(20) && expiryOf(issue[4].text) === NEVER_TEXT.padEnd(20)
     && expiryOf(issue[1].text) === '1800000000'.padEnd(20) && expiryOf(issue[3].text) === '1'.padEnd(20) && issue.every((c) => !c.text.includes('0 = never')));
   const rpOf = (t: string) => /\nPasskey RP \(hash\): (.{64})\n/.exec(t)?.[1];
-  ok(G, 'issue_grant: a non-passkey grantee\'s (zero) RP hash reads "not applicable"; a passkey grantee\'s hash its 64 hex digits (Q46)',
-    issue.slice(0, 4).every((c) => rpOf(c.text) === NOT_APPLICABLE_TEXT.padEnd(64)) && rpOf(issue[4].text) === hex(det('rph', 32)));
+  ok(G, 'issue_grant: a non-passkey grantee\'s (zero) RP hash reads "not applicable"; a spending passkey grant shows its hash in 64 hex digits (Q46); a read-only passkey grant reads "not applicable" (Q49)',
+    issue.slice(0, 4).every((c) => rpOf(c.text) === NOT_APPLICABLE_TEXT.padEnd(64)) && rpOf(issue[4].text) === hex(det('rph', 32)) && rpOf(issue[5].text) === NOT_APPLICABLE_TEXT.padEnd(64));
   const pk = corpus.filter((c) => /^(add|remove)_device midnight:account:device:r1:v2$/.test(c.name));
   ok(G, 'device block: a passkey target shows its RP hash in hex, never a word (Q46; 705 and 781 bytes)',
     pk.length === 2 && pk.every((c) => rpOf(c.text) === hex(det('rp', 32))) && pk[0].text.length === 705 && pk[1].text.length === 781 && corpus.every((c) => !c.op.endsWith('_device') || !c.text.includes('not applicable')));
@@ -398,8 +405,11 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   refused(G, "Q46: remove_device by descriptor of a passkey target with an all-zero RP hash: renderer", 'client', /a passkey's RP hash is zero/, () =>
     solDeviceMessageText(devCtx(0), { op: 'remove_device', literal: false, target: zeroPk, counter: 0n, epoch: 0n }));
   const igP = devOps.find(([n]) => n === 'issue_grant midnight:account:grant:id:r1:v1')![1] as any;
-  refused(G, "Q46: issue_grant to a passkey grantee with an all-zero RP hash: renderer", 'client', /a passkey grantee's RP hash is zero/, () =>
+  refused(G, "Q46: issue_grant, a spending grant to a passkey grantee with an all-zero RP hash: renderer", 'client', /a passkey grantee's RP hash is zero/, () =>
     solDeviceMessageText(devCtx(0), { ...igP, rpIdHash: new Uint8Array(32) }));
+  const igRO = devOps.find(([n]) => n.startsWith('issue_grant passkey read-only'))![1] as any;
+  refused(G, 'Q49: issue_grant, a read-only grant to a passkey grantee carrying an RP hash: renderer', 'client', /a read-only grant carries no RP hash/, () =>
+    solDeviceMessageText(devCtx(0), { ...igRO, rpIdHash: det('rph', 32) }));
   const ig0 = devOps.find(([n]) => n === 'issue_grant midnight:account:grant:id:evm:v1')![1] as any;
   refused(G, 'Q47: issue_grant to any recipient (kind 0) carrying a recipient: renderer', 'client', /a recipient without a recipient kind/, () =>
     solDeviceMessageText(devCtx(0), { ...ig0, recipientKind: 0n, recipient: det('r47', 32) }));
