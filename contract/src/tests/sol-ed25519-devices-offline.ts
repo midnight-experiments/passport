@@ -304,6 +304,28 @@ const G5 = '5 guards';
       remove(s5, true, { tag: '' }, 0n, 0n, eK, a, solTargetPoint(S3.key)));
   }
   ok(G5, 'after every refusal both devices are still there', ledgerOf(s5.state).device_count === 3n && live(s5, eK));
+  // Q46 = A: a passkey's own RP hash is never zero. The renderer refuses to
+  // build such a message; past the client, the wallet signs the contract's
+  // own bytes (the pure message circuit renders the zero hash in hex) and
+  // only the target's derivation refuses it, for add and for removal by
+  // descriptor
+  {
+    const tZ: SolTargetFields = { ...tP, c: new Uint8Array(32) };
+    const signedCircuit = async (sim: Sim, o: SolDeviceOperation) => {
+      const { bytes, showArgs } = solDeviceMessageCircuit(S.key, ctxOf(sim), SITE, o);
+      return { ...(await auth(sim, S, { op: 'add_device', target: tJ })), sig: (await S.signBytes(bytes)).sig, showArgs };
+    };
+    await refused(G5, "Q46: a passkey target with an all-zero RP hash: the renderer refuses the add_device message", 'client', /a passkey's RP hash is zero/, () =>
+      auth(g, S, { op: 'add_device', target: tZ }));
+    await refused(G5, "Q46: add_device of a passkey target with an all-zero RP hash under a valid signature over the contract's bytes", 'runtime', /a passkey's RP hash is zero/, async () =>
+      add(g, tZ, await signedCircuit(g, { op: 'add_device', target: tZ })));
+    const oR: SolDeviceOperation = { op: 'remove_device', literal: false, target: tZ, counter: 0n, epoch: ep };
+    await refused(G5, "Q46: remove_device by descriptor of a passkey target with an all-zero RP hash: the renderer refuses the message", 'client', /a passkey's RP hash is zero/, () =>
+      auth(s5, S, oR));
+    await refused(G5, "Q46: remove_device by descriptor of a passkey target with an all-zero RP hash under a valid signature over the contract's bytes", 'runtime', /a passkey's RP hash is zero/, async () =>
+      remove(s5, false, tZ, 0n, ep, new Uint8Array(32), await signedCircuit(s5, oR)));
+    ok(G5, 'Q46: a passkey target shows its RP hash in hex (no word)', (await auth(g, S, { op: 'add_device', target: tP })).text.includes(`Passkey RP (hash): ${Buffer.from(tP.c!).toString('hex')}\n`));
+  }
   // the client: an unregistered scheme is refused before any message is built
   // (the base's checkDescriptor returns nothing for one; found on node at S7S)
   await refused(G5, 'an unregistered scheme: the facade refuses the descriptor (no message, no call)', 'client', /not a registered descriptor scheme \(zz\)/, () => solTargetOf({ scheme: 'zz' } as any));

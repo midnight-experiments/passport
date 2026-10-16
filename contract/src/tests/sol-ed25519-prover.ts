@@ -78,9 +78,15 @@
 //   qa-s3        (G1S-6) the Field-to-Bytes<32> rendering of the recovery
 //                lines is canonical: an approval over the non-canonical
 //                rendering (value + r) of each phi and key coordinate;
-//   readability  (Q43 = A') the magnitudes and exact words: the message text
-//                of every changed circuit, the honest calls proved, a forged
-//                magnitude or word signed by the wallet, forged digits.
+//   readability  (Q43 words; Q44 = A″, every number in full digits) the
+//                message text of the circuits with amounts, caps, an expiry or
+//                an RP hash, the honest calls proved, a forged amount, cap or
+//                word signed by the wallet, forged digits;
+//   rules        (Q46 = A, Q47 = A) a passkey's own RP hash is never zero
+//                (add_device, remove_device by descriptor, issue_grant to a
+//                passkey grantee) and an any-recipient grant carries no
+//                recipient, each refused at the constraint level under a
+//                valid signature over the contract's own bytes.
 //
 // Every prover-level negative records the refusing request's circuit (it must
 // be the circuit under test) and the refusal's kind: `constraint` (the
@@ -111,7 +117,6 @@ import {
 } from '../wallet/signer.js';
 import { recoveryKey, signRecoverSubmit, recoverSubmitArgs, recoverSubmitChallenge, JUBJUB_IDENTITY, JUBJUB_ORDER_TWO } from '../wallet/recovery-gate.js';
 import { DESCRIPTOR_TAGS, grantOriginHash, padTag } from '../wallet/descriptors.js';
-import { magnitudeText } from '../wallet/rendering.js';
 import * as sol from '../wallet/signer-sol-ed25519.js';
 import * as msg from '../wallet/sol-ed25519-message.js';
 import { softwarePasskey } from './p256-fixtures.js';
@@ -122,7 +127,7 @@ import {
   GRANT_ID_FORGE_OVERRIDES, grantIdForgery, withLedgerCell, type LocalAccount, type LocalCoin,
 } from './sol-ed25519-negative.js';
 
-const ALL = ['activation', 'seam', 'replay', 'frame', 'custody', 'witness', 'devices', 'grants', 'grantee-scope', 'frame-lifecycle', 'recovery', 'qa-s3', 'readability'];
+const ALL = ['activation', 'seam', 'replay', 'frame', 'custody', 'witness', 'devices', 'grants', 'grantee-scope', 'frame-lifecycle', 'recovery', 'qa-s3', 'readability', 'rules'];
 const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 for (const s of SECTIONS) if (!ALL.includes(s)) throw new Error(`sol-ed25519-prover: unknown section ${s} (${ALL.join(', ')})`);
 const DRY = process.env.SOL_ED25519_DRY === '1';
@@ -1503,7 +1508,7 @@ async function sectionRecovery(doRecovery: boolean, doQaS3: boolean) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// readability (Q43 = A')
+// readability (Q43 words; Q44 = A″: every number in full digits)
 // ═════════════════════════════════════════════════════════════════════════════
 async function sectionReadability() {
   const rnd = rng('readability');
@@ -1518,7 +1523,7 @@ async function sectionReadability() {
     return msg.solMessageBytes(text.replace(from, to));
   };
   const forgedAuth = async (honest: any, from: string, to: string, dev: any = S) => ({ ...honest, sig: (await dev.signBytes(forge(honest.text, from, to))).sig });
-  const mag = (v: bigint) => magnitudeText(v).padEnd(13, ' ');
+  const d39 = (v: bigint | string) => String(v).padEnd(39, ' ');
   const amt = (color: Uint8Array, amount: bigint, decimals = 0, symbol = 'tTOK') => ({ color, amount, decimals, symbol });
   // custody
   const COL_U = fill(32, 0xc1), RU = fill(32, 0x77);
@@ -1527,12 +1532,12 @@ async function sectionReadability() {
   const aU = await authFor(AU, oU);
   const uArgs = (au: any) => [COL_U, 1_000_000n, { bytes: RU }, ...authArgs(au)];
   const ctlU = { a: AU, args: uArgs(aU) };
-  textCheck('readability', 'withdraw_unshielded: "Amount (base units): ~1.00 x 10^6  = 1000000…" (636 bytes)', aU.message.length === 636 && aU.text.includes(`Amount (base units): ${mag(1_000_000n)} = 1000000${' '.repeat(32)}\n`));
-  await positive('readability', 'withdraw_unshielded 10^6 with its magnitude: proved', undefined, AU, WU, ctlU.args);
-  await negative('readability', 'forged magnitude: the wallet signed "~1.00 x 10^5" for an executed 10^6', AU, WU, uArgs(await forgedAuth(aU, '~1.00 x 10^6 ', '~1.00 x 10^5 ')), INVALID, [INVALID], ctlU);
+  textCheck('readability', 'withdraw_unshielded: "Amount (base units): 1000000…" in full digits, no magnitude (620 bytes)', aU.message.length === 620 && aU.text.includes(`Amount (base units): ${d39(1_000_000n)}\n`) && !aU.text.includes(' x 10^'));
+  await positive('readability', 'withdraw_unshielded 10^6: proved', undefined, AU, WU, ctlU.args);
+  await negative('readability', 'forged amount: the wallet signed "100000" for an executed 1000000', AU, WU, uArgs(await forgedAuth(aU, `Amount (base units): ${d39(1_000_000n)}`, `Amount (base units): ${d39(100_000n)}`)), INVALID, [INVALID], ctlU);
   for (const [name, units, expect] of [
-    ['forged digits: a leading zero (would read "0")', '01000000', LEADING],
-    ['forged digits: a digit after the padding (would shift the exponent)', '1000000 0', ALIGN],
+    ['forged digits: a leading zero', '01000000', LEADING],
+    ['forged digits: a digit after the padding', '1000000 0', ALIGN],
   ] as const) {
     const copy = await copyFor([expect]);
     const shown = [...aU.showArgs] as any[];
@@ -1554,35 +1559,30 @@ async function sectionReadability() {
     const au = await authFor(H.a, o);
     const sArgs = (x: any) => [{ bytes: recipient }, COL_A, 300n, ...authArgs(x)];
     const short = circuit === WS ? 'withdraw_shielded' : 'withdraw_shielded_to_contract';
-    textCheck('readability', `${short}: the amount, the spent value and the change each with its magnitude (${circuit === WS ? 909 : 919} bytes)`, au.message.length === (circuit === WS ? 909 : 919)
-      && au.text.includes(`Spent coin value: ${mag(1000n)} = 1000`) && au.text.includes(`Change back to this account: ${mag(700n)} = 700`) && au.text.includes(`Amount (base units): ${mag(300n)} = 300`));
-    await positive('readability', `${short} 300 of a 1000 coin with the magnitudes: proved`, undefined, H.a, circuit, sArgs(au));
-    if (circuit === WS) await negative('readability', 'forged magnitude: the wallet signed the change as "~7.00 x 10^1"', H.a, circuit,
-      sArgs(await forgedAuth(au, `Change back to this account: ${mag(700n)}`, `Change back to this account: ${'~7.00 x 10^1'.padEnd(13)}`)), INVALID, [INVALID], { a: H.a, args: sArgs(au) });
+    const len = circuit === WS ? 861 : 871;
+    textCheck('readability', `${short}: the amount, the spent value and the change in full digits (${len} bytes)`, au.message.length === len
+      && au.text.includes(`Spent coin value: ${d39(1000n)}\n`) && au.text.includes(`Change back to this account: ${d39(700n)}\n`) && au.text.includes(`Amount (base units): ${d39(300n)}\n`));
+    await positive('readability', `${short} 300 of a 1000 coin: proved`, undefined, H.a, circuit, sArgs(au));
+    if (circuit === WS) await negative('readability', 'forged change: the wallet signed the change as 70', H.a, circuit,
+      sArgs(await forgedAuth(au, `Change back to this account: ${d39(700n)}`, `Change back to this account: ${d39(70n)}`)), INVALID, [INVALID], { a: H.a, args: sArgs(au) });
   }
-  // devices: a passkey target whose RP hash is all zero
+  // devices: a passkey target shows its RP hash in hex (Q46: never a word)
   const pass = softwarePasskey();
-  const tZ = sol.solTargetOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y, policy: { rpIdHash: Z32, origin: pass.policy.origin } } as any);
-  const aAdd = await authFor(A0, { op: 'add_device', target: tZ });
-  const addArgs = (x: any) => [msg.solTargetArg(tZ), msg.solTargetPointArg(tZ), ...authArgs(x)];
-  const ctlAdd = { a: A0, args: addArgs(aAdd) };
+  const tR = sol.solTargetOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y, policy: { rpIdHash: pass.policy.rp_id_hash, origin: pass.policy.origin } } as any);
+  const aR = await authFor(A0, { op: 'add_device', target: tR });
+  const addArgs = (t: any, x: any) => [msg.solTargetArg(t), msg.solTargetPointArg(t), ...authArgs(x)];
+  const ctlAdd = { a: A0, args: addArgs(tR, aR) };
   const NA = 'not applicable'.padEnd(64, ' ');
-  textCheck('readability', 'add_device: a passkey target with an all-zero RP hash reads "Passkey RP (hash): not applicable" (705 bytes)', aAdd.message.length === 705 && aAdd.text.includes(`Passkey RP (hash): ${NA}`));
+  textCheck('readability', 'add_device: a passkey target shows its RP hash as 64 hex digits (705 bytes)', aR.message.length === 705 && aR.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}\n`));
   const A1 = await positive('readability', 'add_device of that passkey target: proved', undefined, A0, ADD, ctlAdd.args);
-  await negative('readability', 'forged word: the wallet signed 64 zeros for the all-zero RP hash', A0, ADD, addArgs(await forgedAuth(aAdd, `Passkey RP (hash): ${NA}`, `Passkey RP (hash): ${'0'.repeat(64)}`)), INVALID, [INVALID], ctlAdd);
-  {
-    const tR = sol.solTargetOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y, policy: { rpIdHash: pass.policy.rp_id_hash, origin: pass.policy.origin } } as any);
-    const aR = await authFor(A0, { op: 'add_device', target: tR });
-    textCheck('readability', 'add_device: a real passkey RP hash reads as its 64 hex digits', aR.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}`));
-    await negative('readability', 'forged word: the wallet signed "not applicable" for a real RP hash', A0, ADD,
-      [msg.solTargetArg(tR), msg.solTargetPointArg(tR), ...authArgs(await forgedAuth(aR, `Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}`, `Passkey RP (hash): ${NA}`))], INVALID, [INVALID], ctlAdd);
-  }
+  await negative('readability', 'forged word: the wallet signed "not applicable" for a passkey target\'s RP hash', A0, ADD,
+    addArgs(tR, await forgedAuth(aR, `Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}`, `Passkey RP (hash): ${NA}`)), INVALID, [INVALID], ctlAdd);
   const A1x = A1 ?? (await execute(Original.Contract, A0, ADD, ctlAdd.args)).after;
   {
-    const o = { op: 'remove_device', literal: false, target: tZ, counter: 0n, epoch: ledgerOf(A1x).device_epoch as bigint };
+    const o = { op: 'remove_device', literal: false, target: tR, counter: 0n, epoch: ledgerOf(A1x).device_epoch as bigint };
     const au = await authFor(A1x, o);
-    await positive('readability', "remove_device of that passkey target by descriptor (the word in the removal's block): proved", undefined, A1x, REMOVE,
-      [false, msg.solTargetArg(tZ), msg.solTargetPointArg(tZ), 0n, o.epoch, Z32, ...authArgs(au)], (after) => ledgerOf(after).device_count === 1n);
+    await positive('readability', 'remove_device of that passkey target by descriptor (its RP hash in hex in the removal\'s block): proved', undefined, A1x, REMOVE,
+      [false, msg.solTargetArg(tR), msg.solTargetPointArg(tR), 0n, o.epoch, Z32, ...authArgs(au)], (after) => ledgerOf(after).device_count === 1n);
   }
   // grants
   const G = await sol.SolEd25519Grantee.enrol(sol.solSoftwareSigner(rnd()), { network: 'undeployed', issuingAccount: A0.addressBytes }, 'Example dApp');
@@ -1592,25 +1592,25 @@ async function sectionReadability() {
   const gG = G.grantee(0n);
   const aI = await authFor(A0, { op: 'issue_grant', grantee: gG, ...sG });
   const ctlI = { a: A0, args: issueArgsOf(gG, sG, saltG, aI) };
-  const MAXTXT = MAX128.toString();
-  textCheck('readability', 'issue_grant: caps of 2^128 - 1 read "~3.40 x 10^38 = 340282…", expiry 0 reads "never", a zero RP hash "not applicable" (1,726 bytes)',
-    aI.message.length === 1726 && aI.text.includes(`Total cap: ~3.40 x 10^38 = ${MAXTXT}`) && aI.text.includes(`Max coin value: ~3.40 x 10^38 = ${MAXTXT}`)
-    && aI.text.includes(`Expires at (block time, seconds): ${'never'.padEnd(20)}\n`) && aI.text.includes(`Passkey RP (hash): ${NA}\n`) && aI.text.includes(`Window cap: 0${' '.repeat(12)} = 0`));
-  const AG = await positive('readability', 'issue_grant to a sol grantee with the words and magnitudes: proved', undefined, A0, ISSUE, ctlI.args, (after) => ledgerOf(after).grants.member(G.grantId(after.addressBytes, 0n)));
-  await negative('readability', 'forged magnitude: the wallet signed "no limit" for the total cap', A0, ISSUE, issueArgsOf(gG, sG, saltG, await forgedAuth(aI, 'Total cap: ~3.40 x 10^38', `Total cap: ${'no limit'.padEnd(13)}`)), INVALID, [INVALID], ctlI);
+  const MAXTXT = d39(MAX128);
+  textCheck('readability', 'issue_grant: caps of 2^128 - 1 in full digits, expiry 0 reads "never", a non-passkey grantee\'s zero RP hash "not applicable" (1,662 bytes)',
+    aI.message.length === 1662 && aI.text.includes(`Total cap: ${MAXTXT}\n`) && aI.text.includes(`Max coin value: ${MAXTXT}\n`) && aI.text.includes(`Per-call cap: ${MAXTXT}\n`)
+    && aI.text.includes(`Expires at (block time, seconds): ${'never'.padEnd(20)}\n`) && aI.text.includes(`Passkey RP (hash): ${NA}\n`) && aI.text.includes(`Window cap: ${d39(0n)}\n`) && !aI.text.includes(' x 10^'));
+  const AG = await positive('readability', 'issue_grant to a sol grantee with the words and the full digits: proved', undefined, A0, ISSUE, ctlI.args, (after) => ledgerOf(after).grants.member(G.grantId(after.addressBytes, 0n)));
+  await negative('readability', 'forged cap: the wallet signed "no limit" for the total cap', A0, ISSUE, issueArgsOf(gG, sG, saltG, await forgedAuth(aI, `Total cap: ${MAXTXT}`, `Total cap: ${d39('no limit')}`)), INVALID, [INVALID], ctlI);
   await negative('readability', 'forged word: the wallet signed "0" instead of "never" for an expiry of 0', A0, ISSUE, issueArgsOf(gG, sG, saltG, await forgedAuth(aI, `seconds): ${'never'.padEnd(20)}`, `seconds): ${'0'.padEnd(20)}`)), INVALID, [INVALID], ctlI);
-  await negative('readability', 'forged word: the wallet signed 64 zeros for the all-zero RP hash', A0, ISSUE, issueArgsOf(gG, sG, saltG, await forgedAuth(aI, `Passkey RP (hash): ${NA}`, `Passkey RP (hash): ${'0'.repeat(64)}`)), INVALID, [INVALID], ctlI);
+  await negative('readability', 'forged word: the wallet signed 64 zeros for a non-passkey grantee\'s zero RP hash', A0, ISSUE, issueArgsOf(gG, sG, saltG, await forgedAuth(aI, `Passkey RP (hash): ${NA}`, `Passkey RP (hash): ${'0'.repeat(64)}`)), INVALID, [INVALID], ctlI);
   {
     const gP = sol.solGranteeOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y } as any, { origin: pass.policy.origin }, 0n);
     const sP = scope({ opWithdrawUnshielded: false, read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash, color: Z32, maxCoinValue: 0n, perCallCap: 0n, cap: 0n, expiresAt: 1_000n });
     const saltP = rnd();
     const aP = await authFor(A0, { op: 'issue_grant', grantee: gP, ...sP });
-    textCheck('readability', 'issue_grant to a passkey grantee: the RP hash in hex, the expiry in seconds, zero caps read "0 = 0"',
-      aP.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}\n`) && aP.text.includes(`Expires at (block time, seconds): ${'1000'.padEnd(20)}\n`) && aP.text.includes(`Total cap: 0${' '.repeat(12)} = 0`));
+    textCheck('readability', 'issue_grant to a passkey grantee: the RP hash in hex, the expiry in seconds, zero caps read "0"',
+      aP.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}\n`) && aP.text.includes(`Expires at (block time, seconds): ${'1000'.padEnd(20)}\n`) && aP.text.includes(`Total cap: ${d39(0n)}\n`));
     await positive('readability', 'issue_grant to a passkey grantee (RP hash, expiry 1000): proved', undefined, A0, ISSUE, issueArgsOf(gP, sP, saltP, aP));
     const ctlP = { a: A0, args: issueArgsOf(gP, sP, saltP, aP) };
     await negative('readability', 'forged word: the wallet signed "never" for an expiry of 1000', A0, ISSUE, issueArgsOf(gP, sP, saltP, await forgedAuth(aP, `seconds): ${'1000'.padEnd(20)}`, `seconds): ${'never'.padEnd(20)}`)), INVALID, [INVALID], ctlP);
-    await negative('readability', 'forged word: the wallet signed "not applicable" for a real RP hash', A0, ISSUE, issueArgsOf(gP, sP, saltP, await forgedAuth(aP, `Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}`, `Passkey RP (hash): ${NA}`)), INVALID, [INVALID], ctlP);
+    await negative('readability', 'forged word: the wallet signed "not applicable" for a passkey grantee\'s RP hash', A0, ISSUE, issueArgsOf(gP, sP, saltP, await forgedAuth(aP, `Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}`, `Passkey RP (hash): ${NA}`)), INVALID, [INVALID], ctlP);
   }
   // the grantee twins
   const AGx = AG ?? (await execute(Original.Contract, A0, ISSUE, ctlI.args)).after;
@@ -1622,9 +1622,9 @@ async function sectionReadability() {
     const ga = await sol.authoriseSolGrantee(G.device, gctx(AGU, 0n), SITE, o as any);
     const gArgs = (x: any) => [COL_U, 2_500_000n, { bytes: RU }, ...grantAuthArgs(opening(0n, saltG, 0n, MAX128) as any, x)];
     const ctlG = { a: AGU, args: gArgs(ga) };
-    textCheck('readability', 'the unshielded twin: "Amount (base units): ~2.50 x 10^6  = 2500000…" (762 bytes)', ga.message.length === 762 && ga.text.includes(`Amount (base units): ${mag(2_500_000n)} = 2500000`));
-    await positive('readability', 'the unshielded twin with its magnitude: proved; auth_nonce untouched', undefined, AGU, GWU, ctlG.args, (after) => ledgerOf(after).auth_nonce === ledgerOf(AGU).auth_nonce);
-    await negative('readability', 'forged magnitude: the grantee signed "~2.50 x 10^5" for an executed 2,500,000', AGU, GWU, gArgs(await forgedAuth(ga, '~2.50 x 10^6 ', '~2.50 x 10^5 ', G.device)), GINVALID, [GINVALID], ctlG);
+    textCheck('readability', 'the unshielded twin: "Amount (base units): 2500000…" in full digits (746 bytes)', ga.message.length === 746 && ga.text.includes(`Amount (base units): ${d39(2_500_000n)}\n`));
+    await positive('readability', 'the unshielded twin: proved; auth_nonce untouched', undefined, AGU, GWU, ctlG.args, (after) => ledgerOf(after).auth_nonce === ledgerOf(AGU).auth_nonce);
+    await negative('readability', 'forged amount: the grantee signed "250000" for an executed 2500000', AGU, GWU, gArgs(await forgedAuth(ga, `Amount (base units): ${d39(2_500_000n)}`, `Amount (base units): ${d39(250_000n)}`, G.device)), GINVALID, [GINVALID], ctlG);
   }
   {
     const sS = scope({ opWithdrawUnshielded: false, opWithdrawShielded: true, opWithdrawShieldedToContract: true, read: true, readPk: rnd(), color: COL_A, maxCoinValue: 1000n, perCallCap: 600n, cap: 600n });
@@ -1638,13 +1638,80 @@ async function sectionReadability() {
       const o = { op: circuit === GWS ? 'withdraw_shielded_with_grant' : 'withdraw_shielded_to_contract_with_grant', amount: amt(COL_A, 300n), recipient, changeEntry: change, encPk: enc,
         coin: { nonce: H.coin.nonce, color: COL_A, value: 1000n, mt_index: H.coin.mtIndex } };
       const ga = await sol.authoriseSolGrantee(G.device, gctx(H.a, 1n), SITE, o as any);
-      const len = circuit === GWS ? 1634 : 1644;
-      textCheck('readability', `the ${circuit === GWS ? 'shielded' : 'to-contract'} twin: the amount, spent value and change with their magnitudes (${len} bytes)`, ga.message.length === len
-        && ga.text.includes(`Spent coin value: ${mag(1000n)} = 1000`) && ga.text.includes(`Change back to this account: ${mag(700n)} = 700`));
-      await positive('readability', `the ${circuit === GWS ? 'shielded' : 'to-contract'} twin 300 of a 1000 coin with the magnitudes: proved`, undefined, H.a, circuit,
+      const len = circuit === GWS ? 1586 : 1596;
+      textCheck('readability', `the ${circuit === GWS ? 'shielded' : 'to-contract'} twin: the amount, spent value and change in full digits (${len} bytes)`, ga.message.length === len
+        && ga.text.includes(`Spent coin value: ${d39(1000n)}\n`) && ga.text.includes(`Change back to this account: ${d39(700n)}\n`));
+      await positive('readability', `the ${circuit === GWS ? 'shielded' : 'to-contract'} twin 300 of a 1000 coin: proved`, undefined, H.a, circuit,
         [{ bytes: recipient }, COL_A, 300n, change, enc, ...grantAuthArgs(opening(1n, saltS, 0n, 1000n) as any, ga)]);
     }
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// rules (Q46 = A, Q47 = A): a passkey's own RP hash is never zero; an
+// any-recipient grant carries no recipient
+// ═════════════════════════════════════════════════════════════════════════════
+async function sectionRules() {
+  const rnd = rng('rules');
+  const SITE = 'Q46 Q47 prover';
+  const { d: S } = await solDevice(rnd());
+  const A0 = await activated(S, rnd());
+  const authFor = (a: LocalAccount, o: any) => sol.authoriseSolDevice(S, ctxOf(a), SITE, o, counterIn(a, S));
+  /** A valid signature over the CONTRACT's own bytes (the client renderer
+   *  refuses these values, so the bytes come from the pure message circuit). */
+  const circuitAuth = async (a: LocalAccount, o: any) => {
+    const { bytes, showArgs } = sol.solDeviceMessageCircuit(S.key, ctxOf(a), SITE, o);
+    return { ...(await authFor(a, { op: 'revoke_all_grants' })), sig: (await S.signBytes(bytes)).sig, showArgs, message: bytes };
+  };
+  const ZERO_PK = "descriptor: a passkey's RP hash is zero";
+  const ZERO_GRANTEE = "sol_ed25519: a passkey grantee's RP hash is zero";
+  const RECIPIENT = 'sol_ed25519: a recipient without a recipient kind';
+  const pass = softwarePasskey();
+  const tR = sol.solTargetOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y, policy: { rpIdHash: pass.policy.rp_id_hash, origin: pass.policy.origin } } as any);
+  const tZ = { ...tR, c: new Uint8Array(32) };
+  const addArgs = (t: any, x: any) => [msg.solTargetArg(t), msg.solTargetPointArg(t), ...authArgs(x)];
+  const ctlAdd = { a: A0, args: addArgs(tR, await authFor(A0, { op: 'add_device', target: tR })) };
+  await negative('rules', 'Q46: add_device of a passkey target whose RP hash is zero, under a valid signature over the contract\'s bytes', A0, ADD,
+    addArgs(tZ, await circuitAuth(A0, { op: 'add_device', target: tZ })), ZERO_PK, [ZERO_PK], ctlAdd);
+  // remove_device by descriptor: the zero-hash passkey's entry planted
+  // through an upstream arm's raw add_device (the w117 recipe, recomputed)
+  const k1 = K256Device.generate();
+  const A1 = (await execute(Original.Contract, A0, ADD, addArgs(sol.solTargetOf({ scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: Number(k1.envelope) } as any),
+    await authFor(A0, { op: 'add_device', target: sol.solTargetOf({ scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: Number(k1.envelope) } as any) })))).after;
+  const ep = ledgerOf(A1).device_epoch as bigint;
+  const le = (v: bigint, n: number) => { const o = new Uint8Array(n); let x = v; for (let i = 0; i < n; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
+  const w117 = (t: any, e: bigint, c: bigint) => new Uint8Array(createHash('sha256').update(new Uint8Array([...padTag(DESCRIPTOR_TAGS.device.p256), ...A1.addressBytes, ...t.a, ...t.b, ...t.c, ...t.origin, ...le(e, 4), ...le(c, 8)])).digest());
+  if (!Buffer.from(w117(tR, ep, 0n)).equals(Buffer.from(pass.device.entryAt(A1.addressBytes, ep, 0n)))) throw new Error('setup: the w117 recipe does not reproduce the passkey entry');
+  const plantZ = w117(tZ, ep, 0n);
+  const plantR = pass.device.entryAt(A1.addressBytes, ep, 0n);
+  let A2 = A1;
+  for (const e of [plantZ, plantR]) {
+    const l = ledgerOf(A2);
+    const kc = (() => { for (let c = 0n; c < 64n; c++) if (l.devices.member(k1.entryAt(A2.addressBytes, l.device_epoch, c))) return c; throw new Error('K not live'); })();
+    A2 = (await execute(Original.Contract, A2, 'add_device_with_k256', [e, ...authArgs(k1.sign(k256Challenges.addDevice(ctxOf(A2), k1.pk, e), kc))])).after;
+  }
+  if (!ledgerOf(A2).devices.member(plantZ) || !ledgerOf(A2).devices.member(plantR)) throw new Error('setup: the plants did not land');
+  stateOnly('rules', 'setup: the zero-hash passkey entry (w117 recipe, reproduced for the real hash) and the real one planted by the k256 device', true);
+  const remArgs = (t: any, x: any) => [false, msg.solTargetArg(t), msg.solTargetPointArg(t), 0n, ep, Z32, ...authArgs(x)];
+  const ctlRem = { a: A2, args: remArgs(tR, await authFor(A2, { op: 'remove_device', literal: false, target: tR, counter: 0n, epoch: ep })) };
+  await negative('rules', 'Q46: remove_device by descriptor of a passkey target whose RP hash is zero (its entry live), under a valid signature over the contract\'s bytes', A2, REMOVE,
+    remArgs(tZ, await circuitAuth(A2, { op: 'remove_device', literal: false, target: tZ, counter: 0n, epoch: ep })), ZERO_PK, [ZERO_PK], ctlRem);
+  // issue_grant
+  const COL = fill(32, 0xc1);
+  const gP = sol.solGranteeOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y } as any, { origin: pass.policy.origin }, 0n);
+  const sP = scopeOf({ read: true, readPk: rnd(), rpIdHash: pass.policy.rp_id_hash });
+  const salt = rnd();
+  const ctlIssue = { a: A0, args: issueArgsOf(gP, sP, salt, await authFor(A0, { op: 'issue_grant', grantee: gP, ...sP })) };
+  const sZ = { ...sP, rpIdHash: new Uint8Array(32) };
+  await negative('rules', 'Q46: issue_grant to a passkey grantee whose RP hash is zero, under a valid signature over the contract\'s bytes', A0, ISSUE,
+    issueArgsOf(gP, sZ, salt, await circuitAuth(A0, { op: 'issue_grant', grantee: gP, ...sZ })), ZERO_GRANTEE, [ZERO_GRANTEE], ctlIssue);
+  const G = await sol.SolEd25519Grantee.enrol(sol.solSoftwareSigner(rnd()), { network: 'undeployed', issuingAccount: A0.addressBytes }, 'Example dApp');
+  const sAny = scopeOf({ opWithdrawUnshielded: true, color: COL, maxCoinValue: 100n, perCallCap: 100n, cap: 100n, recipientKind: 0n, recipient: rnd() });
+  await negative('rules', 'Q47: issue_grant to any recipient (kind 0) carrying a recipient, under a valid signature over the contract\'s bytes', A0, ISSUE,
+    issueArgsOf(G.grantee(0n), sAny, salt, await circuitAuth(A0, { op: 'issue_grant', grantee: G.grantee(0n), ...sAny })), RECIPIENT, [RECIPIENT], ctlIssue);
+  await positive('rules', 'Q47: issue_grant to any recipient (kind 0) with a zero recipient: proved (original module)', undefined, A0, ISSUE,
+    issueArgsOf(G.grantee(0n), { ...sAny, recipient: Z32 }, salt, await authFor(A0, { op: 'issue_grant', grantee: G.grantee(0n), ...sAny, recipient: Z32 })),
+    (after) => ledgerOf(after).grants.member(G.grantId(after.addressBytes, 0n)));
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1663,6 +1730,7 @@ try {
   if (SECTIONS.includes('frame-lifecycle')) await sectionFrameLifecycle();
   if (SECTIONS.includes('recovery') || SECTIONS.includes('qa-s3')) await sectionRecovery(SECTIONS.includes('recovery'), SECTIONS.includes('qa-s3'));
   if (SECTIONS.includes('readability')) await sectionReadability();
+  if (SECTIONS.includes('rules')) await sectionRules();
 } catch (e: any) {
   fatal = String(e?.stack ?? e?.message ?? e).split('\n').slice(0, 14).join('\n');
   errors++;

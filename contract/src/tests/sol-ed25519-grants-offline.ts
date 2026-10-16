@@ -148,7 +148,7 @@ for (const [scheme, g, idOf] of grantees) {
   const sc = baseScope({ read: true, readPk, rpIdHash: scheme === 'p256' ? pass.policy.rp_id_hash : Z32 });
   const nonce = sim.L().auth_nonce;
   const a = await sim.auth({ op: 'issue_grant', grantee: g, ...sc });
-  ok(G1, `${scheme}: the message (1726 bytes) shows the consequence and the grantee scheme`, a.message.length === 1726
+  ok(G1, `${scheme}: the message (1662 bytes) shows the consequence and the grantee scheme`, a.message.length === 1662
     && a.text.includes('Consequence: lets the grantee key below spend from this account within these limits.\n') && a.text.includes(`Grantee scheme: ${DESCRIPTOR_TAGS['grant-id'][scheme as 'k256']}`));
   await sim.call('issue_grant_with_sol_ed25519', ...issueArgs(g, sc, rnd(), a));
   const id = idOf();
@@ -174,6 +174,23 @@ const G2 = '2 rules';
   await bad('the shared chip through the arm: spend without cap', baseScope({ cap: 0n, perCallCap: 0n, maxCoinValue: 0n }), /spend without cap/);
   await bad('the shared chip through the arm: shielded spend without read', baseScope({ opWithdrawShielded: true }), /shielded spend requires read/);
   await bad('the shared chip through the arm: an empty scope', baseScope({ opWithdrawUnshielded: false }), /empty scope/);
+  // Q46 = A and Q47 = A: refused by the renderer (no message) and, past the
+  // client, under a valid signature over the contract's own bytes
+  const circuitAuth = async (o: any) => {
+    const { bytes, showArgs } = solDeviceMessageCircuit(sim.owner.key, sim.ctx(), SITE, o);
+    return { ...(await sim.auth({ op: 'revoke_all_grants' })), sig: (await sim.owner.signBytes(bytes)).sig, showArgs, message: bytes };
+  };
+  const gP = grantees[4][1];
+  const zeroRp = baseScope({ read: true, readPk: rnd(), rpIdHash: Z32 });
+  await refused(G2, "Q46: a passkey grantee with an all-zero RP hash: the renderer refuses the message", 'client', /a passkey grantee's RP hash is zero/, () =>
+    sim.auth({ op: 'issue_grant', grantee: gP, ...zeroRp }));
+  await refused(G2, "Q46: a passkey grantee with an all-zero RP hash under a valid signature over the contract's bytes", 'runtime', /a passkey grantee's RP hash is zero/, async () =>
+    sim.call('issue_grant_with_sol_ed25519', ...issueArgs(gP, zeroRp, rnd(), await circuitAuth({ op: 'issue_grant', grantee: gP, ...zeroRp }))));
+  const anyWithRecipient = baseScope({ recipientKind: 0n, recipient: rnd() });
+  await refused(G2, 'Q47: an any-recipient grant (kind 0) carrying a recipient: the renderer refuses the message', 'client', /a recipient without a recipient kind/, () =>
+    sim.auth({ op: 'issue_grant', grantee: g, ...anyWithRecipient }));
+  await refused(G2, "Q47: an any-recipient grant (kind 0) carrying a recipient under a valid signature over the contract's bytes", 'runtime', /a recipient without a recipient kind/, async () =>
+    sim.call('issue_grant_with_sol_ed25519', ...issueArgs(g, anyWithRecipient, rnd(), await circuitAuth({ op: 'issue_grant', grantee: g, ...anyWithRecipient }))));
   ok(G2, 'nothing was issued at slot 5', !sim.L().grants.member(G.grantId(sim.bytes, 5n)));
 }
 
@@ -230,7 +247,7 @@ const unsh = async (s: Sim, n: bigint, to: Uint8Array, spent: bigint, a?: SolEd2
 {
   const before = twinSim.L();
   const a1 = await authoriseSolGrantee(T.device, gctx(twinSim), SITE, { op: 'withdraw_unshielded_with_grant', amount: amt(200n), recipient: pin });
-  ok(G4, 'the grantee message (762 bytes) shows the grant label, slot, issued-at nonce and use nonce', a1.message.length === 762
+  ok(G4, 'the grantee message (746 bytes) shows the grant label, slot, issued-at nonce and use nonce', a1.message.length === 746
     && a1.text.includes('Role: grantee of a scoped grant\n') && a1.text.includes('Grant label: Example dApp') && a1.text.includes('Grant use nonce: 0'));
   await unsh(twinSim, 200n, pin, 0n, a1);
   const after = twinSim.L();

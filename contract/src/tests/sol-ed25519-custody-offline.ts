@@ -121,8 +121,8 @@ const G2 = '2 withdraw_unshielded';
   const amount: SolAmount = { color, amount: 1200n, decimals: 2, symbol: 'tDUST' };
   const o: SolDeviceOperation = { op: 'withdraw_unshielded', amount, recipient: to };
   const a = await auth(sim, dev, o);
-  ok(G2, 'the message shows the token, the amount (its magnitude and 39 digits, Q43), the site\'s label and the recipient (636 bytes)', a.message.length === 636
-    && a.text.includes(`Token: ${hex(color)}\n`) && a.text.includes('Amount (base units): ~1.20 x 10^3  = 1200' + ' '.repeat(35) + '\n')
+  ok(G2, 'the message shows the token, the amount (39 digits, no magnitude: Q44 = A″), the site\'s label and the recipient (620 bytes)', a.message.length === 620
+    && a.text.includes(`Token: ${hex(color)}\n`) && a.text.includes('Amount (base units): 1200' + ' '.repeat(35) + '\n')
     && a.text.includes('This site labels it: 12.00 tDUST') && a.text.includes(`To unshielded address: ${hex(to)}\n`));
   const exec = (c: Uint8Array, n: bigint, r: Uint8Array, x: SolEd25519Authorisation) => call(sim, 'withdraw_unshielded_with_sol_ed25519', c, n, { bytes: r }, ...authArgs(x));
   const swap = (p: Partial<{ color: Uint8Array; amount: bigint; to: Uint8Array; decimals: number }>) => {
@@ -154,11 +154,11 @@ const shielded = async (G: string, circuit: string, op: 'withdraw_shielded' | 'w
   const amount: SolAmount = { color: colA, amount: 300n, decimals: 0, symbol: 'tTOKEN' };
   const o: SolDeviceOperation = { op, amount, recipient: to, coin };
   const a = await auth(sim, dev, o);
-  const len = op === 'withdraw_shielded' ? 909 : 919;
+  const len = op === 'withdraw_shielded' ? 861 : 871;
   ok(G, `the message shows the coin's colour, value, nonce, Merkle index and the change (${len} bytes)`, a.message.length === len
-    && a.text.includes(`Token: ${hex(colA)}\n`) && a.text.includes('Spent coin value: ~1.00 x 10^3  = 1000' + ' '.repeat(35) + '\n')
+    && a.text.includes(`Token: ${hex(colA)}\n`) && a.text.includes('Spent coin value: 1000' + ' '.repeat(35) + '\n')
     && a.text.includes(`Spent coin nonce: ${hex(nonceH)}\n`) && a.text.includes('Spent coin index: 7' + ' '.repeat(19) + '\n')
-    && a.text.includes('Change back to this account: ~7.00 x 10^2  = 700' + ' '.repeat(36) + '\n'));
+    && a.text.includes('Change back to this account: 700' + ' '.repeat(36) + '\n'));
   const recipient = (r: Uint8Array) => ({ bytes: r });
   const exec = (x: SolEd25519Authorisation, amt: bigint = 300n, r: Uint8Array = to, c: Uint8Array = colA) => call(sim, circuit, recipient(r), c, amt, ...authArgs(x));
   // The witness answers `w` for the approved colour; the attacker's display
@@ -200,7 +200,7 @@ const shielded = async (G: string, circuit: string, op: 'withdraw_shielded' | 'w
     && (sent === null || (sent.value === 300n && hex(sent.color) === hex(colA))));
   // A full spend: no change.
   const full = await auth(sim, dev, { op, amount: { ...amount, amount: 1000n }, recipient: to, coin });
-  ok(G, 'a full spend shows change 0', full.text.includes('Change back to this account: 0' + ' '.repeat(12) + ' = 0' + ' '.repeat(38) + '\n'));
+  ok(G, 'a full spend shows change 0', full.text.includes('Change back to this account: 0' + ' '.repeat(38) + '\n'));
   const r2: any = await call(sim, circuit, recipient(to), colA, 1000n, ...authArgs(full));
   const change2 = op === 'withdraw_shielded' ? r2 : r2[1];
   ok(G, 'a full spend lands with no change', change2?.is_some === false);
