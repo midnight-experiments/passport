@@ -49,10 +49,23 @@ export const ACCOUNT_JS = path.join(zkConfigPath, 'contract', 'index.js');
 export const Original: any = await import(pathToFileURL(ACCOUNT_JS).href);
 export const zk = new NodeZkConfigProvider(zkConfigPath);
 export const proofLog: ProofServerRequest[] = [];
+/** The requests of a transaction's Zswap parts (spends and outputs), kept
+ *  apart from `proofLog`: the ledger proves a shielded transaction's parts
+ *  concurrently, so a Zswap `/prove` can be recorded after the arm circuit's
+ *  refusing `/check`, and the base helper attributes a refusal to the LAST
+ *  recorded request (it would then call a genuine refusal "not a verdict").
+ *  `proofLog` therefore holds only contract-circuit requests. */
+export const zswapLog: ProofServerRequest[] = [];
+const routedLog = {
+  push(...items: ProofServerRequest[]) {
+    for (const r of items) (String(r.keyLocation).startsWith('contract:') ? proofLog : zswapLog).push(r);
+    return proofLog.length;
+  },
+} as unknown as ProofServerRequest[];
 
 // The base helper's recording provider sends every proof-server request over
 // its own connection (constraint-negative.ts freshConnection).
-export const proofProvider = recordingProofProvider(CONFIG.proofServer, zk, proofLog);
+export const proofProvider = recordingProofProvider(CONFIG.proofServer, zk, routedLog);
 const coinPublicKey = '00'.repeat(32);
 const encryptionPublicKey = '00'.repeat(32);
 const privateState = emptyCoinStore(new Uint8Array(32).fill(7));

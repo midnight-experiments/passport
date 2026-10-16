@@ -124,7 +124,7 @@ import { expectRefusal, expectSuccess, type BypassedContractModule, type Negativ
 import {
   Original, loadPatched, dormant, execute, prove, ledgerOf, proofLog, withLocalCoins, coinStoreAnswering, localCoinPublicKeyBytes,
   transportRetries, overrideState, TYPE_OVERRIDES, QA1_OVERRIDES, SL_OVERRIDES, CALLER_OVERRIDES, callerInjection,
-  GRANT_ID_FORGE_OVERRIDES, grantIdForgery, withLedgerCell, type LocalAccount, type LocalCoin,
+  GRANT_ID_FORGE_OVERRIDES, grantIdForgery, withLedgerCell, zswapLog, type LocalAccount, type LocalCoin,
 } from './sol-ed25519-negative.js';
 
 const ALL = ['activation', 'seam', 'replay', 'frame', 'custody', 'witness', 'devices', 'grants', 'grantee-scope', 'frame-lifecycle', 'recovery', 'qa-s3', 'readability', 'rules'];
@@ -1754,7 +1754,7 @@ if (process.env.EVIDENCE_DIR) {
   fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });
   const file = path.join(process.env.EVIDENCE_DIR, `sol-ed25519-prover${SECTIONS === ALL ? '' : `-${SECTIONS.join('-')}`}${DRY ? '-dry' : ''}.json`);
   fs.writeFileSync(file, JSON.stringify(J({ suite: 'sol-ed25519-prover', sections: SECTIONS, dry: DRY, proofServer: CONFIG.proofServer, startedAt, finishedAt: new Date().toISOString(),
-    verdict, failures, errors, fatal, totalsByLayer: totals, requests: proofLog.length, transportRetries, cases: results }), null, 2) + '\n');
+    verdict, failures, errors, fatal, totalsByLayer: totals, requests: proofLog.length, zswapRequests: zswapLog.length, transportRetries, cases: results }), null, 2) + '\n');
   console.log(`evidence → ${file}`);
 }
 console.log(JSON.stringify(totals, null, 1));
