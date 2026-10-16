@@ -274,7 +274,13 @@ export function solDeviceMessageText(c: SolDeviceContext, o: SolDeviceOperation)
     case 'issue_grant':
       // the arm's issue rules the message depends on (Q46 = A, Q47 = A; the
       // circuit refuses the same with the same messages)
-      if (GRANT_TAGS[o.grantee.tag] === 4) passkeyRpHash(o.rpIdHash, "sol_ed25519: a passkey grantee's RP hash is zero");
+      {
+        // the RP hash is non-zero exactly for a passkey grantee whose scope can spend (Q46, Q49)
+        const spends = o.opWithdrawUnshielded || o.opWithdrawShielded || o.opWithdrawShieldedToContract;
+        const zero = o.rpIdHash.every((b) => b === 0);
+        if (GRANT_TAGS[o.grantee.tag] === 4 && spends) passkeyRpHash(o.rpIdHash, "sol_ed25519: a passkey grantee's RP hash is zero");
+        if (!spends && !zero) throw new Error('sol_ed25519: a read-only grant carries no RP hash');
+      }
       if (BigInt(o.recipientKind) === 0n && !o.recipient.every((b) => b === 0)) throw new Error('sol_ed25519: a recipient without a recipient kind');
       return head('Issue a scoped grant', 'device', c) + L('Consequence: lets the grantee key below spend from this account within these limits.')
         + granteeLines(o.grantee)

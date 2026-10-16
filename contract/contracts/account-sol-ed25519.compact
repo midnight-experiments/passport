@@ -427,9 +427,13 @@ export circuit issue_grant_with_sol_ed25519(
   assert(read_pk != pad(32, "") || !read, "sol_ed25519: read without a read key");
   const cls = sol_grantee_class(grantee.tag);
   assert(cls == 4 || rp_id_hash == pad(32, ""), "sol_ed25519: an RP hash belongs to a passkey grantee");
-  // A passkey grantee's own RP hash is never zero (AA 00067 Q46): "not
-  // applicable" is shown only for the other grantees, whose hash is zero.
-  assert(cls != 4 || rp_id_hash != pad(32, ""), "sol_ed25519: a passkey grantee's RP hash is zero");
+  // The RP hash is non-zero exactly when the grantee is a passkey AND the
+  // scope can spend (AA 00067 Q46, Q49): upstream checks a grant's RP pin only
+  // on the passkey spend path, so a read-only grant carries none and shows
+  // "not applicable", and a spending passkey grant shows its real hash.
+  const spends = op_withdraw_unshielded || op_withdraw_shielded || op_withdraw_shielded_to_contract;
+  assert(cls != 4 || !spends || rp_id_hash != pad(32, ""), "sol_ed25519: a passkey grantee's RP hash is zero");
+  assert(spends || rp_id_hash == pad(32, ""), "sol_ed25519: a read-only grant carries no RP hash");
   // Any recipient (kind 0) carries no recipient (AA 00067 Q47): the wallet
   // never shows a recipient that nothing enforces.
   assert(recipient_kind != 0 || recipient == pad(32, ""), "sol_ed25519: a recipient without a recipient kind");
