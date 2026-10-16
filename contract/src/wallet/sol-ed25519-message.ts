@@ -33,7 +33,7 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { DESCRIPTOR_TAGS, parseSolanaPublicKey } from './descriptors.js';
 import { ENUM_TEXT_WIDTH, k256EnvelopeLabel, recipientKindLabel } from './labels.js';
-import { EXPIRY_TEXT_WIDTH, MAGNITUDE_TEXT_WIDTH, RP_HASH_TEXT_WIDTH, expiryText, magnitudeText, rpHashText } from './rendering.js';
+import { EXPIRY_TEXT_WIDTH, RP_HASH_TEXT_WIDTH, expiryText, rpHashText } from './rendering.js';
 
 export const SOL_MESSAGE_FORMAT = 'sol v1';
 export const SOL_FIRST_LINE = 'Midnight Passport approval (sol v1)';
@@ -50,13 +50,19 @@ const hex = (b: Uint8Array, n: number, what: string): string => {
   return s;
 };
 const reversed = (b: Uint8Array) => Uint8Array.from(b).reverse();
-// The base's readable values (AA 00067 Q43 = A', src/wallet/rendering.ts),
-// padded as the circuits pad them: an amount or cap as "<magnitude> = <base
-// units>", a grant expiry of 0 as "never", an all-zero passkey RP hash as
-// "not applicable".
-const withMagnitude = (v: bigint) => magnitudeText(v).padEnd(MAGNITUDE_TEXT_WIDTH, ' ') + ' = ' + decimal(v, 39);
+// The base's exact words (AA 00067 Q43, src/wallet/rendering.ts), padded as
+// the circuits pad them: a grant expiry of 0 as "never", the all-zero RP hash
+// of a non-passkey grantee as "not applicable". Every number is shown in
+// full digits (Q44 = A″: no magnitudes).
 const expiryShown = (v: bigint) => expiryText(v).padEnd(EXPIRY_TEXT_WIDTH, ' ');
 const rpHashShown = (h: Uint8Array) => { hex(h, 32, 'the RP hash'); return rpHashText(h).padEnd(RP_HASH_TEXT_WIDTH, ' '); };
+/** A passkey's own RP hash: its hex, never zero (Q46 = A; the circuits
+ *  refuse a zero one with the same message). */
+const passkeyRpHash = (h: Uint8Array, refusal: string) => {
+  const x = hex(h, 32, 'the RP hash');
+  if (h.every((b) => b === 0)) throw new Error(refusal);
+  return x;
+};
 const MAX: Record<number, bigint> = { 3: 255n, 10: 0xffffffffn, 20: 0xffffffffffffffffn, 39: (1n << 128n) - 1n };
 /** A decimal of a fixed-width unsigned type, left-aligned, space-padded. */
 export function decimal(v: bigint, width: 3 | 10 | 20 | 39): string {
@@ -139,12 +145,12 @@ function head(title: string, role: 'device' | 'grantee', c: { site: string; acco
 const deviceTail = (c: SolDeviceContext) => 'Device nonce: ' + decimal(c.nonce, 20);
 const grantTail = (c: SolGranteeContext) => L('Grant label: ', labelText(labelBytes(c.label))) + L('Grant slot: ', decimal(c.slot, 3))
   + L('Grant issued at nonce: ', decimal(c.issuedAt, 20)) + 'Grant use nonce: ' + decimal(c.nonce, 20);
-const amountLines = (a: SolAmount) => L('Token: ', hex(a.color, 32, 'the token')) + L('Amount (base units): ', withMagnitude(a.amount))
+const amountLines = (a: SolAmount) => L('Token: ', hex(a.color, 32, 'the token')) + L('Amount (base units): ', decimal(a.amount, 39))
   + L('This site labels it: ', claimText(a.amount, a.decimals, a.symbol));
 function coinLines(coin: SolCoin, amount: bigint): string {
   if (amount > coin.value) throw new Error('sol message: amount above the spent coin\'s value');
-  return L('Spent coin value: ', withMagnitude(coin.value)) + L('Spent coin nonce: ', hex(coin.nonce, 32, 'the coin nonce'))
-    + L('Spent coin index: ', decimal(coin.mt_index, 20)) + L('Change back to this account: ', withMagnitude(coin.value - amount));
+  return L('Spent coin value: ', decimal(coin.value, 39)) + L('Spent coin nonce: ', hex(coin.nonce, 32, 'the coin nonce'))
+    + L('Spent coin index: ', decimal(coin.mt_index, 20)) + L('Change back to this account: ', decimal(coin.value - amount, 39));
 }
 const entryLines = (entry: Uint8Array, word: string) => {
   hex(entry, 192, 'an inbox entry');
@@ -185,7 +191,7 @@ function deviceBlock(t: SolTargetFields): string {
     case 3: return padBlock(L('secp256k1 key x: ', hex(reversed(a), 32, 'x')) + L('secp256k1 key y: ', hex(reversed(b), 32, 'y'))
       + L('Signing envelope: ', envelopeLabel(t.envelope ?? 0n)), 282);
     default: return padBlock(L('Passkey key x: ', hex(reversed(a), 32, 'x')) + L('Passkey key y: ', hex(reversed(b), 32, 'y'))
-      + L('Passkey origin: ', visible(t.origin ?? Z21)) + L('Passkey RP (hash): ', rpHashShown(t.c ?? Z32)), 282);
+      + L('Passkey origin: ', visible(t.origin ?? Z21)) + L('Passkey RP (hash): ', passkeyRpHash(t.c ?? Z32, "descriptor: a passkey's RP hash is zero")), 282);
   }
 }
 
@@ -266,14 +272,18 @@ export function solDeviceMessageText(c: SolDeviceContext, o: SolDeviceOperation)
       return head('Remove a device', 'device', c) + L('Consequence: the removed device can no longer act for this account.') + body + deviceTail(c);
     }
     case 'issue_grant':
+      // the arm's issue rules the message depends on (Q46 = A, Q47 = A; the
+      // circuit refuses the same with the same messages)
+      if (GRANT_TAGS[o.grantee.tag] === 4) passkeyRpHash(o.rpIdHash, "sol_ed25519: a passkey grantee's RP hash is zero");
+      if (BigInt(o.recipientKind) === 0n && !o.recipient.every((b) => b === 0)) throw new Error('sol_ed25519: a recipient without a recipient kind');
       return head('Issue a scoped grant', 'device', c) + L('Consequence: lets the grantee key below spend from this account within these limits.')
         + granteeLines(o.grantee)
         + L('May withdraw unshielded: ', yesNo(o.opWithdrawUnshielded)) + L('May withdraw shielded: ', yesNo(o.opWithdrawShielded))
         + L('May withdraw shielded to a contract: ', yesNo(o.opWithdrawShieldedToContract)) + L('May read the inbox: ', yesNo(o.read))
         + L('Token: ', hex(o.color, 32, 'the token')) + L('Recipient kind: ', kindWord(o.recipientKind)) + L('Recipient: ', hex(o.recipient, 32, 'the recipient'))
-        + L('Max coin value: ', withMagnitude(o.maxCoinValue)) + L('Per-call cap: ', withMagnitude(o.perCallCap)) + L('Total cap: ', withMagnitude(o.cap))
+        + L('Max coin value: ', decimal(o.maxCoinValue, 39)) + L('Per-call cap: ', decimal(o.perCallCap, 39)) + L('Total cap: ', decimal(o.cap, 39))
         + L('Expires at (block time, seconds): ', expiryShown(o.expiresAt)) + L('Passkey RP (hash): ', rpHashShown(o.rpIdHash))
-        + L('Inbox read key: ', hex(o.readPk, 32, 'the read key')) + L('Window length: ', decimal(o.windowLen, 20)) + L('Window cap: ', withMagnitude(o.windowCap))
+        + L('Inbox read key: ', hex(o.readPk, 32, 'the read key')) + L('Window length: ', decimal(o.windowLen, 20)) + L('Window cap: ', decimal(o.windowCap, 39))
         + L('Caller restricted to a contract: ', yesNo(o.caller !== null)) + L('Caller: ', hex(o.caller ?? Z32, 32, 'the caller')) + deviceTail(c);
     case 'revoke_grant':
       return head('Revoke a scoped grant', 'device', c) + L('Consequence: the grantee can no longer act under this grant.') + granteeLines(o.grantee) + deviceTail(c);
