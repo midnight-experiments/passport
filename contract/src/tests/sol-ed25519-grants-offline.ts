@@ -464,6 +464,11 @@ const G8 = '8 grantee blind';
 // the client: an unregistered grantee scheme is refused before any message
 await refused(G1, 'an unregistered grantee scheme: the facade refuses the descriptor (no message, no call)', 'client', /not a registered descriptor scheme \(zz\)/,
   () => solGranteeOf({ scheme: 'zz' } as any, { label: 'Example dApp' }, 0n));
+// (G2S-6) the grant facade runs the strict descriptor parsers, as the device facade does
+await refused(G1, 'a k256 grantee whose point is not on secp256k1: the facade refuses the descriptor (checkDescriptor)', 'client', /^descriptor: /,
+  () => solGranteeOf({ scheme: 'k256', x: 1n, y: 1n, envelope: 0 } as any, { originHash: originHash('https://k.example') }, 0n));
+await refused(G1, 'a sol_ed25519 grantee whose key is not an Ed25519 point: the facade refuses the descriptor (checkDescriptor)', 'client', /^descriptor: /,
+  () => solGranteeOf({ scheme: 'sol_ed25519', key: (() => { for (let i = 2; ; i++) { const k = new Uint8Array(32); k[0] = i; try { solTargetPoint(k); } catch { return k; } } })(), blind: rnd() } as any, { label: 'Example dApp' }, 0n));
 
 const failed = cases.filter((c) => c.verdict !== 'PASS');
 for (const gname of [...new Set(cases.map((c) => c.group))]) {

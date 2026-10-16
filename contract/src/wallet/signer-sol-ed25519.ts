@@ -624,8 +624,10 @@ export async function removeUnknownDeviceWithSolEd25519(account: SolEd25519Lifec
 export type SolGranteeSite = { label: string } | { origin: Uint8Array } | { originHash: Uint8Array };
 
 /** The message-level grantee of a readable descriptor at a site and slot. */
-export function solGranteeOf(d: Descriptor, site: SolGranteeSite, slot: bigint): SolGranteeFields {
-  requireRegisteredScheme(d);
+export function solGranteeOf(descriptor: Descriptor, site: SolGranteeSite, slot: bigint): SolGranteeFields {
+  // the strict parsers (a point on its curve, a Solana key that decodes, a
+  // passkey origin of visible ASCII), as the device facade does (G2S-6)
+  const d = checkDescriptor(requireRegisteredScheme(descriptor));
   const tag = DESCRIPTOR_TAGS['grant-id'][d.scheme];
   const need = <K extends string>(k: K): any => {
     if (!(k in site)) throw new Error(`sol_ed25519: a ${d.scheme} grantee is identified by its ${k}`);
