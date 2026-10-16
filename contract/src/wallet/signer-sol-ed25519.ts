@@ -638,7 +638,15 @@ export function solGranteeOf(descriptor: Descriptor, site: SolGranteeSite, slot:
     case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind), label: need('label'), slot };
     case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y), originHash: new Uint8Array(need('originHash')), slot };
     case 'k256': return { tag, a: le32(d.x), b: le32(d.y), envelope: BigInt(d.envelope), originHash: new Uint8Array(need('originHash')), slot };
-    case 'p256': return { tag, a: le32(d.x), b: le32(d.y), origin: new Uint8Array(need('origin')), slot };
+    case 'p256': {
+      // the grantee's site origin passes the base's passkey-origin rule (21
+      // bytes, visible ASCII without quotes or backslashes; G2(S) G2S-10),
+      // checked through checkDescriptor's policy branch (the RP hash is a
+      // scope field, so a placeholder stands in for it here)
+      const origin = new Uint8Array(need('origin'));
+      checkDescriptor({ scheme: 'p256', x: d.x, y: d.y, policy: { rpIdHash: new Uint8Array(32), origin } } as Descriptor);
+      return { tag, a: le32(d.x), b: le32(d.y), origin, slot };
+    }
     default: throw new Error(`sol_ed25519: not a registered descriptor scheme (${String((d as any).scheme)})`);
   }
 }
