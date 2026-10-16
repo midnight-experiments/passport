@@ -18,11 +18,10 @@
 //   visible   exact visible ASCII (a passkey origin), shown as is;
 //   enums     an enumerated operand (a grant's recipient kind, a k256 key's
 //             signing envelope) as a fixed text label per value;
-//   magnitude a Uint<128> amount or cap's order of magnitude, "~d.dd x 10^e",
-//             derived from its checked digits (Q43), shown with the digits;
 //   words     "never" for a grant expiry of 0 and "not applicable" for an
 //             all-zero passkey RP hash: the only values with a fixed word,
-//             each with an exact protocol meaning (Q43).
+//             each with an exact protocol meaning (Q43 A' revised by Q44 A'':
+//             exact-value words only; amounts and caps stay in base units).
 //
 // Compact has no division, so the decimal digits are DISPLAY INPUTS: the
 // caller supplies the text and the circuit CHECKS that it reads back to the
@@ -77,52 +76,14 @@ module WalletArmRendering {
     return decimal_text<39>(value as Field, text);
   }
 
-  // ── Magnitude (AA 00067 Q43) ──────────────────────────────────────────────
-  //
-  // Every amount and cap keeps its base units in full AND gains its order of
-  // magnitude, so that a huge value reads as huge whatever it is: 2^128 - 1
-  // and 2^128 - 2 both read "~3.40 x 10^38" (no word on one exact value, no
-  // "cliff" just below it). The form is ASCII, "~d.dd x 10^e", left-aligned
-  // and space-padded to 13 bytes; zero is "0".
-  //
-  // It is derived from the CHECKED canonical decimal text (decimal_text: one
-  // or more digits, no leading zero, then spaces): e = the number of digits
-  // after the first, and the mantissa is the first digit and the next two,
-  // TRUNCATED (never rounded), a missing digit read as 0. So it is a pure
-  // function of the value, with no input of its own: nothing for a prover
-  // to choose. The exponent's two digits come from comparisons (no division).
-  circuit magnitude_text_39(t: Vector<39, Uint<8>>): Vector<13, Uint<8>> {
-    // The number of digits (t is canonical: t[0] is a digit), minus one.
-    const digits = fold((n: Field, c: Uint<8>): Field => (c == 32 ? n : n + 1), 0 as Field, t);
-    const e = (digits - 1) as Uint<8>;
-    const tens = (e >= 30 ? 3 : e >= 20 ? 2 : e >= 10 ? 1 : 0) as Uint<8>;
-    const ones = ((e as Field) - (tens as Field) * 10) as Uint<8>;
-    const zero = t[0] == 48;
-    const two = e >= 10;
-    const m1 = (t[1] == 32 ? 48 : t[1]) as Uint<8>;
-    const m2 = (t[2] == 32 ? 48 : t[2]) as Uint<8>;
-    // "~" d "." d d " x 10^" e: e in one digit (then a space) or two.
-    const shown = [126, t[0], 46, m1, m2, 32, 120, 32, 49, 48, 94,
-                   (two ? tens + 48 : ones + 48) as Uint<8>, (two ? ones + 48 : 32) as Uint<8>];
-    return map((c: Uint<8>, z: Uint<8>): Uint<8> => (zero ? z : c) as Uint<8>,
-               shown, [48, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]);
-  }
-
-  // A Uint<128> amount or cap as shown: its digits checked against the value
-  // (uint128_text) and its magnitude derived from those digits. Use both:
-  // the base units in full, then the magnitude.
-  export pure circuit uint128_magnitude_text(value: Uint<128>, text: Vector<39, Uint<8>>): [Vector<39, Uint<8>>, Vector<13, Uint<8>>] {
-    const digits = uint128_text(value, text);
-    return [digits, magnitude_text_39(digits)];
-  }
-
-  // ── Exact words (AA 00067 Q43) ────────────────────────────────────────────
+  // ── Exact words (AA 00067 Q43 A', revised by Q44 A'') ─────────────────────
   //
   // A word replaces a value ONLY where the value has an exact protocol
   // meaning, selected by exact equality: a grant expiry of 0 never expires
   // ("never"); an all-zero passkey RP hash means no passkey is involved
-  // ("not applicable"). Every other value is shown as before. The words are
-  // space-padded to the field's width; the client's copies are in
+  // ("not applicable"). Every other value is shown as before; amounts and
+  // caps stay in base units in full (Q44 A'' removed the magnitude). The
+  // words are space-padded to the field's width; the client's copies are in
   // src/wallet/rendering.ts.
 
   // A grant's expiry (block time, seconds): "never" for 0, else its decimal
@@ -181,7 +142,7 @@ module WalletArmRendering {
             ...hex_text_32(slice<32>(b, 128)), ...hex_text_32(slice<32>(b, 160))];
   }
 
-  // A grant's passkey RP hash (Q43 exact word): "not applicable" (space-padded)
+  // A grant's passkey RP hash (exact word): "not applicable" (space-padded)
   // when all 32 bytes are zero, which every non-passkey grant carries; else
   // the hash in full hex. `hex` MUST be h's own hex text, already checked
   // against h (hex_text_32, or an arm's own checked renderer): this helper

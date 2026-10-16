@@ -52,7 +52,7 @@ export {
   uint8_text, uint32_text, uint64_text, uint128_text,
   hex_text_20, hex_text_32, hex_text_64, hex_text_192, reverse_32,
   label_text_32, visible_text_21, recipient_kind_text, k256_envelope_text,
-  uint128_magnitude_text, expiry_text, rp_hash_text, rp_hash_text_from_hex,
+  expiry_text, rp_hash_text, rp_hash_text_from_hex,
 };
 
 export ledger derived: Bytes<32>;
@@ -188,30 +188,21 @@ export circuit probe_k256_envelope_text(envelope: Uint<8>): [] {
   text_24 = disclose(k256_envelope_text(envelope) as Bytes<24>);
 }
 
-// ── Q43: magnitude and exact words ──────────────────────────────────────────
+// ── Exact words (Q43 A', revised by Q44 A'': no magnitude) ──────────────────
 //
 // Rows: each helper probe has a control probe with the same inputs and the
 // same ledger writes but without the helper's logic; the difference is what
 // the helper adds to an arm's circuit (the message bytes it adds are the
 // arm's own cost). Checks: an arm binds the shown text through its signed
 // bytes; the probe_check_* circuits model that with an assert, so that a
-// forged magnitude or word is refused at the prover.
+// forged word is refused at the prover.
 
+// text_13 was the magnitude probes' cell (Q43, removed by Q44 A''). It stays
+// declared so that the cells after it keep their indices, and so the word
+// probes keep their ZKIR.
 export ledger text_13: Bytes<13>;
 export ledger text_20: Bytes<20>;
 export ledger text_64: Bytes<64>;
-
-export circuit probe_uint128_magnitude_text(value: Uint<128>, text: Vector<39, Uint<8>>): [] {
-  const r = uint128_magnitude_text(value, text);
-  text_39 = disclose(r[0] as Bytes<39>);
-  text_13 = disclose(r[1] as Bytes<13>);
-}
-
-// Control: the digits and a 13-byte input, no magnitude.
-export circuit probe_uint128_text_control_13(value: Uint<128>, text: Vector<39, Uint<8>>, other: Bytes<13>): [] {
-  text_39 = disclose(uint128_text(value, text) as Bytes<39>);
-  text_13 = disclose(other);
-}
 
 export circuit probe_expiry_text(value: Uint<64>, text: Vector<20, Uint<8>>): [] {
   text_20 = disclose(expiry_text(value, text) as Bytes<20>);
@@ -241,11 +232,6 @@ export circuit probe_rp_hash_text_from_hex(h: Bytes<32>, hex: Vector<64, Uint<8>
 export circuit probe_text_64_control(h: Bytes<32>, hex: Vector<64, Uint<8>>): [] {
   derived = disclose(h);
   text_64 = disclose(hex as Bytes<64>);
-}
-
-export circuit probe_check_magnitude(value: Uint<128>, text: Vector<39, Uint<8>>, shown: Bytes<13>): [] {
-  assert(uint128_magnitude_text(value, text)[1] as Bytes<13> == shown, "display: the shown magnitude is not the circuit's");
-  text_13 = disclose(shown);
 }
 
 export circuit probe_check_expiry(value: Uint<64>, text: Vector<20, Uint<8>>, shown: Bytes<20>): [] {
