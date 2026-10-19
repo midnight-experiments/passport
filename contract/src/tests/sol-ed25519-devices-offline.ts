@@ -10,7 +10,8 @@
 // entry. Removal by descriptor and by the literal form, an entry
 // planted at device_epoch + 1 by an upstream arm evicted by descriptor, S13
 // in both forms, the last device. Binding: every shown descriptor field
-// changed at execution. Guards: an unregistered tag,
+// changed at execution, and an evm address shown with another address's
+// hex digits. Guards: an unregistered tag,
 // an unused field set, a Solana target whose point is not the key shown, the
 // identity as a Solana target, a non-identity point on another class, the
 // form's unused values.
@@ -232,6 +233,21 @@ const G4 = '4 binding';
       return add(b, executed, withShow(a, shownFor(b, S, { op: 'add_device', target: executed })));
     });
   }
+  // The wallet signed a message showing another evm address, and the display
+  // inputs carry that address's hex digits: the signature holds, so only the
+  // display check (the digits against the executed address) refuses it; then
+  // the honest call lands (positive control)
+  {
+    const m = solDeviceMessageCircuit(S.key, ctxOf(b), SITE, { op: 'add_device', target: { ...tE, address: flip(tE.address!) } });
+    await refused(G4, 'add_device: the wallet signed a message showing another evm address (its hex digits with it): the display check', 'runtime',
+      /hex digits do not match the value/, async () => {
+        const a = await auth(b, S, { op: 'add_device', target: tE });
+        return add(b, tE, { ...a, sig: (await S.signBytes(m.bytes)).sig, showArgs: m.showArgs });
+      });
+    const ep = epochOf(b);
+    await add(b, tE, await auth(b, S, { op: 'add_device', target: tE }));
+    ok(G4, 'add_device (evm target): positive control, the honest approval lands', live(b, entryOf('evm_eip712', D[3][1], null, b.bytes, ep, 0n)));
+  }
   const sR = await deploy(S);
   await add(sR, tJ, await auth(sR, S, { op: 'add_device', target: tJ }));
   const ep = epochOf(sR);
@@ -294,6 +310,7 @@ const G5 = '5 guards';
     ['an evm_eip712 target with a non-zero second field', { ...solTargetOf(D[3][1]), b: rnd(32) }, /unused second field must be zero/],
     ['a jubjub target with a non-zero RP hash', { ...tJ, c: rnd(32) }, /unused rp hash must be zero/],
     ['a jubjub target with a non-zero origin (its characters equal its bytes)', { ...tJ, origin: rnd(21) }, /unused origin must be zero/],
+    ['a jubjub target with a non-zero address (its hex digits supplied consistently)', { ...tJ, address: rnd(20) }, /unused address must be zero/],
   ] as [string, SolTargetFields, RegExp][]) {
     await refused(G5, `${name} (not shown; the wallet signed the contract's bytes)`, 'runtime', re, async () => {
       const m = solDeviceMessageCircuit(S.key, ctxOf(g), SITE, { op: 'add_device', target: t });
