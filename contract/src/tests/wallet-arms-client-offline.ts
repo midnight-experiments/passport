@@ -103,6 +103,8 @@ const schemesOf = (r: DescriptorRecipe): readonly DescriptorScheme[] => (r === '
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // The refusal of a legacy boot: upstream's circuit named, at `where`.
 const legacyBoot = (scheme: string, where: string) =>
+  // The pattern is built from this suite's fixed scheme and function names (the function name escaped) and anchored at the end; no outside input reaches it.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
   new RegExp(`descriptor: ${scheme} boots through upstream's derive_boot_commitment_with_${scheme}, not through a descriptor \\(${escapeRe(where)}\\)$`);
 
 // ── Tags ─────────────────────────────────────────────────────────────────────
@@ -740,6 +742,8 @@ const unknownSchemeReport: { schemes: string[]; functions: string[]; refusals: n
   ];
   const fns = new Set<string>();
   const refuse = (why: string, where: string, prefix: 'descriptor' | 'blind', shown: string, f: () => unknown) => {
+    // The pattern is built from a fixed prefix and this suite's function names and test schemes (both escaped); no outside input reaches it.
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
     refused('unknown scheme', f, new RegExp(`${prefix}: unknown scheme ${escapeRe(shown)} in ${escapeRe(where)} \\(registered: `), `${why} (${where})`);
     fns.add(where === 'payloadParts' ? 'payloadParts (via payloadParts, entryCall, grantIdCall)' : where);
   };

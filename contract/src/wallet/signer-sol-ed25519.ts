@@ -45,7 +45,7 @@ export const ED25519_L: bigint = ed25519.Point.Fn.ORDER;
 const equalBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
 const toHex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 const fromHex = (s: string, n: number, what: string): Uint8Array => {
-  if (!new RegExp(`^[0-9a-f]{${2 * n}}$`).test(s)) throw new Error(`sol_ed25519: ${what} is ${n} bytes of lower-case hex`);
+  if (typeof s !== 'string' || s.length !== 2 * n || !/^[0-9a-f]*$/.test(s)) throw new Error(`sol_ed25519: ${what} is ${n} bytes of lower-case hex`);
   return Uint8Array.from(s.match(/../g)!, (h) => parseInt(h, 16));
 };
 const bigLE = (b: Uint8Array): bigint => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
