@@ -328,7 +328,7 @@ export const NEGATIVES: NegativeVector[] = [
   { name: 'spending passkey grant with a zero RP hash', base: 'issue_grant/p256', refusedBy: ['client', 'runtime'], why: "a passkey grantee that can spend has its RP pin, never zero",
     patch: (v) => { const c = clone(v); (c.args as any).scope.rpIdHash = '00'.repeat(32); return c; } },
   { name: 'read-only passkey grant with an RP hash', base: 'issue_grant/p256', refusedBy: ['client', 'runtime'], why: 'upstream checks the RP pin only on the passkey spend path, so a grant that cannot spend carries zero',
-    patch: (v) => { const c = clone(v); Object.assign((c.args as any).scope, { opWithdrawUnshielded: false, opWithdrawShielded: false, opWithdrawShieldedToContract: false }); return c; } },
+    patch: (v) => { const c = clone(v); const s = (c.args as any).scope; s.opWithdrawUnshielded = false; s.opWithdrawShielded = false; s.opWithdrawShieldedToContract = false; return c; } },
   { name: 'an RP hash for a non-passkey grantee', base: 'issue_grant/k256', refusedBy: ['client', 'runtime'], why: 'only a passkey grantee has an RP pin',
     patch: (v) => { const c = clone(v); (c.args as any).scope.rpIdHash = hex(new Uint8Array(32).fill(0x3f)); return c; } },
   { name: 'any recipient with a recipient', base: 'issue_grant/jubjub', refusedBy: ['client', 'runtime'], why: '"any recipient" carries no recipient',
