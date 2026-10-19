@@ -90,8 +90,10 @@ const ascii = (v: bigint[]) => String.fromCharCode(...v.map(Number));
 
 const tally: Record<string, { pass: number; refused: number }> = {};
 const ok = (k: string) => { (tally[k] ??= { pass: 0, refused: 0 }).pass++; };
-const refused = (k: string, f: () => unknown, re: RegExp, why: string) => {
-  assert.throws(f, re, `${k}: must refuse ${why}`);
+// `expected` is a pattern tested against String(error), or a validation
+// function that returns true for the expected error.
+const refused = (k: string, f: () => unknown, expected: RegExp | ((e: unknown) => boolean), why: string) => {
+  assert.throws(f, expected, `${k}: must refuse ${why}`);
   (tally[k] ??= { pass: 0, refused: 0 }).refused++;
 };
 
@@ -100,12 +102,10 @@ const RECIPES: readonly DescriptorRecipe[] = ['device', 'boot', 'grant-id'];
 const boots = (scheme: DescriptorScheme) => (BOOT_SCHEMES as readonly string[]).includes(scheme);
 const recipesOf = (scheme: DescriptorScheme): DescriptorRecipe[] => RECIPES.filter((r) => r !== 'boot' || boots(scheme));
 const schemesOf = (r: DescriptorRecipe): readonly DescriptorScheme[] => (r === 'boot' ? BOOT_SCHEMES : DESCRIPTOR_SCHEMES);
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// The refusal of a legacy boot: upstream's circuit named, at `where`.
-const legacyBoot = (scheme: string, where: string) =>
-  // The pattern is built from this suite's fixed scheme and function names (the function name escaped) and anchored at the end; no outside input reaches it.
-  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
-  new RegExp(`descriptor: ${scheme} boots through upstream's derive_boot_commitment_with_${scheme}, not through a descriptor \\(${escapeRe(where)}\\)$`);
+// The refusal of a legacy boot: an Error whose message ends by naming
+// upstream's circuit and the refusing function `where`.
+const legacyBoot = (scheme: string, where: string) => (e: unknown) =>
+  e instanceof Error && e.message.endsWith(`descriptor: ${scheme} boots through upstream's derive_boot_commitment_with_${scheme}, not through a descriptor (${where})`);
 
 // ── Tags ─────────────────────────────────────────────────────────────────────
 
@@ -742,9 +742,8 @@ const unknownSchemeReport: { schemes: string[]; functions: string[]; refusals: n
   ];
   const fns = new Set<string>();
   const refuse = (why: string, where: string, prefix: 'descriptor' | 'blind', shown: string, f: () => unknown) => {
-    // The pattern is built from a fixed prefix and this suite's function names and test schemes (both escaped); no outside input reaches it.
-    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
-    refused('unknown scheme', f, new RegExp(`${prefix}: unknown scheme ${escapeRe(shown)} in ${escapeRe(where)} \\(registered: `), `${why} (${where})`);
+    const text = `${prefix}: unknown scheme ${shown} in ${where} (registered: `;
+    refused('unknown scheme', f, (e: unknown) => e instanceof Error && e.message.includes(text), `${why} (${where})`);
     fns.add(where === 'payloadParts' ? 'payloadParts (via payloadParts, entryCall, grantIdCall)' : where);
   };
   for (const [why, scheme] of BAD) {
