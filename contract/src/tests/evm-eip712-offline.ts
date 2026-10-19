@@ -533,7 +533,7 @@ console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (c
     for (const [l, c] of [[1n, 0n], [0n, 7n], [3600n, 5n]] as [bigint, bigint][]) {
       const input = strip(base);
       const td = JSON.parse(JSON.stringify(base.typedData));
-      Object.assign(td.message, { windowLength: l.toString(), windowCap: c.toString(), window: EVM_EIP712_WINDOW_POINTER });
+      td.message.windowLength = l.toString(); td.message.windowCap = c.toString(); td.message.window = EVM_EIP712_WINDOW_POINTER;
       input.args.scope.windowLen = l.toString(); input.args.scope.windowCap = c.toString();
       const acct = Buffer.from(input.frame.account, 'hex');
       assert.equal(toHex(typedDataDigest(td)), toHex(pc.evm_eip712_digest(acct, contractStructHash(pc, input), accountHashHint(acct))), `window ${l}/${c}: contract digest == the pointer message`);
