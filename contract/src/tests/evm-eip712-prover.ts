@@ -2173,7 +2173,7 @@ if (SECTIONS.includes('texts')) {
     const td = evmEip712Messages.withdrawUnshielded(frameOf(AU), COL_U, amount, RECIPIENT_U, TEST_SITE);
     const l = label49(label);
     const t = patch(td, (m) => { m.amountLabel = EVM_EIP712_AMOUNT_LABEL_PREFIX + ascii(l); });
-    await negative('texts', `withdraw_unshielded: ${amount} shown as "${label.replace('\n', '\\n')}" (signed as shown)`, AU, WU,
+    await negative('texts', `withdraw_unshielded: ${amount} shown as "${label.replaceAll('\n', '\\n')}" (signed as shown)`, AU, WU,
       [COL_U, amount, { bytes: RECIPIENT_U }, signed(AU, t), keep({ amount: leHint(amount, 16), label: l })], expect, [expect], '',
       { control: { a: AU, args: [COL_U, amount, { bytes: RECIPIENT_U }, authFor(td)] } });
   };
