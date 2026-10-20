@@ -1,13 +1,14 @@
 {
  "suite": "evm-eip712-prover (npm run test:evm_eip712)",
  "build": {
-  "branch": "evm-arm",
-  "commit": "197f92a",
-  "keys": "full key generation of the contract tree at that commit",
+  "branch": "wallet-arm-evm-eip712",
+  "commit": "8d553e1",
+  "keys": "a full key generation of a contract tree whose ZKIR is byte-identical to that commit's, circuit by circuit",
   "upstreamCircuits": "the 52 upstream account circuits byte-identical (ZKIR and verifier keys) to upstream 0d7bb0b",
   "compiler": "compactc 0.35.0 --feature-zkir-v3",
   "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8",
-  "node": "2.1.0-rc.4"
+  "node": "2.1.0-rc.4",
+  "note": "The sections frame-lifecycle, grant-matrix, grants, hints, isolate, places, texts ran at 8d553e1. The others ran at earlier revisions of these tests (3c9647e, ace595b), before the commits of this history were cut; each of their cases equals the case of the same name in the DRY at 8d553e1 (kind, expected refusal, bypassed asserts, enforcement), and every proof-server request they made named the verifier key that the build above holds for its circuit, so no key they used has changed. None of them proves issue_grant_with_evm_eip712, the one circuit whose key changed since those runs."
  },
  "method": "Each negative runs twice: in the simulator (generated JavaScript, honest checks) and at the proof server with the JavaScript checks that would refuse it bypassed in a patched copy of the generated contract; every other assert still throws in that copy, so a case that names one assert isolates it. Every patched copy proves the honest call of its circuit through itself: the cases of the checked hints, the readable texts the isolating forgeries and the shared checks at every place a value enters (sections hints, texts, isolate, places) and most others prove it before their own attempt; elsewhere the negatives of one copy in a section share the first control proved through it, and each result names its control (control.with). A forged byte argument above 8 bits travels through a copy that lets it past the type check and encodes it as given; the circuit's range check refuses it. A case passes only when it is refused at the expected layer, every named assert fired in the copy, and the refusal is attributed to the circuit under test. Each section ran in its own run from a freshly started proof server; each section draws its own deterministic values, so a run of one section draws what the full suite draws.",
  "runs": [
@@ -101,36 +102,36 @@
   },
   {
    "run": "grants",
-   "testsAt": "3c9647e",
+   "testsAt": "8d553e1",
    "sections": [
     "grants"
    ],
    "casesCounted": 48,
    "verdict": "PASS",
    "requests": 131,
-   "ranAt": "2026-10-18T18:28:34.723Z"
+   "ranAt": "2026-10-20T01:05:22.380Z"
   },
   {
    "run": "grant-matrix",
-   "testsAt": "ace595b",
+   "testsAt": "8d553e1",
    "sections": [
     "grant-matrix"
    ],
    "casesCounted": 76,
    "verdict": "PASS",
    "requests": 534,
-   "ranAt": "2026-10-18T05:47:21.110Z"
+   "ranAt": "2026-10-20T01:43:58.038Z"
   },
   {
    "run": "frame-lifecycle",
-   "testsAt": "ace595b",
+   "testsAt": "8d553e1",
    "sections": [
     "frame-lifecycle"
    ],
-   "casesCounted": 9,
+   "casesCounted": 10,
    "verdict": "PASS",
-   "requests": 39,
-   "ranAt": "2026-10-18T06:35:16.195Z"
+   "requests": 42,
+   "ranAt": "2026-10-20T01:50:46.245Z"
   },
   {
    "run": "qa-s3",
@@ -156,50 +157,50 @@
   },
   {
    "run": "hints",
-   "testsAt": "3c9647e",
+   "testsAt": "8d553e1",
    "sections": [
     "hints"
    ],
    "casesCounted": 23,
    "verdict": "PASS",
    "requests": 75,
-   "ranAt": "2026-10-18T18:46:35.082Z"
+   "ranAt": "2026-10-20T02:16:22.438Z"
   },
   {
    "run": "texts",
-   "testsAt": "1e5b783",
+   "testsAt": "8d553e1",
    "sections": [
     "texts"
    ],
    "casesCounted": 19,
    "verdict": "PASS",
    "requests": 57,
-   "ranAt": "2026-10-18T15:55:28.758Z"
+   "ranAt": "2026-10-20T02:26:04.651Z"
   },
   {
    "run": "isolate",
-   "testsAt": "197f92a",
+   "testsAt": "8d553e1",
    "sections": [
     "isolate"
    ],
    "casesCounted": 13,
    "verdict": "PASS",
    "requests": 45,
-   "ranAt": "2026-10-18T20:00:36.592Z"
+   "ranAt": "2026-10-20T01:57:05.072Z"
   },
   {
    "run": "places",
-   "testsAt": "197f92a",
+   "testsAt": "8d553e1",
    "sections": [
     "places"
    ],
    "casesCounted": 12,
    "verdict": "PASS",
    "requests": 36,
-   "ranAt": "2026-10-18T19:54:12.695Z"
+   "ranAt": "2026-10-20T02:33:20.903Z"
   }
  ],
- "cases": 365,
+ "cases": 366,
  "circuits": [
   "activate_initial_device_with_evm_eip712",
   "add_device_with_evm_eip712",
@@ -224,15 +225,15 @@
  "totalsByLayer": {
   "positive: proved at the proof server": 38,
   "negative: refused at the proof server, layer constraint (constraint on a declared read (+ node transcript replay))": 79,
-  "positive controls proved through a negative's own patched copy before its attempt": 245,
-  "negative: refused at the proof server, layer constraint (constraint)": 229,
+  "positive controls proved through a negative's own patched copy before its attempt": 246,
+  "negative: refused at the proof server, layer constraint (constraint)": 230,
   "negative: refused at the proof server, layer decoding": 3,
   "negative: runtime-only (generated JavaScript; prover level unreachable, reason recorded)": 7,
   "positive: state-only (simulator state check, no proof)": 8,
   "not applicable (reason recorded)": 1
  },
  "controls": {
-  "own": 245,
+  "own": 246,
   "shared": 66
  },
  "verdict": "PASS",
@@ -5061,6 +5062,25 @@
    "assertsNamed": [],
    "attribution": null,
    "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "frame-lifecycle",
+   "circuit": "issue_grant_with_evm_eip712",
+   "case": "issue_grant: a scope salt the prover chose, with the device's honest approval",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "the proof of the transcript the copy built",
+   "assertsNamed": [],
+   "attribution": null,
+   "simulator": null,
    "prover": "PASS",
    "control": {
     "kind": "own",
