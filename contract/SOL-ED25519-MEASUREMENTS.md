@@ -1,6 +1,6 @@
 # `sol_ed25519` measurements
 
-Measured 2026-10-18. Compact 0.35.0 (`--feature-zkir-v3`), midnight-zkir 3.1.0-rc.1, runtime 0.20.0, ledger 9; proof server midnightntwrk/proof-server:9.0.0-rc.8 on the reference localnet (node 2.1.0-rc.4). Format `sol v1` as frozen in `src/tests/vectors/sol-ed25519-messages-v1.json`.
+Measured 2026-10-18 (`issue_grant_with_sol_ed25519`: 2026-10-20). Compact 0.35.0 (`--feature-zkir-v3`), midnight-zkir 3.1.0-rc.1, runtime 0.20.0, ledger 9; proof server midnightntwrk/proof-server:9.0.0-rc.8 on the reference localnet (node 2.1.0-rc.4). Format `sol v1` as frozen in `src/tests/vectors/sol-ed25519-messages-v1.json`.
 
 ## Per circuit
 
@@ -21,9 +21,9 @@ Measured 2026-10-18. Compact 0.35.0 (`--feature-zkir-v3`), midnight-zkir 3.1.0-r
 | `remove_device_with_sol_ed25519` | 18 | 160,477 | 761 | 7 | 552.3 | 3,369 | 18.2 | 15 | 16.8 / 26.1 |
 | `withdraw_shielded_with_grant_sol_ed25519` | 18 | 203,307 | 1,566 | 13 | 552.5 | 3,369 | 20.0 | 22 | 16.0 / 30.5 |
 | `withdraw_shielded_to_contract_with_grant_sol_ed25519` | 18 | 209,058 | 1,576 | 13 | 552.5 | 3,369 | 21.4 | 23 | 18.8 / 26.3 |
-| `issue_grant_with_sol_ed25519` | 18 | 225,165 | 1,690 | 14 | 552.5 | 3,369 | 19.6 | 46 | 16.1 / 33.4 |
+| `issue_grant_with_sol_ed25519` | 18 | 228,858 | 1,690 | 14 | 552.5 | 3,369 | 15.2 | 46 | 15.0 / 20.0 |
 
-All 16 circuits are at k ≤ 18; the widest is `issue_grant_with_sol_ed25519` (225,165 rows, 36,979 below 2^18). Their verifier keys total 53,472 bytes; with `sol_ed25519` registered in `ARMS`, `planWaves` packs the 68-circuit roster into waves of at most 15,000 verifier bytes each (`evidence/sol-ed25519/full-roster-deploy.json`).
+All 16 circuits are at k ≤ 18; the widest is `issue_grant_with_sol_ed25519` (228,858 rows, 33,286 below 2^18). Their verifier keys total 53,472 bytes; with `sol_ed25519` registered in `ARMS`, `planWaves` packs the 68-circuit roster into waves of at most 15,000 verifier bytes each (`evidence/sol-ed25519/full-roster-deploy.json`).
 
 **Scope of the timings.** Each observation is the wall time of one `/prove` request to the proof server for the circuit's own key, recorded by the test harness (`src/tests/constraint-negative.ts`) during the constraint-level suite (`npm run test:sol-ed25519`): the honest calls and the positive controls that precede the negatives, against local account states. It includes the upload of the prover key with the request and the proof server's key loading; it excludes signing, local execution, the Zswap proofs of a shielded transaction, balancing and inclusion. Requests whose verifier key differs from the measured build are excluded. The host was not idle during the run (other builds and test runs shared its CPUs), so a time can include that load. These are observations, not a latency distribution. One request whose first attempt the proof server did not survive was sent again after a restart; its time is excluded (`excludedRetried` in the evidence).
 

@@ -437,26 +437,26 @@
       "contract": "account",
       "circuit": "issue_grant_with_sol_ed25519",
       "k": 18,
-      "rows": 225165,
+      "rows": 228858,
       "signedMessageBytes": 1690,
       "sha512Blocks": 14,
       "assets": {
         "zkir": {
-          "bytes": 1687907
+          "bytes": 1688604
         },
         "prover": {
-          "bytes": 579363385
+          "bytes": 579363646
         },
         "verifier": {
           "bytes": 3369,
-          "sha256": "ef9682433e65e38d671ef0711e6f09d40f117f2bc188f03287f113e965e389b9"
+          "sha256": "683d456cbb940f478bf397635e204cb1ade040e3c71429fa18a1d7c26eca750f"
         }
       },
       "prove": {
         "n": 46,
-        "minMs": 16082,
-        "medianMs": 19607.5,
-        "maxMs": 33399,
+        "minMs": 15002,
+        "medianMs": 15233,
+        "maxMs": 19981,
         "otherKeyObservations": 0
       }
     }
