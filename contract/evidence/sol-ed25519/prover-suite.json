@@ -1,13 +1,13 @@
 {
  "suite": "sol-ed25519-prover (npm run test:sol-ed25519)",
  "build": {
-  "head": "c0975b0",
-  "contracts": "c0975b0",
-  "base": "wallet-arms-base 62ac1aa",
+  "head": "19e0762",
+  "contracts": "19e0762",
+  "base": "the shared base commits, 1288784",
   "compiler": "compactc 0.35.0 (--feature-zkir-v3)",
   "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8",
-  "snapshot": "keys of the contracts of c0975b0: the 16 sol_ed25519 circuits generated per circuit by compactc 0.35.0; the 52 upstream circuits' keys reused from the base build, whose ZKIR is byte-identical",
-  "note": "The sections hints, arm-asserts and display-module ran at c0975b0; devices, frame-lifecycle, readability and rules at f143be8, whose contracts are c0975b0's and whose cases for those sections are the same; the others at 5efb61f, whose contracts differ from c0975b0's only in remove_device_with_sol_ed25519 (which none of those sections proves) and whose cases for those sections are the same, every other key byte-identical. Every negative names its positive control (results[].control): its own, in the run's record, or one proved earlier in the same run through the same patched module file for the same circuit, named by the runs at c0975b0 and, for the earlier runs, derived from the run's own data by that rule. A negative of a check of the verification inputs or of a readable format, and every negative of hints, arm-asserts and display-module, has its own. One run per section (grantee-scope once per grantee twin), each on a freshly restarted proof server. The readability run went through a restart-and-retry hook in the test runner (outside the test code): the proof server ran out of memory 1 time(s) during a /prove, was restarted, and that one request was sent again and answered (runs[].proofServerRestarts); a refusal is never retried, and a second failure of the same request fails the run."
+  "snapshot": "a full key generation by compactc 0.35.0 of a contract tree whose ZKIR is byte-identical to 19e0762's, circuit by circuit",
+  "note": "The sections grants, grantee-scope-U, grantee-scope-S, grantee-scope-C, frame-lifecycle, readability, rules, module, hints, arm-asserts, display-module ran at 19e0762 on these keys. devices ran at f143be8 and activation, seam, replay, frame, custody, witness, recovery, field-rendering at 5efb61f, earlier revisions of this arm before the commits of this history were cut: each of their cases equals the case of the same name in the DRY at 19e0762 (circuit, kind, expected refusal, bypassed asserts, enforcement), and every proof-server request they made named the verifier key that these keys hold for its circuit, so no key they used has changed; none of them proves issue_grant_with_sol_ed25519, the one circuit whose key changed since. Every negative names its positive control (results[].control): its own, in the run's record, or one proved earlier in the same run through the same patched module file for the same circuit, named by the runs that record it and, for the earlier runs, derived from the run's own data by that rule. A negative of a check of the verification inputs or of a readable format, and every negative of hints, arm-asserts and display-module, has its own. One run per section (grantee-scope once per grantee twin), each on a freshly restarted proof server."
  },
  "method": "Each negative runs twice: in the simulator (the generated JavaScript, honest checks) and at the proof server with the JavaScript checks that would refuse it bypassed in a patched copy of the generated contract (and, where a value the runtime refuses must reach the transcript, named runtime functions overridden); each copy first proves the admissible call of the same circuit through itself, and each negative names the control its refusal is attributed to. A case passes only when it is refused at the expected layer and the refusal is attributed to the circuit under test.",
  "layers": [
@@ -112,13 +112,13 @@
    "sections": [
     "grants"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 21,
    "requests": 45,
    "zswapRequests": 0,
-   "startedAt": "2026-10-17T23:46:05.108Z",
-   "finishedAt": "2026-10-17T23:54:55.669Z",
+   "startedAt": "2026-10-20T02:33:26.956Z",
+   "finishedAt": "2026-10-20T02:40:08.652Z",
    "transportRetries": []
   },
   {
@@ -126,13 +126,13 @@
     "grantee-scope",
     "SOL_GRANT_TWINS=U"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 22,
    "requests": 51,
    "zswapRequests": 0,
-   "startedAt": "2026-10-17T23:55:04.649Z",
-   "finishedAt": "2026-10-18T00:05:03.925Z",
+   "startedAt": "2026-10-20T02:40:11.501Z",
+   "finishedAt": "2026-10-20T02:48:23.111Z",
    "transportRetries": []
   },
   {
@@ -140,13 +140,13 @@
     "grantee-scope",
     "SOL_GRANT_TWINS=S"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 29,
    "requests": 68,
    "zswapRequests": 141,
-   "startedAt": "2026-10-18T00:06:45.510Z",
-   "finishedAt": "2026-10-18T00:19:25.601Z",
+   "startedAt": "2026-10-20T02:48:25.826Z",
+   "finishedAt": "2026-10-20T02:58:31.298Z",
    "transportRetries": []
   },
   {
@@ -154,26 +154,26 @@
     "grantee-scope",
     "SOL_GRANT_TWINS=C"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 29,
    "requests": 68,
    "zswapRequests": 141,
-   "startedAt": "2026-10-18T00:31:03.542Z",
-   "finishedAt": "2026-10-18T00:44:47.712Z",
+   "startedAt": "2026-10-20T02:58:34.040Z",
+   "finishedAt": "2026-10-20T03:09:02.098Z",
    "transportRetries": []
   },
   {
    "sections": [
     "frame-lifecycle"
    ],
-   "build": "contracts and tests f143be8",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 8,
    "requests": 22,
    "zswapRequests": 12,
-   "startedAt": "2026-10-18T12:51:25.364Z",
-   "finishedAt": "2026-10-18T12:55:42.861Z",
+   "startedAt": "2026-10-20T03:09:04.828Z",
+   "finishedAt": "2026-10-20T03:12:43.992Z",
    "transportRetries": []
   },
   {
@@ -206,90 +206,78 @@
    "sections": [
     "readability"
    ],
-   "build": "contracts and tests f143be8",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 37,
    "requests": 56,
    "zswapRequests": 18,
-   "startedAt": "2026-10-18T13:29:21.216Z",
-   "finishedAt": "2026-10-18T13:40:13.984Z",
-   "transportRetries": [],
-   "proofServerRestarts": [
-    {
-     "at": "2026-10-18T13:39:17.562Z",
-     "circuit": "withdraw_shielded_with_grant_sol_ed25519",
-     "case": "the shielded twin 300 of a 1000 coin: proved",
-     "endpoint": "/prove",
-     "exitCode": 137,
-     "oomKilled": true,
-     "restartMs": 1149,
-     "retryAnswered": 200
-    }
-   ]
+   "startedAt": "2026-10-20T03:12:49.882Z",
+   "finishedAt": "2026-10-20T03:21:33.617Z",
+   "transportRetries": []
   },
   {
    "sections": [
     "rules"
    ],
-   "build": "contracts and tests f143be8",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 8,
    "requests": 19,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T14:08:10.358Z",
-   "finishedAt": "2026-10-18T14:12:09.998Z",
+   "startedAt": "2026-10-20T03:21:39.862Z",
+   "finishedAt": "2026-10-20T03:25:08.945Z",
    "transportRetries": []
   },
   {
    "sections": [
     "module"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 6,
    "requests": 17,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T02:20:03.113Z",
-   "finishedAt": "2026-10-18T02:23:15.263Z",
+   "startedAt": "2026-10-20T03:25:11.751Z",
+   "finishedAt": "2026-10-20T03:28:11.444Z",
    "transportRetries": []
   },
   {
    "sections": [
     "hints"
    ],
-   "build": "contracts and tests c0975b0",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 30,
    "requests": 88,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T17:02:41.201Z",
-   "finishedAt": "2026-10-18T17:17:18.722Z",
+   "startedAt": "2026-10-20T03:28:14.212Z",
+   "finishedAt": "2026-10-20T03:37:38.667Z",
    "transportRetries": []
   },
   {
    "sections": [
     "arm-asserts"
    ],
-   "build": "contracts and tests c0975b0",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 19,
    "requests": 56,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T17:35:32.741Z",
-   "finishedAt": "2026-10-18T17:45:45.325Z",
+   "startedAt": "2026-10-20T03:37:41.499Z",
+   "finishedAt": "2026-10-20T03:45:30.653Z",
    "transportRetries": []
   },
   {
    "sections": [
     "display-module"
    ],
-   "build": "contracts and tests c0975b0",
+   "build": "contracts and tests 19e0762",
    "verdict": "PASS",
    "cases": 24,
    "requests": 71,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T17:19:31.713Z",
-   "finishedAt": "2026-10-18T17:32:15.423Z",
+   "startedAt": "2026-10-20T03:45:33.472Z",
+   "finishedAt": "2026-10-20T03:55:45.929Z",
    "transportRetries": []
   }
  ],
@@ -3366,11 +3354,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue binding: the cap changed at execution",
     "own": true,
@@ -3379,7 +3362,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3401,11 +3389,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue binding: the cap changed at execution",
     "own": false,
@@ -3414,7 +3397,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3436,11 +3424,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue binding: the cap changed at execution",
     "own": false,
@@ -3449,7 +3432,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3471,11 +3459,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue binding: the cap changed at execution",
     "own": false,
@@ -3484,7 +3467,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3506,11 +3494,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue binding: the cap changed at execution",
     "own": false,
@@ -3519,7 +3502,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3541,11 +3529,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue rule: a read key without read (a valid signature over the contract's bytes; the renderer refuses this message)",
     "own": true,
@@ -3554,7 +3537,12 @@
       "sol_ed25519: a read key without read"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3576,11 +3564,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue rule: an RP hash on a non-passkey grantee (a valid signature over the contract's bytes; the renderer refuses this message)",
     "own": true,
@@ -3589,7 +3572,12 @@
       "sol_ed25519: an RP hash belongs to a passkey grantee"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3611,11 +3599,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue: the grantee's descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)",
     "own": true,
@@ -3624,7 +3607,12 @@
       "descriptor: the Solana key is not the point's encoding"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3654,11 +3642,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "revoke binding: another slot executed (a live grant at slot 1; the approval names slot 0)",
     "own": true,
@@ -3667,7 +3650,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3697,11 +3685,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "revoke_all operation: a recover_cancel signature presented as revoke_all_grants",
     "own": true,
@@ -3710,7 +3693,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3740,11 +3728,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "grantee binding: the amount changed at execution (consistent display inputs)",
     "own": true,
@@ -3753,7 +3736,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3775,11 +3763,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "grantee binding: the amount changed at execution (consistent display inputs)",
     "own": false,
@@ -3788,7 +3771,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3810,11 +3798,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "grantee binding: the amount changed at execution (consistent display inputs)",
     "own": false,
@@ -3823,7 +3806,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3845,11 +3833,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "roles: the same key's grantee-role approval presented to the device seam",
     "own": true,
@@ -3858,7 +3841,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3880,11 +3868,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the grantee signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -3893,7 +3876,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3922,11 +3910,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the operation not in the grant's scope (slot 6), honestly signed",
     "own": true,
@@ -3935,7 +3918,12 @@
       "operation not in scope"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3957,11 +3945,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the object commitment: a colour the grant does not cover (X, the grant's is G; X in the mirror), honestly signed",
     "own": true,
@@ -3970,7 +3953,12 @@
       "scope object mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3994,11 +3982,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the caller pin (slot 2): no contract caller (a root call)",
     "own": true,
@@ -4008,7 +3991,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4031,11 +4019,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the caller pin (slot 2): called by another contract",
     "own": true,
@@ -4044,7 +4027,12 @@
       "grant caller mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4067,11 +4055,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": true,
@@ -4080,7 +4063,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4103,11 +4091,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": false,
@@ -4116,7 +4099,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4139,11 +4127,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": false,
@@ -4152,7 +4135,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4181,11 +4169,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: over the per-call cap, honestly signed",
     "own": true,
@@ -4194,7 +4177,12 @@
       "amount above per-call cap"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4216,11 +4204,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: a wrong spent opening (spent so far 100, the record holds 0), honestly signed",
     "own": true,
@@ -4229,7 +4212,12 @@
       "spent opening mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4251,11 +4239,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: over the cumulative cap (200 + 260 > 450), honestly signed with the live spent opening",
     "own": true,
@@ -4264,7 +4247,12 @@
       "cumulative cap exceeded"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4293,11 +4281,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: a recipient other than the pinned one, honestly signed",
     "own": true,
@@ -4306,7 +4289,12 @@
       "recipient not admitted by pin"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4335,11 +4323,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: a revoked grant (its tombstone), a valid approval over its record",
     "own": true,
@@ -4348,7 +4331,12 @@
       "grant revoked"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4370,11 +4358,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: an expired grant (expires_at 1, slot 3), a valid approval",
     "own": true,
@@ -4383,7 +4366,12 @@
       "grant expired"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4405,11 +4393,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval",
     "own": true,
@@ -4418,7 +4401,12 @@
       "grant epoch stale"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4440,11 +4428,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: a grant of a stale generation \u2014 UNREACHABLE today (revoke_all_grants clears the map, account.compact do_revoke_all_grants); the state built by copying the generation cell [1,3] \u2014 a valid approval",
     "own": true,
@@ -4453,7 +4436,12 @@
       "grant generation stale"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4474,18 +4462,18 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "public-transcript-binding",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: an unknown grant: another blind (a grant id with no record), the copy's JavaScript deriving the real grant's id from it (forged grant-id mutant)",
     "own": true,
     "copy": {
      "bypassed": []
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "public-transcript-binding",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4519,11 +4507,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
     "own": true,
@@ -4532,7 +4515,12 @@
       "R is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4561,11 +4549,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the operation not in the grant's scope (slot 6), honestly signed",
     "own": true,
@@ -4574,7 +4557,12 @@
       "operation not in scope"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4596,11 +4584,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the object commitment on its own: a grant for colour A, a coin of colour B withdrawn as B, honestly signed (the colour assert holds)",
     "own": true,
@@ -4609,7 +4592,12 @@
       "scope object mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4633,11 +4621,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the caller pin (slot 2): no contract caller (a root call)",
     "own": true,
@@ -4647,7 +4630,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4670,11 +4658,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the caller pin (slot 2): called by another contract",
     "own": true,
@@ -4683,7 +4666,12 @@
       "grant caller mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4706,11 +4694,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": true,
@@ -4719,7 +4702,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4742,11 +4730,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": false,
@@ -4755,7 +4738,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4778,11 +4766,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": false,
@@ -4791,7 +4774,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4820,11 +4808,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: over the per-call cap, honestly signed",
     "own": true,
@@ -4833,7 +4816,12 @@
       "amount above per-call cap"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4855,11 +4843,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: a wrong spent opening (spent so far 100, the record holds 0), honestly signed",
     "own": true,
@@ -4868,7 +4851,12 @@
       "spent opening mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4890,11 +4878,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: over the cumulative cap (500 + 450 > 900), honestly signed with the live spent opening",
     "own": true,
@@ -4903,7 +4886,12 @@
       "cumulative cap exceeded"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4925,11 +4913,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: a coin above the grant's max coin value (1000 > 600, slot 1), honestly signed",
     "own": true,
@@ -4938,7 +4921,12 @@
       "coin above max_coin_value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4960,11 +4948,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: a recipient other than the pinned one, honestly signed",
     "own": true,
@@ -4973,7 +4956,12 @@
       "recipient not admitted by pin"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -4995,11 +4983,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: a stale encryption key, honestly signed (the change sealed to a key that is no longer live)",
     "own": true,
@@ -5008,7 +4991,12 @@
       "stale encryption key"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5030,11 +5018,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: a revoked grant (its tombstone), a valid approval over its record",
     "own": true,
@@ -5043,7 +5026,12 @@
       "grant revoked"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5065,11 +5053,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: an expired grant (expires_at 1, slot 3), a valid approval",
     "own": true,
@@ -5078,7 +5061,12 @@
       "grant expired"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5100,11 +5088,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval",
     "own": true,
@@ -5113,7 +5096,12 @@
       "grant epoch stale"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5135,11 +5123,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: a grant of a stale generation \u2014 UNREACHABLE today (revoke_all_grants clears the map, account.compact do_revoke_all_grants); the state built by copying the generation cell [1,3] \u2014 a valid approval",
     "own": true,
@@ -5148,7 +5131,12 @@
       "grant generation stale"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5169,18 +5157,18 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "public-transcript-binding",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: an unknown grant: another blind (a grant id with no record), the copy's JavaScript deriving the real grant's id from it (forged grant-id mutant)",
     "own": true,
     "copy": {
      "bypassed": []
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "public-transcript-binding",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5214,11 +5202,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
     "own": true,
@@ -5227,7 +5210,12 @@
       "R is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5249,11 +5237,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the colour assert on its own: a grant scoped to B (slot 4), a valid approval withdrawing A, the witness coin of colour B",
     "own": true,
@@ -5262,7 +5245,12 @@
       "held coin colour does not match the withdrawn colour"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5284,11 +5272,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": true,
@@ -5297,7 +5280,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5319,11 +5307,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -5332,7 +5315,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5354,11 +5342,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -5367,7 +5350,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5389,11 +5377,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -5402,7 +5385,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5424,11 +5412,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -5437,7 +5420,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5459,11 +5447,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -5472,7 +5455,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5501,11 +5489,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the operation not in the grant's scope (slot 6), honestly signed",
     "own": true,
@@ -5514,7 +5497,12 @@
       "operation not in scope"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5536,11 +5524,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the object commitment on its own: a grant for colour A, a coin of colour B withdrawn as B, honestly signed (the colour assert holds)",
     "own": true,
@@ -5549,7 +5532,12 @@
       "scope object mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5573,11 +5561,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the caller pin (slot 2): no contract caller (a root call)",
     "own": true,
@@ -5587,7 +5570,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5610,11 +5598,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the caller pin (slot 2): called by another contract",
     "own": true,
@@ -5623,7 +5606,12 @@
       "grant caller mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5646,11 +5634,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": true,
@@ -5659,7 +5642,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5682,11 +5670,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": false,
@@ -5695,7 +5678,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5718,11 +5706,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the caller pin on its own (slot 7, pinned to the zero contract address): no caller at all \u2014 the presence and type asserts (one message), the commitment matching",
     "own": false,
@@ -5731,7 +5714,12 @@
       "grant requires a contract caller"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5760,11 +5748,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: over the per-call cap, honestly signed",
     "own": true,
@@ -5773,7 +5756,12 @@
       "amount above per-call cap"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5795,11 +5783,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: a wrong spent opening (spent so far 100, the record holds 0), honestly signed",
     "own": true,
@@ -5808,7 +5791,12 @@
       "spent opening mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5830,11 +5818,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: over the cumulative cap (500 + 450 > 900), honestly signed with the live spent opening",
     "own": true,
@@ -5843,7 +5826,12 @@
       "cumulative cap exceeded"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5865,11 +5853,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: a coin above the grant's max coin value (1000 > 600, slot 1), honestly signed",
     "own": true,
@@ -5878,7 +5861,12 @@
       "coin above max_coin_value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5900,11 +5888,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: a recipient other than the pinned one, honestly signed",
     "own": true,
@@ -5913,7 +5896,12 @@
       "recipient not admitted by pin"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5935,11 +5923,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: a stale encryption key, honestly signed (the change sealed to a key that is no longer live)",
     "own": true,
@@ -5948,7 +5931,12 @@
       "stale encryption key"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -5970,11 +5958,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: a revoked grant (its tombstone), a valid approval over its record",
     "own": true,
@@ -5983,7 +5966,12 @@
       "grant revoked"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6005,11 +5993,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: an expired grant (expires_at 1, slot 3), a valid approval",
     "own": true,
@@ -6018,7 +6001,12 @@
       "grant expired"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6040,11 +6028,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: a grant of a stale device epoch (after a local recover_finalise), a valid approval",
     "own": true,
@@ -6053,7 +6036,12 @@
       "grant epoch stale"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6075,11 +6063,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: a grant of a stale generation \u2014 UNREACHABLE today (revoke_all_grants clears the map, account.compact do_revoke_all_grants); the state built by copying the generation cell [1,3] \u2014 a valid approval",
     "own": true,
@@ -6088,7 +6071,12 @@
       "grant generation stale"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6109,18 +6097,18 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "public-transcript-binding",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: an unknown grant: another blind (a grant id with no record), the copy's JavaScript deriving the real grant's id from it (forged grant-id mutant)",
     "own": true,
     "copy": {
      "bypassed": []
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "public-transcript-binding",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6154,11 +6142,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
     "own": true,
@@ -6167,7 +6150,12 @@
       "R is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6189,11 +6177,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the colour assert on its own: a grant scoped to B (slot 4), a valid approval withdrawing A, the witness coin of colour B",
     "own": true,
@@ -6202,7 +6185,12 @@
       "held coin colour does not match the withdrawn colour"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6224,11 +6212,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": true,
@@ -6237,7 +6220,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6259,11 +6247,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -6272,7 +6255,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6294,11 +6282,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -6307,7 +6290,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6329,11 +6317,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -6342,7 +6325,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6364,11 +6352,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -6377,7 +6360,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6399,11 +6387,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: substitution, the coin nonce: signed N, the witness coin N' (same colour, value, index)",
     "own": false,
@@ -6412,7 +6395,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6434,11 +6422,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "add_device: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -6447,7 +6430,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6469,11 +6457,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "remove_device (descriptor form): the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -6482,7 +6465,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6504,11 +6492,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "remove_device (descriptor form): the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": false,
@@ -6517,7 +6500,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6539,11 +6527,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue_grant: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -6552,7 +6535,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6574,11 +6562,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "revoke_grant: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -6587,7 +6570,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6609,11 +6597,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "revoke_all_grants: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -6622,7 +6605,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6644,11 +6632,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_with_grant: the grantee signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -6657,7 +6640,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6679,11 +6667,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract_with_grant: the grantee signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -6692,7 +6675,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8436,11 +8424,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged amount: the wallet signed \"100000\" for an executed 1000000",
     "own": true,
@@ -8449,7 +8432,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8471,11 +8459,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged digits: a leading zero, signed over what they render",
     "own": true,
@@ -8484,7 +8467,12 @@
       "display: leading zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8506,11 +8494,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged digits: a digit after the padding, signed over what they render",
     "own": true,
@@ -8519,7 +8502,12 @@
       "display: not a left-aligned decimal"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8555,11 +8543,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged change: the wallet signed the change as 70",
     "own": true,
@@ -8568,7 +8551,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8618,11 +8606,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged word: the wallet signed \"not applicable\" for a passkey target's RP hash",
     "own": true,
@@ -8631,7 +8614,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8676,11 +8664,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": true,
@@ -8689,7 +8672,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8711,11 +8699,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": false,
@@ -8724,7 +8707,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8746,11 +8734,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": false,
@@ -8759,7 +8742,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8781,11 +8769,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": false,
@@ -8794,7 +8777,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8816,11 +8804,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": false,
@@ -8829,7 +8812,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8851,11 +8839,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": false,
@@ -8864,7 +8847,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8886,11 +8874,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "display: the UTC date text of another second (1970-01-01 00:00:01 for an expiry of 0)",
     "own": true,
@@ -8899,7 +8882,12 @@
       "display: the date and time do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8922,11 +8910,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "display: a non-canonical year split of the UTC date (1969 = 400*4 + 100*3 + 4*16 + 5)",
     "own": true,
@@ -8936,7 +8919,12 @@
       "display: the year split is not canonical"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8986,11 +8974,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": false,
@@ -8999,7 +8982,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9021,11 +9009,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged cap: the wallet signed \"no limit\" for the total cap",
     "own": false,
@@ -9034,7 +9017,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9071,11 +9059,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "forged amount: the grantee signed \"250000\" for an executed 2500000",
     "own": true,
@@ -9084,7 +9067,12 @@
       "invalid grant signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9134,11 +9122,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "add_device of a passkey target whose RP hash is zero, under a valid signature over the contract's bytes",
     "own": true,
@@ -9147,7 +9130,12 @@
       "descriptor: a passkey's RP hash is zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9176,11 +9164,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "remove_device by descriptor of a passkey target whose RP hash is zero (its entry live), under a valid signature over the contract's bytes",
     "own": true,
@@ -9189,7 +9172,12 @@
       "descriptor: a passkey's RP hash is zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9211,11 +9199,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "a spending grant to a passkey grantee whose RP hash is zero, under a valid signature over the contract's bytes",
     "own": true,
@@ -9224,7 +9207,12 @@
       "sol_ed25519: a passkey grantee's RP hash is zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9246,11 +9234,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "a read-only grant to a passkey grantee carrying its RP hash (which nothing would check), under a valid signature over the contract's bytes",
     "own": true,
@@ -9259,7 +9242,12 @@
       "sol_ed25519: a read-only grant carries no RP hash"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9289,11 +9277,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue_grant to any recipient (kind 0) carrying a recipient, under a valid signature over the contract's bytes",
     "own": true,
@@ -9302,7 +9285,12 @@
       "sol_ed25519: a recipient without a recipient kind"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9340,11 +9328,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue_grant: the identity as a sol_ed25519 grantee (its encoding shown and signed): refused by the Ed25519 class's A != O in the grant-id derivation",
     "own": true,
@@ -9353,7 +9336,12 @@
       "descriptor: the Ed25519 key is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9376,11 +9364,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue_grant: an unregistered grant-id tag under a valid signature (the message shows the passkey class text): at runtime past the arm's class check, the module's width-64 grant-id recipe refuses it; at the proof server both",
     "own": true,
@@ -9390,7 +9373,12 @@
       "descriptor: not a registered grant-id tag"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9412,11 +9400,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue_grant: recipient kind 4 under a valid signature over what the renderer shows past its check: refused by the module's recipient-kind labels",
     "own": true,
@@ -9425,7 +9408,12 @@
       "display: unknown recipient kind"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9447,11 +9435,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "issue_grant: grantee slot 0 shown as three spaces, signed over that text: refused by the module's empty-decimal check",
     "own": true,
@@ -9460,7 +9443,12 @@
       "display: empty decimal"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9482,11 +9470,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "add_device: a k256 target with signing envelope 2 under a valid signature over what the renderer shows past its check: refused by the module's envelope labels",
     "own": true,
@@ -9495,7 +9478,12 @@
       "display: unknown signing envelope"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
