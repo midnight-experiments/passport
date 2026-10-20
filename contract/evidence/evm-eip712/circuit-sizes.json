@@ -406,24 +406,24 @@
       "contract": "account",
       "circuit": "issue_grant_with_evm_eip712",
       "k": 18,
-      "rows": 185888,
+      "rows": 189595,
       "assets": {
         "zkir": {
-          "bytes": 441141
+          "bytes": 442305
         },
         "prover": {
-          "bytes": 637678556
+          "bytes": 637678961
         },
         "verifier": {
           "bytes": 3705,
-          "sha256": "f2a2930b91873b7ab4fab5028d91a71e257b0572f6c84b70924f10e31c88500a"
+          "sha256": "fef53fa38e7d6587bd8143cc09352f892e75e8e554c9fdd25ebdf93e8b068a35"
         }
       },
       "prove": {
-        "n": 32,
-        "minMs": 26989,
-        "medianMs": 27885,
-        "maxMs": 38060,
+        "n": 43,
+        "minMs": 23468,
+        "medianMs": 27973,
+        "maxMs": 43492,
         "otherKeyObservations": 0
       }
     }
