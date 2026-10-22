@@ -4,7 +4,7 @@
 // THE DEVICE IS A SOLANA WALLET'S PUBLIC KEY: the 32-byte RFC 8032 encoding
 // the wallet exports (its base58 address). The contract takes it as a
 // Curve25519Point with those 32 bytes and the x-coordinate's bytes as checked
-// inputs (`encode_public_key_with_sol_ed25519` compares them with the
+// inputs (`encode_public_key_ed25519` compares them with the
 // point), so this module decodes the bytes STRICTLY first: canonical y < p,
 // on the curve, in the prime-order subgroup, not the identity
 // (descriptors.ts `parseSolanaPublicKey`).
@@ -63,7 +63,7 @@ export function solPublicKeyPoint(key: Uint8Array | string): Curve25519Point {
 }
 
 /** The 32-byte RFC 8032 encoding of a Curve25519Point (what the circuit's
- *  `encode_public_key_with_sol_ed25519` checks). */
+ *  `encode_public_key_ed25519` checks). */
 export function solPublicKeyBytes(pk: Curve25519Point): Uint8Array {
   return ed25519.Point.fromAffine({ x: pk.x, y: pk.y }).toBytes();
 }
@@ -153,7 +153,7 @@ export function solPublicKeyFromSeed(seed: Uint8Array): { pk: Curve25519Point; k
   if (seed.length !== 32) throw new Error('sol_ed25519: a seed is 32 bytes');
   const pk: Curve25519Point = pureCircuits.compute_public_key_with_sol_ed25519(seed);
   const h = solKeyHints(pk);
-  return { pk, key: pureCircuits.encode_public_key_with_sol_ed25519(pk, h.pk_bytes, h.pk_x) };
+  return { pk, key: pureCircuits.encode_public_key_ed25519(pk, h.pk_bytes, h.pk_x) };
 }
 
 // ── The blind ───────────────────────────────────────────────────────────────
@@ -592,7 +592,7 @@ const txIdOf = (r: any): string => {
 /** The five registered descriptor schemes; anything else is refused before
  *  any message is built (the base's checkDescriptor returns nothing for an
  *  unknown scheme, so the facade must not rely on it to throw). */
-const SOL_REGISTERED_SCHEMES: readonly string[] = ['jubjub', 'k256', 'p256', 'evm_eip712', 'sol_ed25519'];
+const SOL_REGISTERED_SCHEMES: readonly string[] = ['jubjub', 'k256', 'p256', 'evm_k256', 'sol_ed25519'];
 function requireRegisteredScheme<T>(d: T): T {
   const scheme = (d as any)?.scheme;
   if (typeof scheme !== 'string' || !SOL_REGISTERED_SCHEMES.includes(scheme)) {
@@ -611,7 +611,7 @@ export function solTargetOf(d: Descriptor): SolTargetFields {
       if (!d.policy) throw new Error('sol_ed25519: a passkey target needs its policy (RP hash and origin)');
       return { tag, a: le32(d.x), b: le32(d.y), c: new Uint8Array(d.policy.rpIdHash), origin: new Uint8Array(d.policy.origin) };
     }
-    case 'evm_eip712': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind) };
+    case 'evm_k256': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind) };
     case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind) };
     default: throw new Error(`sol_ed25519: not a registered descriptor scheme (${String((d as any).scheme)})`);
   }
@@ -651,7 +651,7 @@ export async function removeUnknownDeviceWithSolEd25519(account: SolEd25519Lifec
 // ── Scoped grants ────────────────────────────────────────────────────────────
 //
 // The grantee is a readable descriptor with its site and
-// slot: a readable grantee (evm_eip712, sol_ed25519) by its 32-byte site
+// slot: a readable grantee (evm_k256, sol_ed25519) by its 32-byte site
 // label (shown as text), a passkey by its 21-byte origin (shown as text; its
 // RP is a scope field), a k256 or JubJub grantee by the labelled origin hash
 // of its client id. A Solana grantee also passes its point.
@@ -670,7 +670,7 @@ export function solGranteeOf(descriptor: Descriptor, site: SolGranteeSite, slot:
     return (site as any)[k];
   };
   switch (d.scheme) {
-    case 'evm_eip712': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind), label: need('label'), slot };
+    case 'evm_k256': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind), label: need('label'), slot };
     case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind), label: need('label'), slot };
     case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y), originHash: new Uint8Array(need('originHash')), slot };
     case 'k256': return { tag, a: le32(d.x), b: le32(d.y), envelope: BigInt(d.envelope), originHash: new Uint8Array(need('originHash')), slot };

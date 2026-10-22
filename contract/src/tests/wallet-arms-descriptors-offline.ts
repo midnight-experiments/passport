@@ -1,5 +1,7 @@
 // Offline suite for the readable-descriptor module (contracts/modules/
-// WalletArmDescriptors.compact), compiled through the base probe contract.
+// WalletArmDescriptors.compact) and the checked Ed25519 key encoding it
+// derives from (contracts/modules/Ed25519Core.compact), compiled through the
+// base probe contract.
 //
 //   1. Tags: every registered tag fits its 32-byte pad, is ASCII, and is
 //      registered once.
@@ -10,7 +12,7 @@
 //      of the plain concatenation, on seeded vectors with edge values
 //      (fixed-width little-endian integers, little-endian coordinates,
 //      passkeys whose RP ID is a registrable parent of the origin host).
-//   3. Readable recipes (`evm_eip712`, `sol_ed25519`): device entry, boot
+//   3. Readable recipes (`evm_k256`, `sol_ed25519`): device entry, boot
 //      commitment, grant id, the grantee origin label, the blind and the
 //      grant scope salt equal an independent SHA-256 of their specified
 //      preimages (the salt also equals the client's grantScopeSalt). A `sol_ed25519` key
@@ -193,19 +195,19 @@ const TAGS: [string, () => Uint8Array, string][] = [
   ['device', probe.device_tag_jubjub, 'midnight:account:device:v1'],
   ['device', probe.device_tag_k256, 'midnight:account:device:k1:v2'],
   ['device', probe.device_tag_p256, 'midnight:account:device:r1:v2'],
-  ['device', probe.device_tag_evm_eip712, 'midnight:account:device:evm:v1'],
+  ['device', probe.device_tag_evm_k256, 'midnight:account:device:evm:v1'],
   ['device', probe.device_tag_sol_ed25519, 'midnight:account:device:sol:v1'],
-  ['boot', probe.boot_tag_evm_eip712, 'midnight:account:boot:evm:v1'],
+  ['boot', probe.boot_tag_evm_k256, 'midnight:account:boot:evm:v1'],
   ['boot', probe.boot_tag_sol_ed25519, 'midnight:account:boot:sol:v1'],
   ['grant-id', probe.grant_id_tag_jubjub, 'midnight:account:grant:id:v1'],
   ['grant-id', probe.grant_id_tag_k256, 'midnight:account:grant:id:k1:v1'],
   ['grant-id', probe.grant_id_tag_p256, 'midnight:account:grant:id:r1:v1'],
-  ['grant-id', probe.grant_id_tag_evm_eip712, 'midnight:account:grant:id:evm:v1'],
+  ['grant-id', probe.grant_id_tag_evm_k256, 'midnight:account:grant:id:evm:v1'],
   ['grant-id', probe.grant_id_tag_sol_ed25519, 'midnight:account:grant:id:sol:v1'],
-  ['blind', probe.blind_tag_evm_eip712, 'midnight:account:blind:evm:v1'],
+  ['blind', probe.blind_tag_evm_k256, 'midnight:account:blind:evm:v1'],
   ['blind', probe.blind_tag_sol_ed25519, 'midnight:account:blind:sol:v1'],
   ['grant-origin', probe.grant_origin_tag, 'midnight:account:grant:origin:v1'],
-  ['salt', probe.salt_tag_evm_eip712, 'midnight:account:salt:evm:v1'],
+  ['salt', probe.salt_tag_evm_k256, 'midnight:account:salt:evm:v1'],
   ['salt', probe.salt_tag_sol_ed25519, 'midnight:account:salt:sol:v1'],
 ];
 const seen = new Set<string>();
@@ -316,7 +318,7 @@ recipe(report.legacy, 'grant origin_hash of a 21-byte passkey origin', (i) => {
 // ── 3. Readable recipes: descriptor == independent SHA-256 of the preimage ──
 
 console.log('\n── readable recipes (descriptor == SHA-256 of the specified preimage)');
-recipe(report.fresh, 'device entry evm_eip712 (w52)', (i) => {
+recipe(report.fresh, 'device entry evm_k256 (w52)', (i) => {
   const a = addr(), address = rnd(20), blind = rnd(32), ep = pick(U32_EDGES, i, 4), ct = pick(U64_EDGES, i, 8);
   return {
     values: [
@@ -336,7 +338,7 @@ recipe(report.fresh, 'device entry sol_ed25519 (ed25519, by point)', (i) => {
     vector: { self: hex(a), key: hex(key), x: point.x.toString(16), y: point.y.toString(16), blind: hex(blind), epoch: ep, counter: ct },
   };
 });
-recipe(report.fresh, 'boot evm_eip712 (w52)', () => {
+recipe(report.fresh, 'boot evm_k256 (w52)', () => {
   const s = rnd(32), address = rnd(20), blind = rnd(32);
   return {
     values: [
@@ -356,7 +358,7 @@ recipe(report.fresh, 'boot sol_ed25519 (ed25519, by point)', (i) => {
     vector: { salt: hex(s), key: hex(key), blind: hex(blind) },
   };
 });
-recipe(report.fresh, 'grant id evm_eip712 (w52)', (i) => {
+recipe(report.fresh, 'grant id evm_k256 (w52)', (i) => {
   const a = addr(), address = rnd(20), blind = rnd(32), oh = rnd(32), slot = pick(SLOT_EDGES, i, 1);
   return {
     values: [
@@ -376,12 +378,12 @@ recipe(report.fresh, 'grant id sol_ed25519 (ed25519, by point)', (i) => {
     vector: { self: hex(a), key: hex(key), blind: hex(blind), origin_hash: hex(oh), slot },
   };
 });
-// The shared encoding (encode_public_key_with_sol_ed25519) == RFC 8032:
+// The shared encoding (encode_public_key_ed25519) == RFC 8032:
 // Node's OpenSSL public keys of seeded secrets (both x parities), checked
 // against the bytes the circuit computes from the decoded point.
 recipe(report.fresh, 'Ed25519 key encoding == OpenSSL RFC 8032 public key', (i) => {
   const { seed, key, point } = solKey(i);
-  return { values: [probe.encode_public_key_with_sol_ed25519(...kin(key)), key], vector: { seed: hex(seed), key: hex(key), x: point.x.toString(16), xOdd: (key[31] >> 7) & 1 } };
+  return { values: [probe.encode_public_key_ed25519(...kin(key)), key], vector: { seed: hex(seed), key: hex(key), x: point.x.toString(16), xOdd: (key[31] >> 7) & 1 } };
 });
 // The seam helper: one encoding, the same recipe as two single derivations.
 recipe(report.fresh, 'signer entries sol_ed25519 == [key, entry(counter), entry(counter + 1)]', (i) => {
@@ -411,11 +413,11 @@ recipe(report.fresh, 'signer entries sol_ed25519 == [key, entry(counter), entry(
   for (const [name, sk, pk] of RFC8032) {
     const key = Buffer.from(pk, 'hex');
     assert.ok(eq(opensslPublicKey(Buffer.from(sk, 'hex')), key), `${name}: OpenSSL reproduces the RFC public key`);
-    assert.ok(eq(probe.encode_public_key_with_sol_ed25519(...kin(key)), key), `${name}: the circuit encodes the point to the RFC public key`);
+    assert.ok(eq(probe.encode_public_key_ed25519(...kin(key)), key), `${name}: the circuit encodes the point to the RFC public key`);
     assert.ok(eq(probe.exploded_encoding_ed25519(pointOf(key)), key), `${name}: the exploded encoding gives the RFC public key`);
     rfc.push({ name, publicKey: pk, xOdd: (key[31] >> 7) & 1 });
   }
-  const encB = probe.encode_public_key_with_sol_ed25519(...kin(ed25519.Point.BASE.toBytes()));
+  const encB = probe.encode_public_key_ed25519(...kin(ed25519.Point.BASE.toBytes()));
   assert.equal(hex(encB), '5866666666666666666666666666666666666666666666666666666666666666', 'the base point B (RFC 8032 section 5.1)');
   rfc.push({ name: 'base point B', publicKey: hex(encB), xOdd: 0 });
   report.fresh['RFC 8032 section 7.1 public keys and the base point'] = { vectors: rfc.length, agree: rfc.length, first: rfc };
@@ -430,7 +432,7 @@ recipe(report.fresh, 'grant origin_hash of a 32-byte label', (i) => {
     vector: { label: hex(label) },
   };
 });
-recipe(report.fresh, 'blind evm_eip712', () => {
+recipe(report.fresh, 'blind evm_k256', () => {
   const sig = rnd(64);
   return { values: [probe.derive_blind(T('midnight:account:blind:evm:v1'), sig), sha(T('midnight:account:blind:evm:v1'), sig)], vector: { signature: hex(sig) } };
 });
@@ -440,8 +442,8 @@ recipe(report.fresh, 'blind sol_ed25519', () => {
 });
 // the grant scope salt: the circuit, an independent SHA-256 of the preimage
 // (tag, blind, account, auth_nonce as 8 bytes little-endian) and the client
-for (const scheme of ['evm_eip712', 'sol_ed25519'] as const) {
-  const text = scheme === 'evm_eip712' ? 'midnight:account:salt:evm:v1' : 'midnight:account:salt:sol:v1';
+for (const scheme of ['evm_k256', 'sol_ed25519'] as const) {
+  const text = scheme === 'evm_k256' ? 'midnight:account:salt:evm:v1' : 'midnight:account:salt:sol:v1';
   assert.equal(SALT_TAGS[scheme], text, `the client's ${scheme} salt tag`);
   recipe(report.fresh, `grant scope salt ${scheme}`, (i) => {
     const blind = rnd(32), a = addr(), nonce = pick(U64_EDGES, i, 8);
@@ -455,7 +457,7 @@ for (const scheme of ['evm_eip712', 'sol_ed25519'] as const) {
 {
   const blind = rnd(32), a = addr(), nonce = 7n, base = grantScopeSalt('sol_ed25519', blind, a, nonce);
   const others = [grantScopeSalt('sol_ed25519', rnd(32), a, nonce), grantScopeSalt('sol_ed25519', blind, addr(), nonce),
-    grantScopeSalt('sol_ed25519', blind, a, nonce + 1n), grantScopeSalt('evm_eip712', blind, a, nonce)];
+    grantScopeSalt('sol_ed25519', blind, a, nonce + 1n), grantScopeSalt('evm_k256', blind, a, nonce)];
   assert.ok(others.every((o) => !eq(o, base)), 'the salt depends on the blind, the account, auth_nonce and the arm');
   report.controls.saltDependsOnEveryInput = true;
   for (const [name, f] of [
@@ -516,7 +518,7 @@ console.log('\n── the checked Ed25519 encoding against the exploded encoding
   for (const [name, key] of all) {
     const [pt] = name.startsWith('the identity') ? [{ x: 0n, y: 1n }] : kin(key);
     const exploded = probe.exploded_encoding_ed25519(pt);
-    const checked = probe.encode_public_key_with_sol_ed25519(pt, u8v(key), u8v(le(pt.x, 32)));
+    const checked = probe.encode_public_key_ed25519(pt, u8v(key), u8v(le(pt.x, 32)));
     assert.ok(eq(exploded, key), `${name}: the exploded encoding is the key`);
     assert.ok(eq(checked, exploded), `${name}: the checked encoding equals the exploded one`);
     odd += (key[31] >> 7) & 1;
@@ -535,21 +537,21 @@ console.log('\n── the checked Ed25519 encoding against the exploded encoding
     const [pt, kb, kx] = keyOf(key);
     for (const i of [0, 15, 30]) {
       const b = [...kb]; b[i] ^= 1n;
-      forged.push([`${name}: key byte ${i} flipped`, () => probe.encode_public_key_with_sol_ed25519(pt, b, kx), /key bytes do not match the point's y/]);
+      forged.push([`${name}: key byte ${i} flipped`, () => probe.encode_public_key_ed25519(pt, b, kx), /key bytes do not match the point's y/]);
       const x = [...kx]; x[i] ^= 1n;
-      forged.push([`${name}: x byte ${i} flipped`, () => probe.encode_public_key_with_sol_ed25519(pt, kb, x), /x bytes do not match the point's x/]);
+      forged.push([`${name}: x byte ${i} flipped`, () => probe.encode_public_key_ed25519(pt, kb, x), /x bytes do not match the point's x/]);
     }
     const s = [...kb]; s[31] ^= 0x80n;
-    forged.push([`${name}: the other sign bit`, () => probe.encode_public_key_with_sol_ed25519(pt, s, kx), /sign bit is not x's parity/]);
+    forged.push([`${name}: the other sign bit`, () => probe.encode_public_key_ed25519(pt, s, kx), /sign bit is not x's parity/]);
     const t = [...kb]; t[31] ^= 0x01n;
-    forged.push([`${name}: y's top byte changed`, () => probe.encode_public_key_with_sol_ed25519(pt, t, kx), /key bytes do not match the point's y/]);
+    forged.push([`${name}: y's top byte changed`, () => probe.encode_public_key_ed25519(pt, t, kx), /key bytes do not match the point's y/]);
     const yp = u8v(le(pt.y + P_ED, 32)); yp[31] += kb[31] & 0x80n;
-    if (yp[31] <= 255n) forged.push([`${name}: y + p`, () => probe.encode_public_key_with_sol_ed25519(pt, yp, kx), /key bytes do not match the point's y|sign bit/]);
-    forged.push([`${name}: x + p`, () => probe.encode_public_key_with_sol_ed25519(pt, kb, u8v(le(pt.x + P_ED, 32))), /x bytes do not match the point's x/]);
+    if (yp[31] <= 255n) forged.push([`${name}: y + p`, () => probe.encode_public_key_ed25519(pt, yp, kx), /key bytes do not match the point's y|sign bit/]);
+    forged.push([`${name}: x + p`, () => probe.encode_public_key_ed25519(pt, kb, u8v(le(pt.x + P_ED, 32))), /x bytes do not match the point's x/]);
     const c = [...kb]; c[3] += 256n; c[4] -= 1n;
-    if (c[4] >= 0n) forged.push([`${name}: carry (byte 3 + 256, byte 4 - 1)`, () => probe.encode_public_key_with_sol_ed25519(pt, c, kx), /type error: .*expected value of type Vector<32, Uint<0\.\.256>>/]);
+    if (c[4] >= 0n) forged.push([`${name}: carry (byte 3 + 256, byte 4 - 1)`, () => probe.encode_public_key_ed25519(pt, c, kx), /type error: .*expected value of type Vector<32, Uint<0\.\.256>>/]);
     const cx = [...kx]; cx[3] += 256n; cx[4] -= 1n;
-    if (cx[4] >= 0n) forged.push([`${name}: x carry (byte 3 + 256, byte 4 - 1)`, () => probe.encode_public_key_with_sol_ed25519(pt, kb, cx), /type error: .*expected value of type Vector<32, Uint<0\.\.256>>/]);
+    if (cx[4] >= 0n) forged.push([`${name}: x carry (byte 3 + 256, byte 4 - 1)`, () => probe.encode_public_key_ed25519(pt, kb, cx), /type error: .*expected value of type Vector<32, Uint<0\.\.256>>/]);
   }
   for (const [name, f, why] of forged) assert.throws(f, why, `refused: ${name}`);
   report.refusals.ed25519_checked_encoding = { cases: forged.length, refused: forged.length };
@@ -642,9 +644,9 @@ console.log(`  ✓ ${refusalsSeen}/${refusalCases} wrong-tag cases refused at th
   const O = { x: 0n, y: 1n };
   const OK: [{ x: bigint; y: bigint }, bigint[], bigint[]] = [O, [1n, ...new Array(31).fill(0n)], new Array(32).fill(0n)];
   let typed = true;
-  try { probe.encode_public_key_with_sol_ed25519(...OK); } catch { typed = false; }
+  try { probe.encode_public_key_ed25519(...OK); } catch { typed = false; }
   assert.ok(typed, 'the identity passes the Curve25519Point type');
-  assert.equal(hex(probe.encode_public_key_with_sol_ed25519(...OK)), '01' + '00'.repeat(31), 'the identity encodes as RFC 8032 says (y = 1)');
+  assert.equal(hex(probe.encode_public_key_ed25519(...OK)), '01' + '00'.repeat(31), 'the identity encodes as RFC 8032 says (y = 1)');
   assert.equal(hex(probe.exploded_encoding_ed25519(O)), '01' + '00'.repeat(31), 'the exploded encoding agrees on the identity');
   const idRefused: [string, () => unknown][] = [
     ['entry', () => probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), A, ...OK, B32, 0n, 0n)],

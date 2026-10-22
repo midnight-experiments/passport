@@ -58,38 +58,22 @@
   "withdraw_unshielded_with_sol_ed25519"
  ],
  "arm": {
-  "messages": 41,
-  "sites": 54,
+  "messages": 40,
+  "sites": 53,
   "refusedAtConstraintLevel": 39,
   "asserts": [
-   {
-    "message": "Curve25519Point identity is not a permitted ed25519Verify verification key",
-    "sites": [
-     {
-      "file": "account-sol-ed25519.compact",
-      "line": 239,
-      "helper": "sol_ed25519_verify",
-      "inProvedCircuit": true
-     }
-    ],
-    "constraint": [],
-    "refusedTogetherWithAnother": [
-     "devices: guards (e): the seam's A != O — a call signed for the identity key (its entry planted, the verification equation holding) is refused only by A != O (the descriptor module's signer derivation and the verification's identity-key assert)"
-    ],
-    "why": "The verification takes the key the seam's derivation has already checked, and that derivation's A != O refuses the identity first; the two are refused together."
-   },
    {
     "message": "R is the identity",
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 216,
+      "line": 218,
       "helper": "require_authorised_with_sol_ed25519",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 648,
+      "line": 629,
       "helper": "require_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -109,7 +93,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 159,
+      "line": 161,
       "helper": "activate_initial_device_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -123,7 +107,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1253,
+      "line": 1234,
       "helper": "sol_coin_lines",
       "inProvedCircuit": true
      }
@@ -136,7 +120,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 160,
+      "line": 162,
       "helper": "activate_initial_device_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -152,7 +136,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1087,
+      "line": 1068,
       "helper": "sol_grantee_origin_hash",
       "inProvedCircuit": true
      }
@@ -166,7 +150,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1047,
+      "line": 1028,
       "helper": "sol_device_entry",
       "inProvedCircuit": true
      }
@@ -181,7 +165,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1083,
+      "line": 1064,
       "helper": "sol_grantee_origin_hash",
       "inProvedCircuit": true
      }
@@ -195,7 +179,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1014,
+      "line": 995,
       "helper": "sol_device_class",
       "inProvedCircuit": true
      }
@@ -209,7 +193,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1070,
+      "line": 1051,
       "helper": "sol_grantee_class",
       "inProvedCircuit": true
      }
@@ -223,13 +207,13 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1056,
+      "line": 1037,
       "helper": "sol_device_entry",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1099,
+      "line": 1080,
       "helper": "sol_grantee_id",
       "inProvedCircuit": true
      }
@@ -244,13 +228,13 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1020,
+      "line": 1001,
       "helper": "sol_require_canonical_device",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1076,
+      "line": 1057,
       "helper": "sol_grantee_origin_hash",
       "inProvedCircuit": true
      }
@@ -264,13 +248,13 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1024,
+      "line": 1005,
       "helper": "sol_require_canonical_device",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1078,
+      "line": 1059,
       "helper": "sol_grantee_origin_hash",
       "inProvedCircuit": true
      }
@@ -284,7 +268,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1032,
+      "line": 1013,
       "helper": "sol_require_unused_key",
       "inProvedCircuit": true
      }
@@ -298,7 +282,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1080,
+      "line": 1061,
       "helper": "sol_grantee_origin_hash",
       "inProvedCircuit": true
      }
@@ -312,13 +296,13 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1023,
+      "line": 1004,
       "helper": "sol_require_canonical_device",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1081,
+      "line": 1062,
       "helper": "sol_grantee_origin_hash",
       "inProvedCircuit": true
      }
@@ -333,7 +317,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1031,
+      "line": 1012,
       "helper": "sol_require_unused_key",
       "inProvedCircuit": true
      }
@@ -347,7 +331,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1022,
+      "line": 1003,
       "helper": "sol_require_canonical_device",
       "inProvedCircuit": true
      }
@@ -361,20 +345,20 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1021,
+      "line": 1002,
       "helper": "sol_require_canonical_device",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1077,
+      "line": 1058,
       "helper": "sol_grantee_origin_hash",
       "inProvedCircuit": true
      }
     ],
     "constraint": [
-     "arm-asserts: add_device: an evm_eip712 target with a non-zero second field, not shown, under a valid signature over the contract's bytes",
-     "arm-asserts: issue_grant: an evm_eip712 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes"
+     "arm-asserts: add_device: an evm_k256 target with a non-zero second field, not shown, under a valid signature over the contract's bytes",
+     "arm-asserts: issue_grant: an evm_k256 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes"
     ]
    },
    {
@@ -382,7 +366,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1375,
+      "line": 1356,
       "helper": "sol_remove_lines",
       "inProvedCircuit": true
      }
@@ -398,13 +382,13 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 995,
+      "line": 976,
       "helper": "sol_chars21",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 999,
+      "line": 980,
       "helper": "sol_chars32",
       "inProvedCircuit": true
      }
@@ -419,25 +403,25 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1131,
+      "line": 1112,
       "helper": "sol_hex20",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1136,
+      "line": 1117,
       "helper": "sol_hex32",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1141,
+      "line": 1122,
       "helper": "sol_hex64",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1146,
+      "line": 1127,
       "helper": "sol_hex192",
       "inProvedCircuit": true
      }
@@ -476,7 +460,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 973,
+      "line": 954,
       "helper": "sol_label_chars",
       "inProvedCircuit": true
      }
@@ -491,7 +475,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 1285,
+      "line": 1266,
       "helper": "sol_origin_chars",
       "inProvedCircuit": true
      }
@@ -505,7 +489,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 639,
+      "line": 620,
       "helper": "require_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -521,7 +505,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 641,
+      "line": 622,
       "helper": "require_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -537,7 +521,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 640,
+      "line": 621,
       "helper": "require_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -553,7 +537,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 638,
+      "line": 619,
       "helper": "require_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -569,25 +553,25 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 328,
+      "line": 309,
       "helper": "withdraw_shielded_with_sol_ed25519",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 351,
+      "line": 332,
       "helper": "withdraw_shielded_to_contract_with_sol_ed25519",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 721,
+      "line": 702,
       "helper": "withdraw_shielded_with_grant_sol_ed25519",
       "inProvedCircuit": true
      },
      {
       "file": "account-sol-ed25519.compact",
-      "line": 754,
+      "line": 735,
       "helper": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -604,7 +588,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 649,
+      "line": 630,
       "helper": "require_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -633,7 +617,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 217,
+      "line": 219,
       "helper": "require_authorised_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -713,7 +697,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 423,
+      "line": 404,
       "helper": "remove_device_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -727,7 +711,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 417,
+      "line": 398,
       "helper": "remove_device_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -741,7 +725,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 491,
+      "line": 472,
       "helper": "issue_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -755,7 +739,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 482,
+      "line": 463,
       "helper": "issue_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -769,7 +753,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 492,
+      "line": 473,
       "helper": "issue_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -783,7 +767,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 495,
+      "line": 476,
       "helper": "issue_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -797,7 +781,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 485,
+      "line": 466,
       "helper": "issue_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -811,7 +795,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 483,
+      "line": 464,
       "helper": "issue_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -825,7 +809,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 215,
+      "line": 217,
       "helper": "require_authorised_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -853,7 +837,7 @@
     "sites": [
      {
       "file": "account-sol-ed25519.compact",
-      "line": 636,
+      "line": 617,
       "helper": "require_grant_with_sol_ed25519",
       "inProvedCircuit": true
      }
@@ -868,16 +852,32 @@
   "unreachedSites": []
  },
  "baseModules": {
-  "messages": 40,
-  "sites": 40,
+  "messages": 41,
+  "sites": 41,
   "refusedAtConstraintLevel": 28,
   "asserts": [
+   {
+    "message": "Curve25519Point identity is not a permitted ed25519Verify verification key",
+    "sites": [
+     {
+      "file": "Ed25519Core.compact",
+      "line": 101,
+      "helper": "ed25519_verify",
+      "inProvedCircuit": true
+     }
+    ],
+    "constraint": [],
+    "refusedTogetherWithAnother": [
+     "devices: guards (e): the seam's A != O — a call signed for the identity key (its entry planted, the verification equation holding) is refused only by A != O (the descriptor module's signer derivation and the verification's identity-key assert)"
+    ],
+    "why": "The verification takes the key the seam's derivation has already checked, and that derivation's A != O refuses the identity first; the two are refused together."
+   },
    {
     "message": "descriptor: not a 117-byte device tag",
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 227,
+      "line": 229,
       "helper": "derive_descriptor_entry_w117",
       "inProvedCircuit": true
      }
@@ -893,7 +893,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 174,
+      "line": 176,
       "helper": "derive_descriptor_entry_w52",
       "inProvedCircuit": true
      }
@@ -906,7 +906,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 270,
+      "line": 272,
       "helper": "derive_descriptor_grant_id_w52",
       "inProvedCircuit": true
      }
@@ -919,7 +919,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 190,
+      "line": 192,
       "helper": "derive_descriptor_entry_w64",
       "inProvedCircuit": true
      }
@@ -932,7 +932,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 284,
+      "line": 286,
       "helper": "derive_descriptor_grant_id_w64",
       "inProvedCircuit": true
      }
@@ -948,7 +948,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 207,
+      "line": 209,
       "helper": "derive_descriptor_entry_w65",
       "inProvedCircuit": true
      }
@@ -961,7 +961,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 300,
+      "line": 302,
       "helper": "derive_descriptor_grant_id_w65",
       "inProvedCircuit": true
      }
@@ -974,7 +974,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 482,
+      "line": 430,
       "helper": "derive_blind",
       "inProvedCircuit": false
      }
@@ -987,7 +987,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 499,
+      "line": 447,
       "helper": "derive_grant_scope_salt",
       "inProvedCircuit": true
      }
@@ -1000,7 +1000,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 419,
+      "line": 367,
       "helper": "derive_descriptor_boot_ed25519",
       "inProvedCircuit": true
      }
@@ -1013,7 +1013,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 404,
+      "line": 352,
       "helper": "derive_descriptor_entry_ed25519",
       "inProvedCircuit": true
      }
@@ -1026,7 +1026,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 435,
+      "line": 383,
       "helper": "derive_descriptor_grant_id_ed25519",
       "inProvedCircuit": true
      }
@@ -1038,8 +1038,8 @@
     "message": "descriptor: the Ed25519 key bytes do not match the point's y",
     "sites": [
      {
-      "file": "WalletArmDescriptors.compact",
-      "line": 360,
+      "file": "Ed25519Core.compact",
+      "line": 57,
       "helper": "ed25519_checked_encoding",
       "inProvedCircuit": true
      }
@@ -1059,7 +1059,7 @@
     "sites": [
      {
       "file": "WalletArmDescriptors.compact",
-      "line": 389,
+      "line": 337,
       "helper": "ed25519_descriptor_key",
       "inProvedCircuit": true
      }
@@ -1075,8 +1075,8 @@
     "message": "descriptor: the Ed25519 sign bit is not x's parity",
     "sites": [
      {
-      "file": "WalletArmDescriptors.compact",
-      "line": 367,
+      "file": "Ed25519Core.compact",
+      "line": 64,
       "helper": "ed25519_checked_encoding",
       "inProvedCircuit": true
      }
@@ -1094,8 +1094,8 @@
     "message": "descriptor: the Ed25519 x bytes do not match the point's x",
     "sites": [
      {
-      "file": "WalletArmDescriptors.compact",
-      "line": 366,
+      "file": "Ed25519Core.compact",
+      "line": 63,
       "helper": "ed25519_checked_encoding",
       "inProvedCircuit": true
      }

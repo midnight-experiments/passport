@@ -2412,7 +2412,7 @@
   {
    "section": "devices",
    "circuit": "add_device_with_sol_ed25519",
-   "case": "add_device: a evm_eip712 target by descriptor; the entry equals the spec recipe (SHA-256, recomputed) at (epoch, 0); nothing at epoch + 1",
+   "case": "add_device: a evm_k256 target by descriptor; the entry equals the spec recipe (SHA-256, recomputed) at (epoch, 0); nothing at epoch + 1",
    "kind": "positive",
    "positive": "PASS",
    "check": "PASS"
@@ -10758,7 +10758,7 @@
   {
    "section": "arm-asserts",
    "circuit": "add_device_with_sol_ed25519",
-   "case": "add_device: an evm_eip712 target with a non-zero second field, not shown, under a valid signature over the contract's bytes",
+   "case": "add_device: an evm_k256 target with a non-zero second field, not shown, under a valid signature over the contract's bytes",
    "kind": "negative",
    "expect": "descriptor: unused second field must be zero",
    "bypassed": [
@@ -10775,7 +10775,7 @@
     "positiveControl": "PASS"
    },
    "control": {
-    "case": "add_device: an evm_eip712 target with a non-zero second field, not shown, under a valid signature over the contract's bytes",
+    "case": "add_device: an evm_k256 target with a non-zero second field, not shown, under a valid signature over the contract's bytes",
     "own": true,
     "copy": {
      "bypassed": [
@@ -10863,7 +10863,7 @@
   {
    "section": "arm-asserts",
    "circuit": "issue_grant_with_sol_ed25519",
-   "case": "issue_grant: an evm_eip712 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes",
+   "case": "issue_grant: an evm_k256 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes",
    "kind": "negative",
    "expect": "descriptor: unused second field must be zero",
    "bypassed": [
@@ -10880,7 +10880,7 @@
     "positiveControl": "PASS"
    },
    "control": {
-    "case": "issue_grant: an evm_eip712 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes",
+    "case": "issue_grant: an evm_k256 grantee with a non-zero second field, not shown, under a valid signature over the contract's bytes",
     "own": true,
     "copy": {
      "bypassed": [

@@ -3,7 +3,7 @@
 // matrices, extended in this new file (upstream's suites are untouched):
 //
 //   1 issue      a sol_ed25519 owner issues to a grantee of every scheme
-//                (sol_ed25519, evm_eip712, k256 and JubJub with the
+//                (sol_ed25519, evm_k256, k256 and JubJub with the
 //                labelled origin hash, a passkey with its origin); each grant
 //                id equals the grantee scheme's own derivation; the record
 //                (issued_at = auth_nonce, nonce 0, read_pk_hash = SHA-256 of
@@ -178,8 +178,8 @@ const ohK = originHash('https://k.example'), ohJ = originHash('https://j.example
 const origin21 = pass.policy.origin;
 const grantees: [string, SolGranteeFields, () => Uint8Array][] = [
   ['sol_ed25519', G.grantee(0n), () => G.grantId(sim.bytes, 0n)],
-  ['evm_eip712', solGranteeOf({ scheme: 'evm_eip712', address: evmAddr, blind: evmBlind }, { label: 'Example dApp' }, 1n),
-    () => sha256(new Uint8Array([...padTag(DESCRIPTOR_TAGS['grant-id'].evm_eip712), ...sim.bytes, ...evmAddr, ...evmBlind, ...grantOriginHash(labelBytes('Example dApp')), 1]))],
+  ['evm_k256', solGranteeOf({ scheme: 'evm_k256', address: evmAddr, blind: evmBlind }, { label: 'Example dApp' }, 1n),
+    () => sha256(new Uint8Array([...padTag(DESCRIPTOR_TAGS['grant-id'].evm_k256), ...sim.bytes, ...evmAddr, ...evmBlind, ...grantOriginHash(labelBytes('Example dApp')), 1]))],
   ['k256', solGranteeOf({ scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: 0 }, { originHash: ohK }, 2n), () => k1.grantId(sim.bytes, ohK, 2n)],
   ['jubjub', solGranteeOf({ scheme: 'jubjub', x: jg.pk.x, y: jg.pk.y }, { originHash: ohJ }, 3n), () => jg.grantId(sim.bytes, ohJ, 3n)],
   ['p256', solGranteeOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y }, { origin: origin21 }, 4n), () => pass.grantee.grantId(sim.bytes, grantOriginHash(origin21), 4n)],
@@ -238,7 +238,7 @@ const G2 = '2 rules';
     { ...solUnusedKey(), pk_x: [3n, ...new Array<bigint>(31).fill(0n)] }, { ...grantees[2][1], slot: 9n });
   // fields a grantee class does not use, non-zero (not shown, so the wallet's
   // signature is over the same bytes as with them zero)
-  await bad('an evm_eip712 grantee with a non-zero second field', baseScope(), /unused second field must be zero/, undefined, { ...grantees[1][1], b: rnd(), slot: 10n });
+  await bad('an evm_k256 grantee with a non-zero second field', baseScope(), /unused second field must be zero/, undefined, { ...grantees[1][1], b: rnd(), slot: 10n });
   await bad('a k256 grantee carrying a label', baseScope(), /unused label must be zero/, undefined, { ...grantees[2][1], label: 'Example dApp', slot: 11n });
   await bad('a jubjub grantee with a non-zero origin (its characters equal its bytes)', baseScope(), /unused origin must be zero/, undefined, { ...grantees[3][1], origin: rnd(21), slot: 12n });
   await bad("a sol_ed25519 grantee carrying an origin hash (a readable grantee's is derived from its label)", baseScope(), /a readable grantee's origin hash is derived/, undefined,
@@ -802,7 +802,7 @@ const G10 = '10 scope salt and read key';
     ['the salt at auth_nonce 0', grantScopeSalt('sol_ed25519', own.dev.blind, s.bytes, 0n)],
     ["the salt of another blind (the grantee's)", grantScopeSalt('sol_ed25519', Gs.blind, s.bytes, n0)],
     ["the next issuance's salt", salt1],
-    ['the EVM arm\'s salt of the same values', grantScopeSalt('evm_eip712', own.dev.blind, s.bytes, n0)],
+    ['the EVM arm\'s salt of the same values', grantScopeSalt('evm_k256', own.dev.blind, s.bytes, n0)],
   ] as [string, Uint8Array][]) {
     await refused(G10, `a grantee spend opened with ${name} is refused`, 'runtime', /scope object mismatch|spent opening mismatch/, () => spend(other, 10n));
   }
