@@ -40,6 +40,8 @@
 // (`midnight:account:{device,boot,grant:id,blind}:evm:v1`).
 
 import "modules/Ed25519Core";
+import "modules/K256Core";
+import "modules/EvmIdentity";
 import "modules/WalletArmDescriptors";
 import "modules/EvmK256";
 
@@ -97,36 +99,12 @@ export pure circuit compute_public_point_with_evm_k256(scalar: Secp256k1Scalar):
   return ecMulGenerator(scalar);
 }
 
-// The checked byte hints of a key's address: `x` and `y` are the bytes of the
-// key's coordinates as `Bytes<32>` stores them (little-endian), and
-// `key_hash` the bytes of keccak256 of the big-endian x || y. Each is checked
-// against the value the circuit computes, so a hint passes only when it is
-// exactly that value's bytes.
-struct EvmAddressHint {
-  x:        Vector<32, Uint<8>>;
-  y:        Vector<32, Uint<8>>;
-  key_hash: Vector<32, Uint<8>>;
-}
-
-// The device's address, derived from the presented point: the low 20 bytes
-// of keccak256 of its big-endian x || y, as Ethereum defines it. The point at
-// infinity is refused by its coordinates, so both encodings of the identity
-// ({0, 0, identity} and {0, 0, not identity}) are refused; extracting the
-// coordinates already refuses the flagged one, so no comparison with the
-// default point is needed. The coordinates are converted once and serve both
-// the guard and the hash; their bytes and the hash's bytes come from checked
-// hints instead of byte-by-byte extraction. Exported so that clients and
-// tests obtain the address through the contract's own code.
-// compact row optimization | Ethereum address from checked coordinate and hash bytes | -78% rows
-export pure circuit evm_address(pk: Secp256k1Point, hint: EvmAddressHint): Bytes<20> {
-  // compact row optimization | key coordinates extracted once for the guard and the hash | -50% rows
-  const x = secp256k1PointX(pk) as Bytes<32>;
-  const y = secp256k1PointY(pk) as Bytes<32>;
-  assert(!(x == pad(32, "") && y == pad(32, "")), "evm_k256: device key is the point at infinity");
-  const hash = keccak256<[Vector<32, Uint<8>>, Vector<32, Uint<8>>]>([
-    evm_k256_reversed(evm_k256_bytes_of(x, hint.x)), evm_k256_reversed(evm_k256_bytes_of(y, hint.y))]);
-  return evm_k256_low20(hash, hint.key_hash);
-}
+// The device's address (modules/EvmIdentity: the low 20 bytes of keccak256
+// of the key's big-endian x || y, the point at infinity refused in both
+// encodings), re-exported as a pure circuit of the account contract, so
+// that clients and tests obtain the address through the contract's own
+// code.
+export { evm_address };
 
 // ── Derivations (width class 52 of the descriptor module) ──────────────────
 
@@ -203,28 +181,6 @@ struct EvmK256SeamHint {
   account_hash: Vector<32, Uint<8>>;
   digest:       Vector<32, Uint<8>>;
   nonce:        Vector<8, Uint<8>>;
-}
-
-// ECDSA verification over secp256k1: the standard library's
-// secp256k1EcdsaVerify with the same arithmetic and semantics (both S forms
-// accepted, the digest read big-endian and reduced mod n, x(R) reduced mod
-// n), without its comparison with the default point and with the digest's
-// big-endian bytes taken from the checked hint `h` instead of reversed byte
-// by byte. The point at infinity is refused by the caller: every seam derives
-// the key's address first, which extracts the key's coordinates and refuses
-// both identity encodings in the same circuit. r = 0 and s = 0 are refused by
-// the seams before this call.
-// compact row optimization | ECDSA verify with the digest from checked bytes | -38% rows
-circuit k256_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point): Boolean {
-  assert(Bytes[...h] == digest, "evm_k256: digest hint does not match the digest");
-  const z = Bytes[h[31], h[30], h[29], h[28], h[27], h[26], h[25], h[24], h[23], h[22], h[21], h[20], h[19], h[18], h[17], h[16],
-                  h[15], h[14], h[13], h[12], h[11], h[10], h[9],  h[8],  h[7],  h[6],  h[5],  h[4],  h[3],  h[2],  h[1],  h[0]] as Secp256k1Scalar;
-  const {r, s} = sig;
-  const w = inv(s);
-  const u1 = z * w;
-  const u2 = r * w;
-  const point = ecAdd(ecMulGenerator(u1), ecMul(pk, u2));
-  return (secp256k1PointX(point) as Bytes<32>) as Secp256k1Scalar == r;
 }
 
 // The device seam, in upstream p256's order (MIP-0013 §4): membership of the
