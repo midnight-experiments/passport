@@ -9,7 +9,7 @@
 // the ledger fee computation refuses it up front ("exceeded block limit in
 // transaction fee computation"). The 30-circuit roster prices at 74,286
 // verifier bytes and is refused by a wider margin. The account therefore
-// deploys in budgeted waves (68 circuits with recovery, P-256 and Solana Ed25519):
+// deploys in budgeted waves (84 circuits with recovery, P-256, EVM EIP-712 and Solana Ed25519):
 //
 //   wave 1  a prefix of the deposits + initial device's arm, the
 //           constructor's ledger state, and the maintenance authority;
@@ -108,9 +108,9 @@ export const SHARED_CIRCUITS = ['deposit_unshielded', 'deposit_shielded'];
  *  finalisation, arm-independent (recovery MIP 6). */
 export const RECOVERY_SHARED_CIRCUITS = ['recover_submit', 'recover_finalise'];
 
-export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256', 'sol_ed25519'];
+export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256', 'evm_eip712', 'sol_ed25519'];
 
-/** All 68 impure circuits: four shared and sixteen per credential arm. */
+/** All 84 impure circuits: four shared and sixteen per credential arm. */
 export const allCircuits = (): string[] => [
   ...SHARED_CIRCUITS,
   ...ARMS.flatMap(armCircuits),

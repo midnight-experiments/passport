@@ -34,6 +34,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { P256Device, P256Grantee, P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
 export { P256Device, P256Grantee, p256Challenges, p256GrantChallenges } from './signer-p256.js';
 export type { P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
+import type { EvmEip712Authorisation, EvmEip712GrantAuthorisation } from './signer-evm-eip712.js';
 import { solEd25519AuthArgs, solEd25519GrantAuthArgs, type SolEd25519Authorisation, type SolEd25519GrantAuthorisation } from './signer-sol-ed25519.js';
 export type { SolEd25519Authorisation, SolEd25519GrantAuthorisation } from './signer-sol-ed25519.js';
 
@@ -45,7 +46,7 @@ import {
 } from './contract.js';
 
 /** The authorisation arms the contract exports circuits for. */
-export type Arm = 'jubjub' | 'k256' | 'p256' | 'sol_ed25519';
+export type Arm = 'jubjub' | 'k256' | 'p256' | 'evm_eip712' | 'sol_ed25519';
 
 export interface CallContext {
   /** The account's contract address, raw bytes (binds the account, AUTH-3). */
@@ -422,7 +423,7 @@ export const k256Challenges = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AnyDevice = JubjubDevice | K256Device | P256Device;
-export type Authorisation = JubjubAuthorisation | K256Authorisation | P256Authorisation | SolEd25519Authorisation;
+export type Authorisation = JubjubAuthorisation | K256Authorisation | P256Authorisation | EvmEip712Authorisation | SolEd25519Authorisation;
 
 /** The trailing circuit arguments an Authorisation expands to, in the
  *  order the arm's gated circuits declare them. */
@@ -431,6 +432,12 @@ export function authArgs(a: Authorisation): unknown[] {
   if (a.arm === 'p256') {
     const { arm, ...auth } = a;
     return [auth];
+  }
+  if (a.arm === 'evm_eip712') {
+    // The auth struct (its seam hints included), then the operation's own
+    // hints when the circuit takes them.
+    const { arm, op, ...auth } = a;
+    return op === undefined ? [auth] : [auth, op];
   }
   return a.arm === 'jubjub'
     ? [a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce]
@@ -714,7 +721,7 @@ export interface JubjubGrantAuthorisation {
   grind_nonce: bigint;
 }
 
-export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation | SolEd25519GrantAuthorisation;
+export type GrantAuthorisation = K256GrantAuthorisation | JubjubGrantAuthorisation | P256GrantAuthorisation | EvmEip712GrantAuthorisation | SolEd25519GrantAuthorisation;
 
 /**
  * A grantee key on the k256 arm. Unlike a device it has no use counter
@@ -897,6 +904,10 @@ export function grantAuthArgs(o: GrantOpening, a: GrantAuthorisation): unknown[]
   if (a.arm === 'p256') {
     const { arm, ...auth } = a;
     return [o.originHash, o.slot, ...openings, auth];
+  }
+  if (a.arm === 'evm_eip712') {
+    const { arm, label, op, ...auth } = a;
+    return op === undefined ? [label, o.slot, ...openings, auth] : [label, o.slot, ...openings, auth, op];
   }
   return a.arm === 'k256'
     ? [a.pk, a.envelope, o.originHash, o.slot, ...openings, a.sig]
