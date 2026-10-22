@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Readable rendering — the shared text helpers of the readable authorisation
-// arms (`evm_eip712`, `sol_ed25519`).
+// arms (`evm_k256`, `sol_ed25519`).
 //
 // A readable arm's signed bytes show every operand in full, and the circuit
 // recomputes those bytes from exactly the values it executes on. These

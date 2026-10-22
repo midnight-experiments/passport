@@ -1,7 +1,7 @@
-// Test support: the checked byte hints of an `evm_eip712` call, recomputed
+// Test support: the checked byte hints of an `evm_k256` call, recomputed
 // from the values the call EXECUTES.
 //
-// The hints (src/wallet/evm-eip712-hints.ts) are exact bytes of values the
+// The hints (src/wallet/evm-k256-hints.ts) are exact bytes of values the
 // circuit computes; a wrong hint only fails the call. The suites build many
 // calls by hand, including tampered ones (a message signed over one value and
 // executed with another, an approval replayed on another account), and each
@@ -17,11 +17,11 @@
 // hash and digest are the ones that module computes.
 
 import {
-  evmEip712KeyHint, accountHashHint, bytesHint, leHint, evmEip712CoinHint, evmEip712Base58Hint,
-} from '../wallet/evm-eip712-hints.js';
+  evmK256KeyHint, accountHashHint, bytesHint, leHint, evmK256CoinHint, evmK256Base58Hint,
+} from '../wallet/evm-k256-hints.js';
 import { solanaKeyInputs } from '../wallet/descriptors.js';
 import { siteAmountLabelBytes, utcDateTimeInputs } from '../wallet/rendering.js';
-import type { SiteAmount } from '../wallet/evm-eip712-codec.js';
+import type { SiteAmount } from '../wallet/evm-k256-codec.js';
 
 /** The site amount label the suites sign with unless a case says otherwise. */
 export const TEST_SITE: SiteAmount = { decimals: 6, symbol: 'TOKEN' };
@@ -42,7 +42,7 @@ export function labelHint(amount: unknown, site: SiteAmount): bigint[] {
 
 /** A call (its auth argument, or its trailing operation hint) carrying this
  *  symbol keeps the hints it was built with. */
-export const KEEP_HINTS = Symbol.for('evm_eip712.test.keepHints');
+export const KEEP_HINTS = Symbol.for('evm_k256.test.keepHints');
 
 export interface HintContext {
   /** The executing account's 32-byte address. */
@@ -64,33 +64,33 @@ const attempt = <T>(f: () => T): T | undefined => { try { return f(); } catch { 
 
 // circuit -> [index of the auth argument, the circuit's arity without its operation hint, takes an operation hint]
 const DEVICE: Record<string, [number, number, boolean]> = {
-  rotate_enc_key_with_evm_eip712: [1, 2, false],
-  withdraw_unshielded_with_evm_eip712: [3, 4, true],
-  withdraw_shielded_with_evm_eip712: [3, 4, true],
-  withdraw_shielded_to_contract_with_evm_eip712: [3, 4, true],
-  append_inbox_with_evm_eip712: [1, 2, false],
-  add_device_with_evm_eip712: [4, 5, true],
-  remove_device_with_evm_eip712: [7, 8, true],
-  issue_grant_with_evm_eip712: [20, 21, true],
-  revoke_grant_with_evm_eip712: [4, 5, true],
-  revoke_all_grants_with_evm_eip712: [0, 1, false],
-  recover_cancel_with_evm_eip712: [0, 1, false],
-  publish_recovery_session_with_evm_eip712: [8, 9, false],
+  rotate_enc_key_with_evm_k256: [1, 2, false],
+  withdraw_unshielded_with_evm_k256: [3, 4, true],
+  withdraw_shielded_with_evm_k256: [3, 4, true],
+  withdraw_shielded_to_contract_with_evm_k256: [3, 4, true],
+  append_inbox_with_evm_k256: [1, 2, false],
+  add_device_with_evm_k256: [4, 5, true],
+  remove_device_with_evm_k256: [7, 8, true],
+  issue_grant_with_evm_k256: [20, 21, true],
+  revoke_grant_with_evm_k256: [4, 5, true],
+  revoke_all_grants_with_evm_k256: [0, 1, false],
+  recover_cancel_with_evm_k256: [0, 1, false],
+  publish_recovery_session_with_evm_k256: [8, 9, false],
 };
 const GRANTEE: Record<string, [number, number]> = {
-  withdraw_unshielded_with_grant_evm_eip712: [10, 11],
-  withdraw_shielded_with_grant_evm_eip712: [12, 13],
-  withdraw_shielded_to_contract_with_grant_evm_eip712: [12, 13],
+  withdraw_unshielded_with_grant_evm_k256: [10, 11],
+  withdraw_shielded_with_grant_evm_k256: [12, 13],
+  withdraw_shielded_to_contract_with_grant_evm_k256: [12, 13],
 };
 
 const kept = (x: unknown) => !!x && typeof x === 'object' && (x as any)[KEEP_HINTS] === true;
 // the circuits whose arguments 1..3 are a Solana key's point and its two byte inputs
-const SOL_ARGS = new Set(['add_device_with_evm_eip712', 'remove_device_with_evm_eip712', 'issue_grant_with_evm_eip712', 'revoke_grant_with_evm_eip712']);
+const SOL_ARGS = new Set(['add_device_with_evm_k256', 'remove_device_with_evm_k256', 'issue_grant_with_evm_k256', 'revoke_grant_with_evm_k256']);
 
-/** `args` with every hint of an `evm_eip712` circuit recomputed from the
+/** `args` with every hint of an `evm_k256` circuit recomputed from the
  *  executed values (other circuits: unchanged). */
 export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, args: unknown[]): unknown[] {
-  if (circuit === 'activate_initial_device_with_evm_eip712') {
+  if (circuit === 'activate_initial_device_with_evm_k256') {
     if (args.length > 3 && kept(args[3])) return args;
     const pk = args[0] as any;
     return [args[0], args[1], args[2], keyHintOf(ctx, pk)];
@@ -112,7 +112,7 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
     if (k) { out[2] = k.pkBytes; out[3] = k.pkX; }
   }
   const keyHint = keyHintOf(ctx, auth.pk);
-  const address = attempt(() => pc.evm_eip712_address(auth.pk, keyHint)) as Uint8Array | undefined;
+  const address = attempt(() => pc.evm_address(auth.pk, keyHint)) as Uint8Array | undefined;
   const ah = accountHashHint(ctx.account);
   const self = { bytes: ctx.account };
   const a = args;
@@ -124,33 +124,33 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
     const f = [ctx.account, address, nonce, nh];
     const coinFor = (color: Uint8Array) => ctx.coin(color);
     switch (circuit) {
-      case 'rotate_enc_key_with_evm_eip712': structHash = attempt(() => pc.evm_eip712_struct_rotate_enc_key(...f, a[0])); break;
-      case 'withdraw_unshielded_with_evm_eip712':
+      case 'rotate_enc_key_with_evm_k256': structHash = attempt(() => pc.evm_k256_struct_rotate_enc_key(...f, a[0])); break;
+      case 'withdraw_unshielded_with_evm_k256':
         op = { amount: le(a[1], 16), label: labelHint(a[1], site) };
-        structHash = attempt(() => pc.evm_eip712_struct_withdraw_unshielded(...f, a[0], a[1], (a[2] as any).bytes, op)); break;
-      case 'withdraw_shielded_with_evm_eip712':
-      case 'withdraw_shielded_to_contract_with_evm_eip712': {
+        structHash = attempt(() => pc.evm_k256_struct_withdraw_unshielded(...f, a[0], a[1], (a[2] as any).bytes, op)); break;
+      case 'withdraw_shielded_with_evm_k256':
+      case 'withdraw_shielded_to_contract_with_evm_k256': {
         const c = coinFor(a[1] as Uint8Array);
-        op = c && fits(a[2], 16) && c.value >= (a[2] as bigint) ? evmEip712CoinHint(a[2] as bigint, c.value, c.mtIndex, site)
+        op = c && fits(a[2], 16) && c.value >= (a[2] as bigint) ? evmK256CoinHint(a[2] as bigint, c.value, c.mtIndex, site)
           : { amount: le(a[2], 16), value: le(c?.value, 16), mt_index: le(c?.mtIndex, 8), change: leHint(0n, 16), label: labelHint(a[2], site) };
-        const oracle = circuit === 'withdraw_shielded_with_evm_eip712' ? pc.evm_eip712_struct_withdraw_shielded : pc.evm_eip712_struct_withdraw_shielded_to_contract;
+        const oracle = circuit === 'withdraw_shielded_with_evm_k256' ? pc.evm_k256_struct_withdraw_shielded : pc.evm_k256_struct_withdraw_shielded_to_contract;
         structHash = c && attempt(() => oracle(...f, a[1], a[2], (a[0] as any).bytes, c.nonce, c.value, c.mtIndex, op));
         break;
       }
-      case 'append_inbox_with_evm_eip712': structHash = attempt(() => pc.evm_eip712_struct_append_inbox(...f, a[0])); break;
-      case 'add_device_with_evm_eip712': {
+      case 'append_inbox_with_evm_k256': structHash = attempt(() => pc.evm_k256_struct_append_inbox(...f, a[0])); break;
+      case 'add_device_with_evm_k256': {
         op = descriptorHintFor(a[0], out[2]);
-        structHash = attempt(() => pc.evm_eip712_struct_add_device(...f, a[0], out[2], op));
+        structHash = attempt(() => pc.evm_k256_struct_add_device(...f, a[0], out[2], op));
         break;
       }
-      case 'remove_device_with_evm_eip712': {
+      case 'remove_device_with_evm_k256': {
         op = { target: descriptorHintFor(a[0], out[2]), epoch: le(a[4], 4), counter: le(a[5], 8) };
         const unknown: any = a[6];
-        if (unknown?.is_some) structHash = attempt(() => pc.evm_eip712_struct_remove_unknown_device(...f, unknown.value));
-        else structHash = attempt(() => pc.evm_eip712_struct_remove_device(...f, a[0], out[2], a[4], a[5], op));
+        if (unknown?.is_some) structHash = attempt(() => pc.evm_k256_struct_remove_unknown_device(...f, unknown.value));
+        else structHash = attempt(() => pc.evm_k256_struct_remove_device(...f, a[0], out[2], a[4], a[5], op));
         break;
       }
-      case 'issue_grant_with_evm_eip712': {
+      case 'issue_grant_with_evm_k256': {
         const g: any = a[0];
         const scope = { maxCoinValue: a[11], perCallCap: a[12], cap: a[13], expiresAt: a[14], windowLen: a[17], windowCap: a[18] } as any;
         const e = fits(scope.expiresAt, 8) ? utcDateTimeInputs(scope.expiresAt) : { text: new Array(29).fill(32n), yearSplit: [0n, 0n, 0n, 0n] };
@@ -159,20 +159,20 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
           expires_at: le(scope.expiresAt, 8), window_len: le(scope.windowLen, 8), window_cap: le(scope.windowCap, 16),
           expiry_text: e.text, year_split: e.yearSplit,
         };
-        structHash = attempt(() => pc.evm_eip712_struct_issue_grant(...f, g, out[2], ...a.slice(4, 20), op));
+        structHash = attempt(() => pc.evm_k256_struct_issue_grant(...f, g, out[2], ...a.slice(4, 20), op));
         break;
       }
-      case 'revoke_grant_with_evm_eip712': {
+      case 'revoke_grant_with_evm_k256': {
         const g: any = a[0];
         op = granteeHintFor(g, out[2]);
-        structHash = attempt(() => pc.evm_eip712_struct_revoke_grant(...f, g, out[2], op));
+        structHash = attempt(() => pc.evm_k256_struct_revoke_grant(...f, g, out[2], op));
         break;
       }
-      case 'revoke_all_grants_with_evm_eip712': structHash = attempt(() => pc.evm_eip712_struct_revoke_all_grants(...f)); break;
-      case 'recover_cancel_with_evm_eip712': structHash = attempt(() => pc.evm_eip712_struct_cancel_recovery(...f)); break;
-      case 'publish_recovery_session_with_evm_eip712': structHash = attempt(() => pc.evm_eip712_struct_publish_recovery_session(...f, ...a.slice(0, 8))); break;
+      case 'revoke_all_grants_with_evm_k256': structHash = attempt(() => pc.evm_k256_struct_revoke_all_grants(...f)); break;
+      case 'recover_cancel_with_evm_k256': structHash = attempt(() => pc.evm_k256_struct_cancel_recovery(...f)); break;
+      case 'publish_recovery_session_with_evm_k256': structHash = attempt(() => pc.evm_k256_struct_publish_recovery_session(...f, ...a.slice(0, 8))); break;
     }
-    const digest = structHash && attempt(() => pc.evm_eip712_digest(ctx.account, structHash, ah)) as Uint8Array | undefined;
+    const digest = structHash && attempt(() => pc.eip712_v1_digest(ctx.account, structHash, ah)) as Uint8Array | undefined;
     out[ai] = { ...auth, hint: { key: keyHint, account_hash: ah, digest: digest ? bytesHint(digest) : zero32(), nonce: nh } };
     if (dev[2]) out.push(op);
     return out;
@@ -180,7 +180,7 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
   // the grantee role: the frame from the grant record the circuit reads
   const label = a[gr[0] === 10 ? 3 : 5] as Uint8Array;
   const slot = a[gr[0] === 10 ? 4 : 6] as bigint;
-  const id = address && attempt(() => pc.derive_grant_id_with_evm_eip712(self, address, auth.blind, pc.derive_grant_origin_hash_label(label), slot));
+  const id = address && attempt(() => pc.derive_grant_id_with_evm_k256(self, address, auth.blind, pc.derive_grant_origin_hash_label(label), slot));
   const rec = id && attempt(() => (ctx.ledger.grants.member(id) ? ctx.ledger.grants.lookup(id) : undefined));
   const issuedAt: bigint = rec?.issued_at ?? 0n;
   const grantNonce: bigint = rec?.nonce ?? 0n;
@@ -188,18 +188,18 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
   const ih = leHint(issuedAt, 8);
   const gh = leHint(grantNonce, 8);
   const gf = [ctx.account, address, label, lh, slot, issuedAt, ih, grantNonce, gh];
-  if (circuit === 'withdraw_unshielded_with_grant_evm_eip712') {
+  if (circuit === 'withdraw_unshielded_with_grant_evm_k256') {
     op = { amount: le(a[1], 16), label: labelHint(a[1], site) };
-    structHash = attempt(() => pc.evm_eip712_struct_withdraw_unshielded_as_grantee(...gf, a[0], a[1], (a[2] as any).bytes, op));
+    structHash = attempt(() => pc.evm_k256_struct_withdraw_unshielded_as_grantee(...gf, a[0], a[1], (a[2] as any).bytes, op));
   } else {
     const c = ctx.coin(a[1] as Uint8Array);
-    op = c && fits(a[2], 16) && c.value >= (a[2] as bigint) ? evmEip712CoinHint(a[2] as bigint, c.value, c.mtIndex, site)
+    op = c && fits(a[2], 16) && c.value >= (a[2] as bigint) ? evmK256CoinHint(a[2] as bigint, c.value, c.mtIndex, site)
       : { amount: le(a[2], 16), value: le(c?.value, 16), mt_index: le(c?.mtIndex, 8), change: leHint(0n, 16), label: labelHint(a[2], site) };
-    const oracle = circuit === 'withdraw_shielded_with_grant_evm_eip712'
-      ? pc.evm_eip712_struct_withdraw_shielded_as_grantee : pc.evm_eip712_struct_withdraw_shielded_to_contract_as_grantee;
+    const oracle = circuit === 'withdraw_shielded_with_grant_evm_k256'
+      ? pc.evm_k256_struct_withdraw_shielded_as_grantee : pc.evm_k256_struct_withdraw_shielded_to_contract_as_grantee;
     structHash = c && attempt(() => oracle(...gf, a[1], a[2], (a[0] as any).bytes, a[3], a[4], c.nonce, c.value, c.mtIndex, op));
   }
-  const digest = structHash && attempt(() => pc.evm_eip712_digest(ctx.account, structHash, ah)) as Uint8Array | undefined;
+  const digest = structHash && attempt(() => pc.eip712_v1_digest(ctx.account, structHash, ah)) as Uint8Array | undefined;
   out[ai] = { ...auth, hint: { key: keyHint, account_hash: ah, digest: digest ? bytesHint(digest) : zero32(), label: lh, issued_at: ih, grant_nonce: gh } };
   out.push(op);
   return out;
@@ -207,14 +207,14 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
 
 // A descriptor's hints with the base58 inputs of the key bytes the call
 // executes (its `sol_bytes` argument, whatever key the descriptor names).
-const b58Of = (solBytes: unknown) => attempt(() => evmEip712Base58Hint(u8s(solBytes))) ?? evmEip712Base58Hint(new Uint8Array(32));
+const b58Of = (solBytes: unknown) => attempt(() => evmK256Base58Hint(u8s(solBytes))) ?? evmK256Base58Hint(new Uint8Array(32));
 const descriptorHintFor = (d: any, solBytes: unknown) =>
   ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: b58Of(solBytes) });
 const granteeHintFor = (g: any, solBytes: unknown) =>
   ({ key: bytesHint(g.key), key2: bytesHint(g.key2), origin: bytesHint(g.origin), label: bytesHint(g.label), b58: b58Of(solBytes) });
 
 function keyHintOf(ctx: HintContext, pk: { x: bigint; y: bigint }) {
-  const h = evmEip712KeyHint(pk);
+  const h = evmK256KeyHint(pk);
   const forged = ctx.keyHash?.(pk);
   return forged ? { ...h, key_hash: bytesHint(forged) } : h;
 }

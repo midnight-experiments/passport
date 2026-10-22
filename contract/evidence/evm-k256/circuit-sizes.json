@@ -29,7 +29,7 @@
   "circuits": [
     {
       "contract": "account",
-      "circuit": "activate_initial_device_with_evm_eip712",
+      "circuit": "activate_initial_device_with_evm_k256",
       "k": 15,
       "rows": 17139,
       "assets": {
@@ -54,7 +54,7 @@
     },
     {
       "contract": "account",
-      "circuit": "revoke_all_grants_with_evm_eip712",
+      "circuit": "revoke_all_grants_with_evm_k256",
       "k": 16,
       "rows": 62470,
       "assets": {
@@ -79,7 +79,7 @@
     },
     {
       "contract": "account",
-      "circuit": "recover_cancel_with_evm_eip712",
+      "circuit": "recover_cancel_with_evm_k256",
       "k": 16,
       "rows": 63172,
       "assets": {
@@ -104,7 +104,7 @@
     },
     {
       "contract": "account",
-      "circuit": "rotate_enc_key_with_evm_eip712",
+      "circuit": "rotate_enc_key_with_evm_k256",
       "k": 17,
       "rows": 60921,
       "assets": {
@@ -129,7 +129,7 @@
     },
     {
       "contract": "account",
-      "circuit": "append_inbox_with_evm_eip712",
+      "circuit": "append_inbox_with_evm_k256",
       "k": 17,
       "rows": 69778,
       "assets": {
@@ -154,7 +154,7 @@
     },
     {
       "contract": "account",
-      "circuit": "withdraw_unshielded_with_evm_eip712",
+      "circuit": "withdraw_unshielded_with_evm_k256",
       "k": 17,
       "rows": 73202,
       "assets": {
@@ -179,7 +179,7 @@
     },
     {
       "contract": "account",
-      "circuit": "publish_recovery_session_with_evm_eip712",
+      "circuit": "publish_recovery_session_with_evm_k256",
       "k": 17,
       "rows": 76557,
       "assets": {
@@ -204,7 +204,7 @@
     },
     {
       "contract": "account",
-      "circuit": "withdraw_shielded_with_evm_eip712",
+      "circuit": "withdraw_shielded_with_evm_k256",
       "k": 17,
       "rows": 95892,
       "assets": {
@@ -229,7 +229,7 @@
     },
     {
       "contract": "account",
-      "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+      "circuit": "withdraw_unshielded_with_grant_evm_k256",
       "k": 17,
       "rows": 99268,
       "assets": {
@@ -254,7 +254,7 @@
     },
     {
       "contract": "account",
-      "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+      "circuit": "withdraw_shielded_to_contract_with_evm_k256",
       "k": 17,
       "rows": 101595,
       "assets": {
@@ -279,7 +279,7 @@
     },
     {
       "contract": "account",
-      "circuit": "add_device_with_evm_eip712",
+      "circuit": "add_device_with_evm_k256",
       "k": 18,
       "rows": 133169,
       "assets": {
@@ -304,7 +304,7 @@
     },
     {
       "contract": "account",
-      "circuit": "withdraw_shielded_with_grant_evm_eip712",
+      "circuit": "withdraw_shielded_with_grant_evm_k256",
       "k": 18,
       "rows": 133618,
       "assets": {
@@ -329,7 +329,7 @@
     },
     {
       "contract": "account",
-      "circuit": "revoke_grant_with_evm_eip712",
+      "circuit": "revoke_grant_with_evm_k256",
       "k": 18,
       "rows": 137452,
       "assets": {
@@ -354,7 +354,7 @@
     },
     {
       "contract": "account",
-      "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+      "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
       "k": 18,
       "rows": 139321,
       "assets": {
@@ -379,7 +379,7 @@
     },
     {
       "contract": "account",
-      "circuit": "remove_device_with_evm_eip712",
+      "circuit": "remove_device_with_evm_k256",
       "k": 18,
       "rows": 142161,
       "assets": {
@@ -404,7 +404,7 @@
     },
     {
       "contract": "account",
-      "circuit": "issue_grant_with_evm_eip712",
+      "circuit": "issue_grant_with_evm_k256",
       "k": 18,
       "rows": 189595,
       "assets": {

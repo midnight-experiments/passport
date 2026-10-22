@@ -1,5 +1,5 @@
 {
- "suite": "evm-eip712-prover (npm run test:evm_eip712)",
+ "suite": "evm-k256-prover (npm run test:evm_k256)",
  "build": {
   "branch": "wallet-arm-evm-eip712",
   "commit": "8d553e1",
@@ -8,7 +8,7 @@
   "compiler": "compactc 0.35.0 --feature-zkir-v3",
   "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8",
   "node": "2.1.0-rc.4",
-  "note": "The sections frame-lifecycle, grant-matrix, grants, hints, isolate, places, texts ran at 8d553e1. The others ran at earlier revisions of these tests (3c9647e, ace595b), before the commits of this history were cut; each of their cases equals the case of the same name in the DRY at 8d553e1 (kind, expected refusal, bypassed asserts, enforcement), and every proof-server request they made named the verifier key that the build above holds for its circuit, so no key they used has changed. None of them proves issue_grant_with_evm_eip712, the one circuit whose key changed since those runs."
+  "note": "The sections frame-lifecycle, grant-matrix, grants, hints, isolate, places, texts ran at 8d553e1. The others ran at earlier revisions of these tests (3c9647e, ace595b), before the commits of this history were cut; each of their cases equals the case of the same name in the DRY at 8d553e1 (kind, expected refusal, bypassed asserts, enforcement), and every proof-server request they made named the verifier key that the build above holds for its circuit, so no key they used has changed. None of them proves issue_grant_with_evm_k256, the one circuit whose key changed since those runs."
  },
  "method": "Each negative runs twice: in the simulator (generated JavaScript, honest checks) and at the proof server with the JavaScript checks that would refuse it bypassed in a patched copy of the generated contract; every other assert still throws in that copy, so a case that names one assert isolates it. Every patched copy proves the honest call of its circuit through itself: the cases of the checked hints, the readable texts the isolating forgeries and the shared checks at every place a value enters (sections hints, texts, isolate, places) and most others prove it before their own attempt; elsewhere the negatives of one copy in a section share the first control proved through it, and each result names its control (control.with). A forged byte argument above 8 bits travels through a copy that lets it past the type check and encodes it as given; the circuit's range check refuses it. A case passes only when it is refused at the expected layer, every named assert fired in the copy, and the refusal is attributed to the circuit under test. Each section ran in its own run from a freshly started proof server; each section draws its own deterministic values, so a run of one section draws what the full suite draws.",
  "runs": [
@@ -202,25 +202,25 @@
  ],
  "cases": 366,
  "circuits": [
-  "activate_initial_device_with_evm_eip712",
-  "add_device_with_evm_eip712",
+  "activate_initial_device_with_evm_k256",
+  "add_device_with_evm_k256",
   "add_device_with_k256",
-  "append_inbox_with_evm_eip712",
-  "issue_grant_with_evm_eip712",
-  "publish_recovery_session_with_evm_eip712",
-  "recover_cancel_with_evm_eip712",
+  "append_inbox_with_evm_k256",
+  "issue_grant_with_evm_k256",
+  "publish_recovery_session_with_evm_k256",
+  "recover_cancel_with_evm_k256",
   "recover_finalise",
-  "remove_device_with_evm_eip712",
-  "revoke_all_grants_with_evm_eip712",
-  "revoke_grant_with_evm_eip712",
-  "rotate_enc_key_with_evm_eip712",
+  "remove_device_with_evm_k256",
+  "revoke_all_grants_with_evm_k256",
+  "revoke_grant_with_evm_k256",
+  "rotate_enc_key_with_evm_k256",
   "rotate_enc_key_with_k256",
-  "withdraw_shielded_to_contract_with_evm_eip712",
-  "withdraw_shielded_to_contract_with_grant_evm_eip712",
-  "withdraw_shielded_with_evm_eip712",
-  "withdraw_shielded_with_grant_evm_eip712",
-  "withdraw_unshielded_with_evm_eip712",
-  "withdraw_unshielded_with_grant_evm_eip712"
+  "withdraw_shielded_to_contract_with_evm_k256",
+  "withdraw_shielded_to_contract_with_grant_evm_k256",
+  "withdraw_shielded_with_evm_k256",
+  "withdraw_shielded_with_grant_evm_k256",
+  "withdraw_unshielded_with_evm_k256",
+  "withdraw_unshielded_with_grant_evm_k256"
  ],
  "totalsByLayer": {
   "positive: proved at the proof server": 38,
@@ -240,7 +240,7 @@
  "results": [
   {
    "section": "activation",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "honest activation (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -256,7 +256,7 @@
   },
   {
    "section": "activation",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "wrong blind",
    "kind": "negative",
    "layer": "constraint",
@@ -277,7 +277,7 @@
   },
   {
    "section": "activation",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "wrong address (another key, the committed blind)",
    "kind": "negative",
    "layer": "constraint",
@@ -299,7 +299,7 @@
   },
   {
    "section": "activation",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "point at infinity, flagged {0, 0, identity}",
    "kind": "negative",
    "layer": "constraint",
@@ -307,7 +307,7 @@
    "declaredRead": null,
    "expect": "identity point",
    "assertsNamed": [
-    "evm_eip712: device key is the point at infinity"
+    "evm_k256: device key is the point at infinity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -320,7 +320,7 @@
   },
   {
    "section": "activation",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "point at infinity, unflagged {0, 0, not identity} (honest-toolchain decoding refusal; in-circuit: the on-curve assignment)",
    "kind": "negative",
    "layer": "decoding",
@@ -328,7 +328,7 @@
    "declaredRead": null,
    "expect": "expected value of type Secp256k1Point",
    "assertsNamed": [
-    "evm_eip712: device key is the point at infinity"
+    "evm_k256: device key is the point at infinity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -341,7 +341,7 @@
   },
   {
    "section": "reactivation",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "first activation (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -357,7 +357,7 @@
   },
   {
    "section": "reactivation",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "activate a booted account again (same device)",
    "kind": "negative",
    "layer": "constraint",
@@ -379,7 +379,7 @@
   },
   {
    "section": "qa1",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "canonical point with a small coordinate (x = 1) activates (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -395,7 +395,7 @@
   },
   {
    "section": "qa1",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "non-canonical x + p: boot commitment to the unreduced bytes",
    "kind": "negative",
    "layer": "decoding",
@@ -414,7 +414,7 @@
   },
   {
    "section": "qa1",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "non-canonical x + p: boot commitment to the real address",
    "kind": "negative",
    "layer": "decoding",
@@ -435,7 +435,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "honest rotate_enc_key (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -451,7 +451,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "the high-S twin of the honest signature",
    "kind": "positive",
    "layer": "positive",
@@ -483,7 +483,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: newKey: signed K', executed K",
    "kind": "negative",
    "layer": "constraint",
@@ -504,7 +504,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: account member: another account",
    "kind": "negative",
    "layer": "constraint",
@@ -526,7 +526,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: device member: another address",
    "kind": "negative",
    "layer": "constraint",
@@ -548,7 +548,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: authNonce: n + 1",
    "kind": "negative",
    "layer": "constraint",
@@ -570,7 +570,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: effect line: another text",
    "kind": "negative",
    "layer": "constraint",
@@ -592,7 +592,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: domain name",
    "kind": "negative",
    "layer": "constraint",
@@ -614,7 +614,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: domain version (\"2\", not the frozen \"1\")",
    "kind": "negative",
    "layer": "constraint",
@@ -636,7 +636,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: domain verifyingContract",
    "kind": "negative",
    "layer": "constraint",
@@ -658,7 +658,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: primary type name",
    "kind": "negative",
    "layer": "constraint",
@@ -680,7 +680,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: a member renamed (newKey -> key)",
    "kind": "negative",
    "layer": "constraint",
@@ -702,7 +702,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "auth: an unenrolled key signs the right message",
    "kind": "negative",
    "layer": "constraint",
@@ -723,7 +723,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "auth: the right key with another blind",
    "kind": "negative",
    "layer": "constraint",
@@ -745,7 +745,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "auth: a wrong use counter",
    "kind": "negative",
    "layer": "constraint",
@@ -767,15 +767,15 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "signature r = 0: the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -789,15 +789,15 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "signature s = 0: the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -811,15 +811,15 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "(r, s) = (0, 0), which verifies against the identity point when inverses of 0 are taken as 0",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero"
+    "evm_k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -832,7 +832,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "device key = the point at infinity (flagged)",
    "kind": "negative",
    "layer": "constraint",
@@ -840,7 +840,7 @@
    "declaredRead": null,
    "expect": "identity point",
    "assertsNamed": [
-    "evm_eip712: device key is the point at infinity",
+    "evm_k256: device key is the point at infinity",
     "unknown device entry",
     "invalid signature"
    ],
@@ -855,7 +855,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "replay/account: a signature for account B executed on account A",
    "kind": "negative",
    "layer": "constraint",
@@ -898,7 +898,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "replay/arm: a k256 signature for the same key presented to the evm arm",
    "kind": "negative",
    "layer": "constraint",
@@ -920,7 +920,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "replay/operation: a CancelRecovery signature (same frame)",
    "kind": "negative",
    "layer": "constraint",
@@ -942,7 +942,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "replay/operation: a RevokeAllGrants signature (same frame)",
    "kind": "negative",
    "layer": "constraint",
@@ -964,7 +964,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "replay/role: a grantee-role signature by the same key",
    "kind": "negative",
    "layer": "constraint",
@@ -986,7 +986,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "the next honest rotate on A1 (counter 1, nonce 1)",
    "kind": "positive",
    "layer": "positive",
@@ -1002,7 +1002,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "replay/nonce: the low-S original after its high-S twin executed (entry consumed)",
    "kind": "negative",
    "layer": "constraint",
@@ -1024,7 +1024,7 @@
   },
   {
    "section": "seam",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "replay/nonce: the old signature with the current counter (nonce advanced)",
    "kind": "negative",
    "layer": "constraint",
@@ -1046,7 +1046,7 @@
   },
   {
    "section": "frame",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "rotate_enc_key: the attacker's key with the victim's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -1065,7 +1065,7 @@
   },
   {
    "section": "frame",
-   "circuit": "append_inbox_with_evm_eip712",
+   "circuit": "append_inbox_with_evm_k256",
    "case": "append_inbox: the attacker's key with the victim's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -1084,7 +1084,7 @@
   },
   {
    "section": "frame",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: the attacker's key with the victim's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -1103,7 +1103,7 @@
   },
   {
    "section": "frame",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: the attacker's key with the victim's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -1122,7 +1122,7 @@
   },
   {
    "section": "frame",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: the attacker's key with the victim's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -1141,7 +1141,7 @@
   },
   {
    "section": "custody",
-   "circuit": "append_inbox_with_evm_eip712",
+   "circuit": "append_inbox_with_evm_k256",
    "case": "append_inbox: honest (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1157,7 +1157,7 @@
   },
   {
    "section": "custody",
-   "circuit": "append_inbox_with_evm_eip712",
+   "circuit": "append_inbox_with_evm_k256",
    "case": "append_inbox binding: entry signed E2, executed E1",
    "kind": "negative",
    "layer": "constraint",
@@ -1178,7 +1178,7 @@
   },
   {
    "section": "custody",
-   "circuit": "append_inbox_with_evm_eip712",
+   "circuit": "append_inbox_with_evm_k256",
    "case": "append_inbox binding: the last ciphertext byte flipped",
    "kind": "negative",
    "layer": "constraint",
@@ -1200,7 +1200,7 @@
   },
   {
    "section": "custody",
-   "circuit": "append_inbox_with_evm_eip712",
+   "circuit": "append_inbox_with_evm_k256",
    "case": "append_inbox replay/operation: a RotateEncKey signature",
    "kind": "negative",
    "layer": "constraint",
@@ -1222,7 +1222,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: honest 400 of 1000 (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1238,7 +1238,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: the whole mirror, 1000 (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1254,7 +1254,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded binding: amount signed 400, executed 401",
    "kind": "negative",
    "layer": "constraint",
@@ -1275,7 +1275,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded binding: colour signed U, executed X",
    "kind": "negative",
    "layer": "constraint",
@@ -1297,7 +1297,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded binding: another recipient",
    "kind": "negative",
    "layer": "constraint",
@@ -1319,7 +1319,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded binding: the amount label of another decimal point signed",
    "kind": "negative",
    "layer": "constraint",
@@ -1341,7 +1341,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: over-withdrawal (1001 of a 1000 mirror), honestly signed",
    "kind": "negative",
    "layer": "runtime-only",
@@ -1357,7 +1357,7 @@
   },
   {
    "section": "custody",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded replay/operation: an AppendInbox signature",
    "kind": "negative",
    "layer": "constraint",
@@ -1379,7 +1379,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: honest partial spend 300 of 1000 (change 700, patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1395,7 +1395,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: honest full spend 1000 (no change)",
    "kind": "positive",
    "layer": "positive",
@@ -1411,7 +1411,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
    "kind": "negative",
    "layer": "constraint",
@@ -1432,7 +1432,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: valid signature for coin value 1000, witness coin of value 999",
    "kind": "negative",
    "layer": "constraint",
@@ -1453,7 +1453,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: valid signature for coin nonce N, witness coin of nonce N'",
    "kind": "negative",
    "layer": "constraint",
@@ -1475,7 +1475,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: valid signature for Merkle index 1, witness coin at index 2",
    "kind": "negative",
    "layer": "constraint",
@@ -1497,7 +1497,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: witness coin of value 200 below the signed amount 300",
    "kind": "negative",
    "layer": "runtime-only",
@@ -1513,7 +1513,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: honest partial spend 300 of 1000 (change 700, patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1529,7 +1529,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: honest full spend 1000 (no change)",
    "kind": "positive",
    "layer": "positive",
@@ -1545,7 +1545,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
    "kind": "negative",
    "layer": "constraint",
@@ -1566,7 +1566,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: valid signature for coin value 1000, witness coin of value 999",
    "kind": "negative",
    "layer": "constraint",
@@ -1587,7 +1587,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: valid signature for coin nonce N, witness coin of nonce N'",
    "kind": "negative",
    "layer": "constraint",
@@ -1609,7 +1609,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: valid signature for Merkle index 1, witness coin at index 2",
    "kind": "negative",
    "layer": "constraint",
@@ -1631,7 +1631,7 @@
   },
   {
    "section": "witness",
-   "circuit": "withdraw_shielded_to_contract_with_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
    "case": "withdraw_shielded_to_contract: witness coin of value 200 below the signed amount 300",
    "kind": "negative",
    "layer": "runtime-only",
@@ -1647,7 +1647,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a jubjub target (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1663,7 +1663,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the jubjub entry equals upstream's derive_device_entry_with_jubjub at epoch 0, counter 0; nothing at epoch 1",
    "kind": "positive",
    "layer": "positive",
@@ -1679,7 +1679,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a k256 target (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1695,7 +1695,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the k256 entry equals upstream's derive_device_entry_with_k256 at epoch 0, counter 0; nothing at epoch 1",
    "kind": "positive",
    "layer": "positive",
@@ -1711,7 +1711,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a p256 target (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1727,7 +1727,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the p256 entry equals upstream's derive_device_entry_with_p256 at epoch 0, counter 0; nothing at epoch 1",
    "kind": "positive",
    "layer": "positive",
@@ -1743,8 +1743,8 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
-   "case": "add_device: a evm_eip712 target (patched path)",
+   "circuit": "add_device_with_evm_k256",
+   "case": "add_device: a evm_k256 target (patched path)",
    "kind": "positive",
    "layer": "positive",
    "enforcement": null,
@@ -1759,8 +1759,8 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
-   "case": "add_device: the evm_eip712 entry equals upstream's derive_device_entry_with_evm_eip712 at epoch 0, counter 0; nothing at epoch 1",
+   "circuit": "add_device_with_evm_k256",
+   "case": "add_device: the evm_k256 entry equals upstream's derive_device_entry_with_evm_k256 at epoch 0, counter 0; nothing at epoch 1",
    "kind": "positive",
    "layer": "positive",
    "enforcement": null,
@@ -1775,7 +1775,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a sol_ed25519 target (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -1791,7 +1791,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the sol_ed25519 entry equals the ed25519 class recipe (from the point) at epoch 0, counter 0; nothing at epoch 1",
    "kind": "positive",
    "layer": "positive",
@@ -1807,7 +1807,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device binding: k256 x changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -1828,7 +1828,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device binding: k256 envelope changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -1850,7 +1850,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device binding: passkey origin changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -1872,7 +1872,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device binding: passkey RP hash changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -1894,7 +1894,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device binding: EVM target privacy salt changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -1916,7 +1916,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device binding: EVM target address changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -1938,7 +1938,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the effect line changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -1960,7 +1960,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device binding: a JubjubDevice signature executed under the Solana tag (same 64 payload bytes)",
    "kind": "negative",
    "layer": "constraint",
@@ -1982,15 +1982,15 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: an unregistered tag, valid signature over the passkey fields (the 117-byte class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a registered device tag",
+   "expect": "evm_k256: not a registered device tag",
    "assertsNamed": [
-    "evm_eip712: not a registered device tag",
+    "evm_k256: not a registered device tag",
     "descriptor: not a 117-byte device tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -2004,15 +2004,15 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: another recipe's tag (k256 boot), valid signature over the passkey fields (the 117-byte class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a registered device tag",
+   "expect": "evm_k256: not a registered device tag",
    "assertsNamed": [
-    "evm_eip712: not a registered device tag",
+    "evm_k256: not a registered device tag",
     "descriptor: not a 117-byte device tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -2026,15 +2026,15 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a passkey target whose origin holds a space, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: the passkey origin is not visible ASCII",
+   "expect": "evm_k256: the passkey origin is not visible ASCII",
    "assertsNamed": [
-    "evm_eip712: the passkey origin is not visible ASCII"
+    "evm_k256: the passkey origin is not visible ASCII"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2047,7 +2047,7 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a Solana target at the identity point, honestly signed (the approval shows its encoding 01 00\u202600)",
    "kind": "negative",
    "layer": "constraint",
@@ -2068,15 +2068,15 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a k256 target with envelope 2, shown with the envelope-1 label the circuit selects, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a k256 envelope",
+   "expect": "evm_k256: not a k256 envelope",
    "assertsNamed": [
-    "evm_eip712: not a k256 envelope"
+    "evm_k256: not a k256 envelope"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2089,15 +2089,15 @@
   },
   {
    "section": "devices",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a passkey target with a zero RP hash, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: a passkey's RP hash is zero",
+   "expect": "evm_k256: a passkey's RP hash is zero",
    "assertsNamed": [
-    "evm_eip712: a passkey's RP hash is zero"
+    "evm_k256: a passkey's RP hash is zero"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2110,15 +2110,15 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device (descriptor form): a passkey target with a zero RP hash, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: a passkey's RP hash is zero",
+   "expect": "evm_k256: a passkey's RP hash is zero",
    "assertsNamed": [
-    "evm_eip712: a passkey's RP hash is zero"
+    "evm_k256: a passkey's RP hash is zero"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2131,15 +2131,15 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device (descriptor form): a passkey target whose origin holds a space, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: the passkey origin is not visible ASCII",
+   "expect": "evm_k256: the passkey origin is not visible ASCII",
    "assertsNamed": [
-    "evm_eip712: the passkey origin is not visible ASCII"
+    "evm_k256: the passkey origin is not visible ASCII"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2152,15 +2152,15 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device (descriptor form): a k256 target with envelope 2, shown with the envelope-1 label, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a k256 envelope",
+   "expect": "evm_k256: not a k256 envelope",
    "assertsNamed": [
-    "evm_eip712: not a k256 envelope"
+    "evm_k256: not a k256 envelope"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2173,15 +2173,15 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: (r, s) = (0, 0), which verifies against the identity point when inverses of 0 are taken as 0",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero"
+    "evm_k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -2194,7 +2194,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: the k256 device by descriptor (epoch 0, counter 0)",
    "kind": "positive",
    "layer": "positive",
@@ -2210,7 +2210,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: the k256 entry by the literal form",
    "kind": "positive",
    "layer": "positive",
@@ -2226,7 +2226,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device binding: targetCounter signed 0, executed 1",
    "kind": "negative",
    "layer": "constraint",
@@ -2248,7 +2248,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device binding: the literal entry changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -2271,7 +2271,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device form swap: a RemoveUnknownDevice signature executed in the descriptor form",
    "kind": "negative",
    "layer": "constraint",
@@ -2292,7 +2292,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device form swap: a RemoveDevice signature executed in the literal form",
    "kind": "negative",
    "layer": "constraint",
@@ -2314,7 +2314,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device (literal form): the fixed revocation line changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -2336,7 +2336,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: a non-canonical absent literal entry",
    "kind": "negative",
    "layer": "constraint",
@@ -2357,7 +2357,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "S13: the device removes its own post-roll entry by descriptor",
    "kind": "negative",
    "layer": "constraint",
@@ -2378,7 +2378,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "S13: the device removes its own post-roll entry by the literal form",
    "kind": "negative",
    "layer": "constraint",
@@ -2400,7 +2400,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "the last device cannot be removed (account with one device)",
    "kind": "negative",
    "layer": "constraint",
@@ -2423,7 +2423,7 @@
   {
    "section": "devices",
    "circuit": "add_device_with_k256",
-   "case": "the upstream residual: a k256 device plants an evm_eip712 entry at device_epoch + 1 (raw entry)",
+   "case": "the upstream residual: a k256 device plants an evm_k256 entry at device_epoch + 1 (raw entry)",
    "kind": "positive",
    "layer": "positive",
    "enforcement": null,
@@ -2438,7 +2438,7 @@
   },
   {
    "section": "devices",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: the planted entry evicted by descriptor at target epoch 1 (= device_epoch + 1)",
    "kind": "positive",
    "layer": "positive",
@@ -2454,8 +2454,8 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
-   "case": "issue_grant: an evm_eip712 grantee, unshielded scope (patched path)",
+   "circuit": "issue_grant_with_evm_k256",
+   "case": "issue_grant: an evm_k256 grantee, unshielded scope (patched path)",
    "kind": "positive",
    "layer": "positive",
    "enforcement": null,
@@ -2470,7 +2470,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a k256 grantee (labelled origin hash), pinned caller",
    "kind": "positive",
    "layer": "positive",
@@ -2486,7 +2486,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a passkey grantee that can spend, with its RP hash",
    "kind": "positive",
    "layer": "positive",
@@ -2502,7 +2502,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a read-only passkey grantee, its RP hash zero (\"not applicable\")",
    "kind": "positive",
    "layer": "positive",
@@ -2518,7 +2518,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant binding: cap signed 450, executed 451",
    "kind": "negative",
    "layer": "constraint",
@@ -2539,7 +2539,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant binding: a caller pin added after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -2561,7 +2561,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant binding: the grantee's site label changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -2583,7 +2583,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant binding: the grantee slot changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -2605,7 +2605,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant binding: a k256 grantee's labelled origin hash changed after signing",
    "kind": "negative",
    "layer": "constraint",
@@ -2627,7 +2627,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the effect line changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -2649,15 +2649,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a read key without read (signed with readKey zero, executed with a key)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: a read key without read",
+   "expect": "evm_k256: a read key without read",
    "assertsNamed": [
-    "evm_eip712: a read key without read"
+    "evm_k256: a read key without read"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2670,15 +2670,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: an RP hash for a non-passkey grantee, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: an RP hash belongs to a spending passkey grant",
+   "expect": "evm_k256: an RP hash belongs to a spending passkey grant",
    "assertsNamed": [
-    "evm_eip712: an RP hash belongs to a spending passkey grant"
+    "evm_k256: an RP hash belongs to a spending passkey grant"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2691,15 +2691,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a read-only passkey grant with its RP hash, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: an RP hash belongs to a spending passkey grant",
+   "expect": "evm_k256: an RP hash belongs to a spending passkey grant",
    "assertsNamed": [
-    "evm_eip712: an RP hash belongs to a spending passkey grant"
+    "evm_k256: an RP hash belongs to a spending passkey grant"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2712,15 +2712,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a spending passkey grant with a zero RP hash, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: a spending passkey grant's RP hash is zero",
+   "expect": "evm_k256: a spending passkey grant's RP hash is zero",
    "assertsNamed": [
-    "evm_eip712: a spending passkey grant's RP hash is zero"
+    "evm_k256: a spending passkey grant's RP hash is zero"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2733,15 +2733,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: \"any recipient\" with a recipient, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: a recipient for any recipient",
+   "expect": "evm_k256: a recipient for any recipient",
    "assertsNamed": [
-    "evm_eip712: a recipient for any recipient"
+    "evm_k256: a recipient for any recipient"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2754,7 +2754,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the expiry word \"never\" signed for a non-zero expiresAt (forged word)",
    "kind": "negative",
    "layer": "constraint",
@@ -2775,7 +2775,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the date of 0 signed for expiresAt 0 in place of \"never\" (forged text)",
    "kind": "negative",
    "layer": "constraint",
@@ -2796,7 +2796,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the date one second later signed for expiresAt 1893456000 (forged text)",
    "kind": "negative",
    "layer": "constraint",
@@ -2817,7 +2817,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the words \"after 9999-12-31 23:59:59 UTC\" signed for an expiry in range (forged text)",
    "kind": "negative",
    "layer": "constraint",
@@ -2838,7 +2838,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the expiry date space-padded to 29 bytes (the exact text is signed)",
    "kind": "negative",
    "layer": "constraint",
@@ -2859,7 +2859,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the window pointer signed for a zero window in place of \"no window\" (forged word)",
    "kind": "negative",
    "layer": "constraint",
@@ -2880,7 +2880,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the passkeyRp word \"not applicable\" signed for a passkey grantee's RP hash (forged word)",
    "kind": "negative",
    "layer": "constraint",
@@ -2901,7 +2901,7 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the passkeyRp pointer signed for a non-passkey grant (forged word)",
    "kind": "negative",
    "layer": "constraint",
@@ -2922,15 +2922,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: read on with a zero read key, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: read without a read key",
+   "expect": "evm_k256: read without a read key",
    "assertsNamed": [
-    "evm_eip712: read without a read key"
+    "evm_k256: read without a read key"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -2943,15 +2943,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: an unregistered grant-id tag on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a registered grant-id tag",
+   "expect": "evm_k256: not a registered grant-id tag",
    "assertsNamed": [
-    "evm_eip712: not a registered grant-id tag",
+    "evm_k256: not a registered grant-id tag",
     "descriptor: not a 64-byte grant-id tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -2965,15 +2965,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: another recipe's tag (the passkey device tag) on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a registered grant-id tag",
+   "expect": "evm_k256: not a registered grant-id tag",
    "assertsNamed": [
-    "evm_eip712: not a registered grant-id tag",
+    "evm_k256: not a registered grant-id tag",
     "descriptor: not a 64-byte grant-id tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -2987,15 +2987,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
-   "case": "issue_grant: an evm_eip712 grantee whose site label has two spaces in a row, honestly signed",
+   "circuit": "issue_grant_with_evm_k256",
+   "case": "issue_grant: an evm_k256 grantee whose site label has two spaces in a row, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a site label",
+   "expect": "evm_k256: not a site label",
    "assertsNamed": [
-    "evm_eip712: not a site label"
+    "evm_k256: not a site label"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3008,15 +3008,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a passkey grantee whose origin holds a space, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: the passkey origin is not visible ASCII",
+   "expect": "evm_k256: the passkey origin is not visible ASCII",
    "assertsNamed": [
-    "evm_eip712: the passkey origin is not visible ASCII"
+    "evm_k256: the passkey origin is not visible ASCII"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3029,15 +3029,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a k256 grantee with envelope 2, shown with the envelope-1 label the circuit selects, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a k256 envelope",
+   "expect": "evm_k256: not a k256 envelope",
    "assertsNamed": [
-    "evm_eip712: not a k256 envelope"
+    "evm_k256: not a k256 envelope"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3050,15 +3050,15 @@
   },
   {
    "section": "grants",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: recipient kind 4, shown with the kind-3 label the circuit selects, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a recipient kind",
+   "expect": "evm_k256: not a recipient kind",
    "assertsNamed": [
-    "evm_eip712: not a recipient kind"
+    "evm_k256: not a recipient kind"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3071,8 +3071,8 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_grant_with_evm_eip712",
-   "case": "revoke_grant: the evm_eip712 grantee by descriptor",
+   "circuit": "revoke_grant_with_evm_k256",
+   "case": "revoke_grant: the evm_k256 grantee by descriptor",
    "kind": "positive",
    "layer": "positive",
    "enforcement": null,
@@ -3087,15 +3087,15 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant: a planted grant named with an unregistered grant-id tag on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a registered grant-id tag",
+   "expect": "evm_k256: not a registered grant-id tag",
    "assertsNamed": [
-    "evm_eip712: not a registered grant-id tag",
+    "evm_k256: not a registered grant-id tag",
     "descriptor: not a 64-byte grant-id tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -3109,15 +3109,15 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_grant_with_evm_eip712",
-   "case": "revoke_grant: a planted grant named by an evm_eip712 grantee whose site label has two spaces in a row, honestly signed",
+   "circuit": "revoke_grant_with_evm_k256",
+   "case": "revoke_grant: a planted grant named by an evm_k256 grantee whose site label has two spaces in a row, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a site label",
+   "expect": "evm_k256: not a site label",
    "assertsNamed": [
-    "evm_eip712: not a site label"
+    "evm_k256: not a site label"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3130,15 +3130,15 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant: a planted grant named by a passkey grantee whose origin holds a space, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: the passkey origin is not visible ASCII",
+   "expect": "evm_k256: the passkey origin is not visible ASCII",
    "assertsNamed": [
-    "evm_eip712: the passkey origin is not visible ASCII"
+    "evm_k256: the passkey origin is not visible ASCII"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3151,15 +3151,15 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant: a planted grant named by a k256 grantee with envelope 2, shown with the envelope-1 label, honestly signed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a k256 envelope",
+   "expect": "evm_k256: not a k256 envelope",
    "assertsNamed": [
-    "evm_eip712: not a k256 envelope"
+    "evm_k256: not a k256 envelope"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3172,7 +3172,7 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant binding: signed for slot 0, executed for the live slot-1 grant",
    "kind": "negative",
    "layer": "constraint",
@@ -3193,7 +3193,7 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_all_grants_with_evm_eip712",
+   "circuit": "revoke_all_grants_with_evm_k256",
    "case": "revoke_all_grants",
    "kind": "positive",
    "layer": "positive",
@@ -3209,7 +3209,7 @@
   },
   {
    "section": "grants",
-   "circuit": "revoke_all_grants_with_evm_eip712",
+   "circuit": "revoke_all_grants_with_evm_k256",
    "case": "revoke_all_grants replay/operation: a CancelRecovery signature (same bare frame)",
    "kind": "negative",
    "layer": "constraint",
@@ -3230,8 +3230,8 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
-   "case": "withdraw_unshielded_with_grant: 200 by the evm_eip712 grantee (patched path)",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
+   "case": "withdraw_unshielded_with_grant: 200 by the evm_k256 grantee (patched path)",
    "kind": "positive",
    "layer": "positive",
    "enforcement": null,
@@ -3246,7 +3246,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "the grant call advanced only its record (nonce +1), never auth_nonce or a device entry",
    "kind": "positive",
    "layer": "positive",
@@ -3262,7 +3262,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grantee binding: amount signed 200, executed 201",
    "kind": "negative",
    "layer": "constraint",
@@ -3283,7 +3283,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grantee replay: the approval of the first call after the record nonce advanced",
    "kind": "negative",
    "layer": "constraint",
@@ -3305,7 +3305,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grantee: another blind (a grant id with no record)",
    "kind": "negative",
    "layer": "runtime-only",
@@ -3321,7 +3321,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grantee replay/role: a device-role WithdrawUnshielded signature by the grantee key",
    "kind": "negative",
    "layer": "constraint",
@@ -3343,7 +3343,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grant seam: the attacker's key with the grantee's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -3362,7 +3362,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: 300 of a 1000 coin (change appended, patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -3378,7 +3378,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "grantee shielded: valid approval for colour A, witness coin of colour B (a grant scoped to B)",
    "kind": "negative",
    "layer": "constraint",
@@ -3399,7 +3399,7 @@
   },
   {
    "section": "grants",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "grantee shielded: valid approval for coin value 1000, witness coin of value 999",
    "kind": "negative",
    "layer": "constraint",
@@ -3420,7 +3420,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: the honest call on the base account (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -3436,7 +3436,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: over the per-call cap, honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -3457,7 +3457,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a grant scoped to another operation only (same object fields), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3478,7 +3478,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: over the cumulative cap (200 + 260 > 450), honestly signed with the live spent opening",
    "kind": "negative",
    "layer": "constraint",
@@ -3499,7 +3499,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: max coin value",
    "kind": "positive",
    "layer": "positive",
@@ -3515,7 +3515,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a wrong object opening (max coin value 301, the record 300), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3536,7 +3536,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a wrong spent opening (100 claimed, the record holds 0), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3557,7 +3557,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a recipient other than the pinned one, honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -3578,7 +3578,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: caller-pinned grant, no contract caller (a root call)",
    "kind": "negative",
    "layer": "constraint",
@@ -3600,7 +3600,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: caller-pinned grant, called by another contract",
    "kind": "negative",
    "layer": "constraint",
@@ -3621,7 +3621,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: pinned to the zero contract address, no caller (a root call): the presence and type asserts (one message), the commitment matching",
    "kind": "negative",
    "layer": "constraint",
@@ -3642,7 +3642,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: pinned to the zero contract address, a user caller: the type assert alone fires (one message with presence), the commitment matching",
    "kind": "negative",
    "layer": "constraint",
@@ -3663,7 +3663,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a revoked grant (tombstone), valid approval over its record",
    "kind": "negative",
    "layer": "constraint",
@@ -3684,7 +3684,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: an expired grant (expires_at 1), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3705,7 +3705,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3726,7 +3726,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a grant of a stale generation (UNREACHABLE today: revoke_all clears the map; the state built by copying the generation cell), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3747,15 +3747,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: a grant planted for the grantee under a site label with two spaces, the approval showing that label in its frame",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a site label",
+   "expect": "evm_k256: not a site label",
    "assertsNamed": [
-    "evm_eip712: not a site label"
+    "evm_k256: not a site label"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -3768,15 +3768,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: signature r = 0 on the grantee path: the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -3790,15 +3790,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: signature s = 0 on the grantee path (inverse of 0 taken as 0 in the copy): the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -3812,15 +3812,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: (r, s) = (0, 0) on the grantee path, which verifies against the identity point when inverses of 0 are taken as 0",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero"
+    "evm_k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -3833,7 +3833,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: the honest call on the base account (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -3849,7 +3849,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: over the per-call cap, honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -3870,7 +3870,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a grant scoped to another operation only (same object fields), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3891,7 +3891,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: over the cumulative cap (500 + 450 > 900), honestly signed with the live spent opening",
    "kind": "negative",
    "layer": "constraint",
@@ -3912,7 +3912,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a coin above the grant's max coin value (1000 > 600), honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -3933,7 +3933,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a wrong object opening (max coin value 1001, the record 1000), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3954,7 +3954,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a wrong spent opening (100 claimed, the record holds 0), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -3975,7 +3975,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a recipient other than the pinned one, honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -3996,7 +3996,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: caller-pinned grant, no contract caller (a root call)",
    "kind": "negative",
    "layer": "constraint",
@@ -4018,7 +4018,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: caller-pinned grant, called by another contract",
    "kind": "negative",
    "layer": "constraint",
@@ -4039,7 +4039,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: pinned to the zero contract address, no caller (a root call): the presence and type asserts (one message), the commitment matching",
    "kind": "negative",
    "layer": "constraint",
@@ -4060,7 +4060,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: pinned to the zero contract address, a user caller: the type assert alone fires (one message with presence), the commitment matching",
    "kind": "negative",
    "layer": "constraint",
@@ -4081,7 +4081,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a revoked grant (tombstone), valid approval over its record",
    "kind": "negative",
    "layer": "constraint",
@@ -4102,7 +4102,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: an expired grant (expires_at 1), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4123,7 +4123,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4144,7 +4144,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a grant of a stale generation (UNREACHABLE today: revoke_all clears the map; the state built by copying the generation cell), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4165,15 +4165,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a grant planted for the grantee under a site label with two spaces, the approval showing that label in its frame",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a site label",
+   "expect": "evm_k256: not a site label",
    "assertsNamed": [
-    "evm_eip712: not a site label"
+    "evm_k256: not a site label"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -4186,15 +4186,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: signature r = 0 on the grantee path: the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4208,15 +4208,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: signature s = 0 on the grantee path (inverse of 0 taken as 0 in the copy): the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4230,15 +4230,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: (r, s) = (0, 0) on the grantee path, which verifies against the identity point when inverses of 0 are taken as 0",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero"
+    "evm_k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -4251,7 +4251,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: coin nonce: signed N, witness coin N' (same colour, value, index)",
    "kind": "negative",
    "layer": "constraint",
@@ -4272,7 +4272,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: Merkle index: signed 1, witness coin at index 2",
    "kind": "negative",
    "layer": "constraint",
@@ -4293,7 +4293,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: change ciphertext: signed C1, executed C2",
    "kind": "negative",
    "layer": "constraint",
@@ -4314,7 +4314,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: encryption key: signed a stale key, executed with the live key",
    "kind": "negative",
    "layer": "constraint",
@@ -4335,7 +4335,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: a stale encryption key, honestly signed (the change sealed to a key that is no longer live)",
    "kind": "negative",
    "layer": "constraint",
@@ -4356,7 +4356,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: amount: signed 300, executed 301",
    "kind": "negative",
    "layer": "constraint",
@@ -4377,7 +4377,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: witness coin of value 200 below the signed amount 300",
    "kind": "negative",
    "layer": "runtime-only",
@@ -4393,7 +4393,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: the honest call on the base account (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -4409,7 +4409,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: over the per-call cap, honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -4430,7 +4430,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a grant scoped to another operation only (same object fields), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4451,7 +4451,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: over the cumulative cap (500 + 450 > 900), honestly signed with the live spent opening",
    "kind": "negative",
    "layer": "constraint",
@@ -4472,7 +4472,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a coin above the grant's max coin value (1000 > 600), honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -4493,7 +4493,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a wrong object opening (max coin value 1001, the record 1000), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4514,7 +4514,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a wrong spent opening (100 claimed, the record holds 0), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4535,7 +4535,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a recipient other than the pinned one, honestly signed",
    "kind": "negative",
    "layer": "constraint",
@@ -4556,7 +4556,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: caller-pinned grant, no contract caller (a root call)",
    "kind": "negative",
    "layer": "constraint",
@@ -4578,7 +4578,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: caller-pinned grant, called by another contract",
    "kind": "negative",
    "layer": "constraint",
@@ -4599,7 +4599,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: pinned to the zero contract address, no caller (a root call): the presence and type asserts (one message), the commitment matching",
    "kind": "negative",
    "layer": "constraint",
@@ -4620,7 +4620,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: pinned to the zero contract address, a user caller: the type assert alone fires (one message with presence), the commitment matching",
    "kind": "negative",
    "layer": "constraint",
@@ -4641,7 +4641,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a revoked grant (tombstone), valid approval over its record",
    "kind": "negative",
    "layer": "constraint",
@@ -4662,7 +4662,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: an expired grant (expires_at 1), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4683,7 +4683,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a grant of a stale device epoch (after a recovery finalisation), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4704,7 +4704,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a grant of a stale generation (UNREACHABLE today: revoke_all clears the map; the state built by copying the generation cell), valid approval",
    "kind": "negative",
    "layer": "constraint",
@@ -4725,15 +4725,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a grant planted for the grantee under a site label with two spaces, the approval showing that label in its frame",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: not a site label",
+   "expect": "evm_k256: not a site label",
    "assertsNamed": [
-    "evm_eip712: not a site label"
+    "evm_k256: not a site label"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -4746,15 +4746,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: signature r = 0 on the grantee path: the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4768,15 +4768,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: signature s = 0 on the grantee path (inverse of 0 taken as 0 in the copy): the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4790,15 +4790,15 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: (r, s) = (0, 0) on the grantee path, which verifies against the identity point when inverses of 0 are taken as 0",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero"
+    "evm_k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -4811,7 +4811,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: coin nonce: signed N, witness coin N' (same colour, value, index)",
    "kind": "negative",
    "layer": "constraint",
@@ -4832,7 +4832,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: Merkle index: signed 1, witness coin at index 2",
    "kind": "negative",
    "layer": "constraint",
@@ -4853,7 +4853,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: change ciphertext: signed C1, executed C2",
    "kind": "negative",
    "layer": "constraint",
@@ -4874,7 +4874,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: encryption key: signed a stale key, executed with the live key",
    "kind": "negative",
    "layer": "constraint",
@@ -4895,7 +4895,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: a stale encryption key, honestly signed (the change sealed to a key that is no longer live)",
    "kind": "negative",
    "layer": "constraint",
@@ -4916,7 +4916,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: amount: signed 300, executed 301",
    "kind": "negative",
    "layer": "constraint",
@@ -4937,7 +4937,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: witness coin of value 200 below the signed amount 300",
    "kind": "negative",
    "layer": "runtime-only",
@@ -4953,7 +4953,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: valid approval for colour A, witness coin of colour B (a grant scoped to B)",
    "kind": "negative",
    "layer": "constraint",
@@ -4974,7 +4974,7 @@
   },
   {
    "section": "grant-matrix",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: valid approval for coin value 1000, witness coin of value 999",
    "kind": "negative",
    "layer": "constraint",
@@ -4995,7 +4995,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the attacker's key with the victim device's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5014,7 +5014,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device (descriptor form): the attacker's key with the victim device's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5033,7 +5033,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device (literal form): the attacker's key with the victim device's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5052,7 +5052,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the attacker's key with the victim device's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5071,7 +5071,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a scope salt the prover chose, with the device's honest approval",
    "kind": "negative",
    "layer": "constraint",
@@ -5090,7 +5090,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant: the attacker's key with the victim device's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5109,7 +5109,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "revoke_all_grants_with_evm_eip712",
+   "circuit": "revoke_all_grants_with_evm_k256",
    "case": "revoke_all_grants: the attacker's key with the victim device's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5128,7 +5128,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "withdraw_unshielded_with_grant: grant seam, the attacker's key with the grantee's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5147,7 +5147,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "withdraw_shielded_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
    "case": "withdraw_shielded_with_grant: grant seam, the attacker's key with the grantee's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5166,7 +5166,7 @@
   },
   {
    "section": "frame-lifecycle",
-   "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "case": "withdraw_shielded_to_contract_with_grant: grant seam, the attacker's key with the grantee's address forged into the derivation",
    "kind": "negative",
    "layer": "constraint",
@@ -5185,7 +5185,7 @@
   },
   {
    "section": "qa-s3",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish_recovery_session: the canonical renderings (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -5201,7 +5201,7 @@
   },
   {
    "section": "qa-s3",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "phi1 shown as the non-canonical rendering of the executed value (value + r, little-endian)",
    "kind": "negative",
    "layer": "constraint",
@@ -5222,7 +5222,7 @@
   },
   {
    "section": "qa-s3",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "phi2 shown as the non-canonical rendering of the executed value (value + r, little-endian)",
    "kind": "negative",
    "layer": "constraint",
@@ -5243,7 +5243,7 @@
   },
   {
    "section": "qa-s3",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "phi3 shown as the non-canonical rendering of the executed value (value + r, little-endian)",
    "kind": "negative",
    "layer": "constraint",
@@ -5264,7 +5264,7 @@
   },
   {
    "section": "qa-s3",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "recoveryKeyX shown as the non-canonical rendering of the executed value (value + r, little-endian)",
    "kind": "negative",
    "layer": "constraint",
@@ -5285,7 +5285,7 @@
   },
   {
    "section": "qa-s3",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "recoveryKeyY shown as the non-canonical rendering of the executed value (value + r, little-endian)",
    "kind": "negative",
    "layer": "constraint",
@@ -5306,7 +5306,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish_recovery_session: the honest session (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -5322,7 +5322,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: the effect line changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5343,7 +5343,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: recoveryKeyX changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5365,7 +5365,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: recoveryKeyY changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5387,7 +5387,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: sessionNonce changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5409,7 +5409,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: phi1 changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5431,7 +5431,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: phi2 changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5453,7 +5453,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: phi3 (signed non-zero, executed zero) changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5475,7 +5475,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: phi4 (signed non-zero, executed zero) changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5497,7 +5497,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: phiLength (signed 3, executed 2) changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5519,7 +5519,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: wrap (one byte) changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5541,7 +5541,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish binding: authNonce (n + 1) changed in the signed message",
    "kind": "negative",
    "layer": "constraint",
@@ -5563,7 +5563,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish replay/operation: a CancelRecovery signature (bare frame) presented as the session approval",
    "kind": "negative",
    "layer": "constraint",
@@ -5585,7 +5585,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish replay: the landed session approval replayed (entry consumed, nonce advanced, stored values)",
    "kind": "negative",
    "layer": "constraint",
@@ -5609,7 +5609,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: an empty vector (length 0)",
    "kind": "negative",
    "layer": "constraint",
@@ -5630,7 +5630,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: a length beyond the slot bound (5)",
    "kind": "negative",
    "layer": "constraint",
@@ -5651,7 +5651,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: length 1 with phi2 non-zero",
    "kind": "negative",
    "layer": "constraint",
@@ -5672,7 +5672,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: length 2 with phi3 non-zero",
    "kind": "negative",
    "layer": "constraint",
@@ -5693,7 +5693,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: length 3 with phi4 non-zero",
    "kind": "negative",
    "layer": "constraint",
@@ -5714,7 +5714,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: an all-zero session identifier",
    "kind": "negative",
    "layer": "constraint",
@@ -5735,7 +5735,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: the stored session identifier reused",
    "kind": "negative",
    "layer": "constraint",
@@ -5756,7 +5756,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: the stored recovery commitment reused",
    "kind": "negative",
    "layer": "constraint",
@@ -5777,7 +5777,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: the identity as the new recovery key",
    "kind": "negative",
    "layer": "constraint",
@@ -5799,7 +5799,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature: a small-order recovery key (runtime trap)",
    "kind": "negative",
    "layer": "runtime-only",
@@ -5815,7 +5815,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish: an unenrolled evm key signs the session",
    "kind": "negative",
    "layer": "constraint",
@@ -5836,7 +5836,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish: the device key with another blind",
    "kind": "negative",
    "layer": "constraint",
@@ -5858,15 +5858,15 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish: signature r = 0: the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -5880,7 +5880,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish under a valid signature while a recovery is pending",
    "kind": "negative",
    "layer": "constraint",
@@ -5901,7 +5901,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "recover_cancel: the second evm device vetoes the pending recovery (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -5917,7 +5917,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel binding: a RevokeAllGrants signature over the same bare frame",
    "kind": "negative",
    "layer": "constraint",
@@ -5938,7 +5938,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel binding: a CancelRecovery signature over authNonce + 1",
    "kind": "negative",
    "layer": "constraint",
@@ -5960,7 +5960,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel binding: a CancelRecovery signature for another account",
    "kind": "negative",
    "layer": "constraint",
@@ -5982,7 +5982,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel: an unenrolled evm key",
    "kind": "negative",
    "layer": "constraint",
@@ -6003,15 +6003,15 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel: signature r = 0: the zero-scalar assert and the signature check",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero",
+    "evm_k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -6025,15 +6025,15 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel: (r, s) = (0, 0), which verifies against the identity point when inverses of 0 are taken as 0",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: signature scalar is zero",
+   "expect": "evm_k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_eip712: signature scalar is zero"
+    "evm_k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -6046,7 +6046,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel under a valid signature with nothing pending",
    "kind": "negative",
    "layer": "constraint",
@@ -6067,7 +6067,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel replay: the landed cancel replayed (entry consumed, nonce advanced, nothing pending)",
    "kind": "negative",
    "layer": "constraint",
@@ -6090,7 +6090,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "publish: the attacker's key with the victim's address forged into the derivation (frame mutant)",
    "kind": "negative",
    "layer": "constraint",
@@ -6109,7 +6109,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "cancel: the attacker's key with the victim's address forged into the derivation (frame mutant)",
    "kind": "negative",
    "layer": "constraint",
@@ -6144,7 +6144,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "after the recovery: a fresh evm device enrolled by the successor publishes a session (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -6160,7 +6160,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "after the recovery: the fresh evm device cancels a new pending recovery (patched path)",
    "kind": "positive",
    "layer": "positive",
@@ -6176,7 +6176,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "after the recovery: the planted entry's device W (counter 0 at the new epoch) publishes",
    "kind": "negative",
    "layer": "constraint",
@@ -6198,7 +6198,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "after the recovery: the planted entry's device W (counter 0 at the new epoch) cancels a pending recovery",
    "kind": "negative",
    "layer": "constraint",
@@ -6220,7 +6220,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "after the recovery: the original device publishes",
    "kind": "negative",
    "layer": "constraint",
@@ -6242,7 +6242,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "after the recovery: the original device cancels a pending recovery",
    "kind": "negative",
    "layer": "constraint",
@@ -6264,7 +6264,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "publish_recovery_session_with_evm_eip712",
+   "circuit": "publish_recovery_session_with_evm_k256",
    "case": "after the recovery: the second evm device publishes",
    "kind": "negative",
    "layer": "constraint",
@@ -6286,7 +6286,7 @@
   },
   {
    "section": "recovery",
-   "circuit": "recover_cancel_with_evm_eip712",
+   "circuit": "recover_cancel_with_evm_k256",
    "case": "after the recovery: the second evm device cancels a pending recovery",
    "kind": "negative",
    "layer": "constraint",
@@ -6308,16 +6308,16 @@
   },
   {
    "section": "hints",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "device seam: a byte of the key's x coordinate",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value",
-    "evm_eip712: hash hint does not match the hash"
+    "evm_k256: byte hint does not match its value",
+    "evm_k256: hash hint does not match the hash"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6330,15 +6330,15 @@
   },
   {
    "section": "hints",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "device seam: a byte of the key hash outside the address",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: hash hint does not match the hash",
+   "expect": "evm_k256: hash hint does not match the hash",
    "assertsNamed": [
-    "evm_eip712: hash hint does not match the hash"
+    "evm_k256: hash hint does not match the hash"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -6351,15 +6351,15 @@
   },
   {
    "section": "hints",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "device seam: a byte of the account hash outside the verifying contract",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: hash hint does not match the hash",
+   "expect": "evm_k256: hash hint does not match the hash",
    "assertsNamed": [
-    "evm_eip712: hash hint does not match the hash"
+    "evm_k256: hash hint does not match the hash"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -6372,15 +6372,15 @@
   },
   {
    "section": "hints",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "device seam: a byte of the digest",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: digest hint does not match the digest",
+   "expect": "evm_k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_eip712: digest hint does not match the digest",
+    "evm_k256: digest hint does not match the digest",
     "invalid signature"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -6394,16 +6394,16 @@
   },
   {
    "section": "hints",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "device seam: a byte of auth_nonce",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: word hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6416,7 +6416,7 @@
   },
   {
    "section": "hints",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "device seam: the carry attack on auth_nonce (byte + 256, next \u2212 1)",
    "kind": "negative",
    "layer": "constraint",
@@ -6435,16 +6435,16 @@
   },
   {
    "section": "hints",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "activation: a byte of the key's y coordinate",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value",
-    "evm_eip712: hash hint does not match the hash"
+    "evm_k256: byte hint does not match its value",
+    "evm_k256: hash hint does not match the hash"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6457,16 +6457,16 @@
   },
   {
    "section": "hints",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: a byte of the amount",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: word hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6479,7 +6479,7 @@
   },
   {
    "section": "hints",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: a digit of the site's amount label",
    "kind": "negative",
    "layer": "constraint",
@@ -6488,7 +6488,7 @@
    "expect": "display: the site amount label does not match the value",
    "assertsNamed": [
     "display: the site amount label does not match the value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6501,7 +6501,7 @@
   },
   {
    "section": "hints",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: the carry attack on the amount",
    "kind": "negative",
    "layer": "constraint",
@@ -6520,16 +6520,16 @@
   },
   {
    "section": "hints",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: a byte of the change",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: word hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6542,16 +6542,16 @@
   },
   {
    "section": "hints",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a byte of the target's x coordinate",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: byte hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6564,7 +6564,7 @@
   },
   {
    "section": "hints",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a byte of the filler key's encoding (k256 target)",
    "kind": "negative",
    "layer": "constraint",
@@ -6585,7 +6585,7 @@
   },
   {
    "section": "hints",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a byte of a Solana target's x coordinate",
    "kind": "negative",
    "layer": "constraint",
@@ -6606,7 +6606,7 @@
   },
   {
    "section": "hints",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a byte of a Solana target's encoding (the key shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -6615,7 +6615,7 @@
    "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
    "assertsNamed": [
     "descriptor: the Ed25519 key bytes do not match the point's y",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6628,7 +6628,7 @@
   },
   {
    "section": "hints",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a digit of a Solana target's base58 text",
    "kind": "negative",
    "layer": "constraint",
@@ -6637,7 +6637,7 @@
    "expect": "display: the base58 carry hints do not split the leading digits",
    "assertsNamed": [
     "display: the base58 carry hints do not split the leading digits",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6650,15 +6650,15 @@
   },
   {
    "section": "hints",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: a byte of a passkey target's origin",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value"
+    "evm_k256: byte hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -6671,16 +6671,16 @@
   },
   {
    "section": "hints",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a byte of the grantee's site label",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: byte hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6693,16 +6693,16 @@
   },
   {
    "section": "hints",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a byte of the scope's cap",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: word hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6715,7 +6715,7 @@
   },
   {
    "section": "hints",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: a digit of the expiry's UTC date",
    "kind": "negative",
    "layer": "constraint",
@@ -6724,7 +6724,7 @@
    "expect": "display: the date and time do not match the value",
    "assertsNamed": [
     "display: the date and time do not match the value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6737,16 +6737,16 @@
   },
   {
    "section": "hints",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grant seam: a byte of the frame's site label",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: byte hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6759,16 +6759,16 @@
   },
   {
    "section": "hints",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grant seam: a byte of the record's issuedAt",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value",
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: word hint does not match its value",
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6781,15 +6781,15 @@
   },
   {
    "section": "hints",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grant seam: a byte of the digest",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: digest hint does not match the digest",
+   "expect": "evm_k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_eip712: digest hint does not match the digest",
+    "evm_k256: digest hint does not match the digest",
     "invalid grant signature"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -6803,7 +6803,7 @@
   },
   {
    "section": "texts",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: expiry 0 (\"never\" shown) with a date text of another shape, 1970/01-01",
    "kind": "negative",
    "layer": "constraint",
@@ -6824,7 +6824,7 @@
   },
   {
    "section": "texts",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: 1970-12-01 shown as month 13 of 1970 (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -6845,7 +6845,7 @@
   },
   {
    "section": "texts",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: 2100-03-01 shown as 2100-02-29 (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -6866,7 +6866,7 @@
   },
   {
    "section": "texts",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: 86400 shown as 1970-01-01 24:00:00 (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -6887,7 +6887,7 @@
   },
   {
    "section": "texts",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: 2026-06-01 with the year split of 2027",
    "kind": "negative",
    "layer": "constraint",
@@ -6908,7 +6908,7 @@
   },
   {
    "section": "texts",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: 253402300800 (the words shown) with the date text 9999-12-31 23:59:59",
    "kind": "negative",
    "layer": "constraint",
@@ -6929,7 +6929,7 @@
   },
   {
    "section": "texts",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: 2030-01-01 00:00:00 shown as 00:00:01 (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -6950,7 +6950,7 @@
   },
   {
    "section": "texts",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device (k256 target): the filler key's base58 digits with a digit of 58 or more (the value kept)",
    "kind": "negative",
    "layer": "constraint",
@@ -6971,7 +6971,7 @@
   },
   {
    "section": "texts",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device (k256 target): the filler key's base58 digits with one digit changed, the read-back hints kept",
    "kind": "negative",
    "layer": "constraint",
@@ -6992,7 +6992,7 @@
   },
   {
    "section": "texts",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device (k256 target): the filler key's base58 digits of a value with byte 20 changed",
    "kind": "negative",
    "layer": "constraint",
@@ -7013,7 +7013,7 @@
   },
   {
    "section": "texts",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device (k256 target): the filler key's base58 digits of a value with byte 3 changed",
    "kind": "negative",
    "layer": "constraint",
@@ -7034,7 +7034,7 @@
   },
   {
    "section": "texts",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device (k256 target): the filler key's encoding with the other sign bit",
    "kind": "negative",
    "layer": "constraint",
@@ -7055,7 +7055,7 @@
   },
   {
    "section": "texts",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device (Solana target): its key shown with a leading \"1\" too many (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -7076,7 +7076,7 @@
   },
   {
    "section": "texts",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: 10 shown as \"0.000010 TO\\nKEN\" (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -7097,7 +7097,7 @@
   },
   {
    "section": "texts",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: 10 shown as \"0.000010 .5\" (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -7118,7 +7118,7 @@
   },
   {
    "section": "texts",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: 1 shown as \"0.0000000000000000001 TOKEN\" (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -7139,7 +7139,7 @@
   },
   {
    "section": "texts",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: 10 shown as \"0.000010 ABCDEFGHI\" (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -7160,7 +7160,7 @@
   },
   {
    "section": "texts",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: 15 shown as \"01.5 X\" (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -7181,7 +7181,7 @@
   },
   {
    "section": "texts",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: 10 shown as \"0.000011 TOKEN\" (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
@@ -7202,15 +7202,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "rotate_enc_key: the device's signature over an unrelated 32-byte value, passed as the digest hint",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: digest hint does not match the digest",
+   "expect": "evm_k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7223,15 +7223,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "rotate_enc_key_with_evm_eip712",
+   "circuit": "rotate_enc_key_with_evm_k256",
    "case": "rotate_enc_key: the approval made at authNonce 0, replayed at authNonce 1 with the nonce hint of 0 (its signed nonce)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint on a declared read (+ node transcript replay)",
    "declaredRead": "auth_nonce",
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value"
+    "evm_k256: word hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7244,15 +7244,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "withdraw_unshielded_with_evm_eip712",
+   "circuit": "withdraw_unshielded_with_evm_k256",
    "case": "withdraw_unshielded: the amount hint of 11, shown and signed, 10 executed (the label is the executed amount's)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value"
+    "evm_k256: word hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7265,15 +7265,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "withdraw_shielded_with_evm_eip712",
+   "circuit": "withdraw_shielded_with_evm_k256",
    "case": "withdraw_shielded: the change hint of 701, shown and signed, 700 executed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value"
+    "evm_k256: word hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7286,15 +7286,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the k256 target's x hint with a byte changed, the shown x signed, the real x executed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value"
+    "evm_k256: byte hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7307,15 +7307,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: targetEpoch 1 shown and signed, 0 executed (the epoch hint of 1)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value"
+    "evm_k256: word hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7328,15 +7328,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: targetCounter 1 shown and signed, 0 executed (the counter hint of 1)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value"
+    "evm_k256: word hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7349,7 +7349,7 @@
   },
   {
    "section": "isolate",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: an unenrolled evm key signs the removal of a live device (the two-form body's membership check)",
    "kind": "negative",
    "layer": "constraint",
@@ -7370,15 +7370,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the cap hint of 1001, shown and signed, 1000 executed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value"
+    "evm_k256: word hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7391,15 +7391,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the grantee's site label hint shown as \"cank.example\" and signed, \"bank.example\" executed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value"
+    "evm_k256: byte hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7412,15 +7412,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grantee twin: the grantee's signature over an unrelated 32-byte value, passed as the digest hint",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: digest hint does not match the digest",
+   "expect": "evm_k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_eip712: digest hint does not match the digest"
+    "evm_k256: digest hint does not match the digest"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7433,15 +7433,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "withdraw_unshielded_with_grant_evm_eip712",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
    "case": "grantee twin: the approval made at grantNonce 0, replayed at grantNonce 1 with the nonce hint of 0 and the current spent opening",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint on a declared read (+ node transcript replay)",
    "declaredRead": "the grant record's nonce",
-   "expect": "evm_eip712: word hint does not match its value",
+   "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: word hint does not match its value"
+    "evm_k256: word hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7454,15 +7454,15 @@
   },
   {
    "section": "isolate",
-   "circuit": "activate_initial_device_with_evm_eip712",
+   "circuit": "activate_initial_device_with_evm_k256",
    "case": "activation: the key's y hint with a byte changed, the boot commitment made over the address those bytes hash to",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_eip712: byte hint does not match its value",
+   "expect": "evm_k256: byte hint does not match its value",
    "assertsNamed": [
-    "evm_eip712: byte hint does not match its value"
+    "evm_k256: byte hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7475,7 +7475,7 @@
   },
   {
    "section": "places",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the Solana target's encoding with one byte of y changed, shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7496,7 +7496,7 @@
   },
   {
    "section": "places",
-   "circuit": "add_device_with_evm_eip712",
+   "circuit": "add_device_with_evm_k256",
    "case": "add_device: the Solana target's encoding with the other sign bit, shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7517,7 +7517,7 @@
   },
   {
    "section": "places",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the Solana grantee's encoding with one byte of y changed, shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7538,7 +7538,7 @@
   },
   {
    "section": "places",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the Solana grantee's encoding with the other sign bit, shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7559,7 +7559,7 @@
   },
   {
    "section": "places",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: the Solana grantee's x bytes with one byte changed (x's parity kept), under the honest approval",
    "kind": "negative",
    "layer": "constraint",
@@ -7580,7 +7580,7 @@
   },
   {
    "section": "places",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: the Solana target's encoding with one byte of y changed (its entry planted), shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7601,7 +7601,7 @@
   },
   {
    "section": "places",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: the Solana target's encoding with the other sign bit (its entry planted), shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7622,7 +7622,7 @@
   },
   {
    "section": "places",
-   "circuit": "remove_device_with_evm_eip712",
+   "circuit": "remove_device_with_evm_k256",
    "case": "remove_device: the Solana target's x bytes with one byte changed (x's parity kept), under the honest approval",
    "kind": "negative",
    "layer": "constraint",
@@ -7643,7 +7643,7 @@
   },
   {
    "section": "places",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant: the Solana grantee's encoding with one byte of y changed (its grant planted), shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7664,7 +7664,7 @@
   },
   {
    "section": "places",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant: the Solana grantee's encoding with the other sign bit (its grant planted), shown in base58 and signed as shown",
    "kind": "negative",
    "layer": "constraint",
@@ -7685,7 +7685,7 @@
   },
   {
    "section": "places",
-   "circuit": "revoke_grant_with_evm_eip712",
+   "circuit": "revoke_grant_with_evm_k256",
    "case": "revoke_grant: the Solana grantee's x bytes with one byte changed (x's parity kept), under the honest approval",
    "kind": "negative",
    "layer": "constraint",
@@ -7706,7 +7706,7 @@
   },
   {
    "section": "places",
-   "circuit": "issue_grant_with_evm_eip712",
+   "circuit": "issue_grant_with_evm_k256",
    "case": "issue_grant: 2026-06-01 shown as 2026-06-02 with the year split (5, 0, 5, 5), which keeps the equation and breaks the bound (signed as shown)",
    "kind": "negative",
    "layer": "constraint",
