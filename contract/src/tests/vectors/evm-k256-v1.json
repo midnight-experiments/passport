@@ -1,12 +1,12 @@
 {
-  "name": "evm_eip712 signing bytes (AUTH-EIP712-PASSPORT-EVM-V1)",
+  "name": "evm_k256 signing bytes (AUTH-EIP712-PASSPORT-EVM-V1)",
   "domain": {
     "name": "Midnight Passport Account",
     "version": "1",
     "verifyingContract": "low 20 bytes of keccak256(account)"
   },
   "hashesBy": "viem 2.45.1 hashTypedData",
-  "seed": "evm-eip712-vectors/v1",
+  "seed": "evm-k256-vectors/v1",
   "typeStrings": {
     "WithdrawUnshielded": "WithdrawUnshielded(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient)",
     "WithdrawShielded": "WithdrawShielded(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)",
@@ -2269,7 +2269,7 @@
       "digest": "0xc082bded9a677d75f5b3da6bf6e957cc0a42acd5988415e60fc734649505dedc"
     },
     {
-      "name": "add_device/evm_eip712",
+      "name": "add_device/evm_k256",
       "op": "addDevice",
       "frame": {
         "account": "b9c4792d49262747383b613f54db88a32de32e7c16574443446e7e078f380f14",
@@ -2278,7 +2278,7 @@
       },
       "args": {
         "descriptor": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6465766963653a65766d3a76310000",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "91e7567bf74fa9d850d6239ca70d74c5d09ad7f22f840b096ba78ff19a47bc16",
@@ -2365,7 +2365,7 @@
       "digest": "0xd3b000e6ae5cb3880069d704132976f5534c9ed8d36ec6bbb9150fea07c65e4c"
     },
     {
-      "name": "remove_device/evm_eip712",
+      "name": "remove_device/evm_k256",
       "op": "removeDevice",
       "frame": {
         "account": "315639a9d5c2ad28abb566082afa7ffb8082638f4d087bca371792e738960aa3",
@@ -2374,7 +2374,7 @@
       },
       "args": {
         "descriptor": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6465766963653a65766d3a76310000",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "91e7567bf74fa9d850d6239ca70d74c5d09ad7f22f840b096ba78ff19a47bc16",
@@ -3294,7 +3294,7 @@
       "digest": "0x7595aa00a73f1208fe89fc4cdd83c1e11eba4d8b13b386aaaea5676f2b3a6a20"
     },
     {
-      "name": "issue_grant/evm_eip712",
+      "name": "issue_grant/evm_k256",
       "op": "issueGrant",
       "frame": {
         "account": "b9c4792d49262747383b613f54db88a32de32e7c16574443446e7e078f380f14",
@@ -3303,7 +3303,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -3520,7 +3520,7 @@
       "digest": "0x4183b4930a403ff808fc41f554213ce8db6602df498011c8ef465f19c6aad624"
     },
     {
-      "name": "revoke_grant/evm_eip712",
+      "name": "revoke_grant/evm_k256",
       "op": "revokeGrant",
       "frame": {
         "account": "0000000000000000000000000000000000000000000000000000000000000001",
@@ -3529,7 +3529,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -5724,7 +5724,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -5950,7 +5950,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -6176,7 +6176,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -6402,7 +6402,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -6628,7 +6628,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -6854,7 +6854,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -7080,7 +7080,7 @@
       },
       "args": {
         "grantee": {
-          "scheme": "evm_eip712",
+          "scheme": "evm_k256",
           "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
           "key": "0000000000000000000000000000000000000000000000000000000000000000",
           "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -7974,14 +7974,14 @@
     },
     {
       "name": "space-padded device tag",
-      "base": "add_device/evm_eip712",
+      "base": "add_device/evm_k256",
       "refusedBy": [
         "client",
         "runtime"
       ],
       "why": "a registered text with non-zero padding",
       "input": {
-        "name": "add_device/evm_eip712",
+        "name": "add_device/evm_k256",
         "op": "addDevice",
         "frame": {
           "account": "b9c4792d49262747383b613f54db88a32de32e7c16574443446e7e078f380f14",
@@ -7990,7 +7990,7 @@
         },
         "args": {
           "descriptor": {
-            "scheme": "evm_eip712",
+            "scheme": "evm_k256",
             "tag": "6d69646e696768743a6163636f756e743a6465766963653a65766d3a76312020",
             "key": "0000000000000000000000000000000000000000000000000000000000000000",
             "key2": "91e7567bf74fa9d850d6239ca70d74c5d09ad7f22f840b096ba78ff19a47bc16",
@@ -8116,14 +8116,14 @@
     },
     {
       "name": "site label ending in a space",
-      "base": "issue_grant/evm_eip712",
+      "base": "issue_grant/evm_k256",
       "refusedBy": [
         "client",
         "runtime"
       ],
       "why": "a label whose text ends in a space is not one-to-one",
       "input": {
-        "name": "issue_grant/evm_eip712",
+        "name": "issue_grant/evm_k256",
         "op": "issueGrant",
         "frame": {
           "account": "b9c4792d49262747383b613f54db88a32de32e7c16574443446e7e078f380f14",
@@ -8132,7 +8132,7 @@
         },
         "args": {
           "grantee": {
-            "scheme": "evm_eip712",
+            "scheme": "evm_k256",
             "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
             "key": "0000000000000000000000000000000000000000000000000000000000000000",
             "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",
@@ -8260,14 +8260,14 @@
     },
     {
       "name": "recipient kind with no label",
-      "base": "issue_grant/evm_eip712",
+      "base": "issue_grant/evm_k256",
       "refusedBy": [
         "client",
         "runtime"
       ],
       "why": "recipientKind 4 has no text label",
       "input": {
-        "name": "issue_grant/evm_eip712",
+        "name": "issue_grant/evm_k256",
         "op": "issueGrant",
         "frame": {
           "account": "b9c4792d49262747383b613f54db88a32de32e7c16574443446e7e078f380f14",
@@ -8276,7 +8276,7 @@
         },
         "args": {
           "grantee": {
-            "scheme": "evm_eip712",
+            "scheme": "evm_k256",
             "tag": "6d69646e696768743a6163636f756e743a6772616e743a69643a65766d3a7631",
             "key": "0000000000000000000000000000000000000000000000000000000000000000",
             "key2": "aa694bc98d4f1e708679aa2428b051c363f5156e0c7bff82dc7324ac5b17ac1b",

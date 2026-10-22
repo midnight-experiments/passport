@@ -1,6 +1,6 @@
 {
   "testId": "full-roster-deploy",
-  "name": "The 68-circuit account (k256, jubjub, p256, evm_eip712 in ARMS) deployed in waves by upstream deployAccountInWaves and used through upstream client paths",
+  "name": "The 68-circuit account (k256, jubjub, p256, evm_k256 in ARMS) deployed in waves by upstream deployAccountInWaves and used through upstream client paths",
   "ranAt": "2026-10-18T00:19:30.697Z",
   "finishedAt": "2026-10-18T00:30:56.684Z",
   "build": "evm-arm ace595b (this arm's final formats; full keys; the 52 upstream account circuits byte-identical to upstream 0d7bb0b)",
@@ -9,7 +9,7 @@
     "k256",
     "jubjub",
     "p256",
-    "evm_eip712"
+    "evm_k256"
   ],
   "budgetVerifierBytesPerWave": 15000,
   "rosterSize": 68,
@@ -30,14 +30,14 @@
       "largestWaveVerifierBytes": 14742,
       "everyWaveWithinBudget": true
     },
-    "evm_eip712": {
+    "evm_k256": {
       "waves": 14,
       "largestWaveVerifierBytes": 14742,
       "everyWaveWithinBudget": true
     }
   },
   "deploy": {
-    "firstArm": "evm_eip712",
+    "firstArm": "evm_k256",
     "address": "0571764559f40d4d5e6622bcd8686a70c5719afc439682d7bbd3e779eedaddc4",
     "deployMs": 252623,
     "waves": [
@@ -47,9 +47,9 @@
         "circuits": [
           "deposit_unshielded",
           "deposit_shielded",
-          "activate_initial_device_with_evm_eip712",
-          "withdraw_unshielded_with_evm_eip712",
-          "append_inbox_with_evm_eip712"
+          "activate_initial_device_with_evm_k256",
+          "withdraw_unshielded_with_evm_k256",
+          "append_inbox_with_evm_k256"
         ],
         "verifierBytes": 13437,
         "retiresAuthority": false,
@@ -63,10 +63,10 @@
         "index": 2,
         "kind": "maintenance",
         "circuits": [
-          "withdraw_shielded_with_evm_eip712",
-          "withdraw_shielded_to_contract_with_evm_eip712",
-          "rotate_enc_key_with_evm_eip712",
-          "add_device_with_evm_eip712"
+          "withdraw_shielded_with_evm_k256",
+          "withdraw_shielded_to_contract_with_evm_k256",
+          "rotate_enc_key_with_evm_k256",
+          "add_device_with_evm_k256"
         ],
         "verifierBytes": 13668,
         "retiresAuthority": false,
@@ -80,7 +80,7 @@
         "index": 3,
         "kind": "maintenance",
         "circuits": [
-          "remove_device_with_evm_eip712",
+          "remove_device_with_evm_k256",
           "activate_initial_device_with_k256",
           "withdraw_unshielded_with_k256",
           "append_inbox_with_k256",
@@ -157,7 +157,7 @@
           "rotate_enc_key_with_p256",
           "add_device_with_p256",
           "remove_device_with_p256",
-          "withdraw_unshielded_with_grant_evm_eip712"
+          "withdraw_unshielded_with_grant_evm_k256"
         ],
         "verifierBytes": 14301,
         "retiresAuthority": false,
@@ -171,10 +171,10 @@
         "index": 8,
         "kind": "maintenance",
         "circuits": [
-          "withdraw_shielded_with_grant_evm_eip712",
-          "withdraw_shielded_to_contract_with_grant_evm_eip712",
-          "issue_grant_with_evm_eip712",
-          "revoke_grant_with_evm_eip712"
+          "withdraw_shielded_with_grant_evm_k256",
+          "withdraw_shielded_to_contract_with_grant_evm_k256",
+          "issue_grant_with_evm_k256",
+          "revoke_grant_with_evm_k256"
         ],
         "verifierBytes": 14052,
         "retiresAuthority": false,
@@ -188,7 +188,7 @@
         "index": 9,
         "kind": "maintenance",
         "circuits": [
-          "revoke_all_grants_with_evm_eip712",
+          "revoke_all_grants_with_evm_k256",
           "withdraw_unshielded_with_grant_k256",
           "withdraw_shielded_with_grant_k256",
           "withdraw_shielded_to_contract_with_grant_k256",
@@ -261,8 +261,8 @@
         "index": 13,
         "kind": "maintenance",
         "circuits": [
-          "publish_recovery_session_with_evm_eip712",
-          "recover_cancel_with_evm_eip712",
+          "publish_recovery_session_with_evm_k256",
+          "recover_cancel_with_evm_k256",
           "publish_recovery_session_with_k256",
           "recover_cancel_with_k256"
         ],
@@ -304,14 +304,14 @@
   },
   "calls": [
     {
-      "circuit": "activate_initial_device_with_evm_eip712",
+      "circuit": "activate_initial_device_with_evm_k256",
       "what": "activation through the found contract (callTx)",
       "txId": "00042827972afec08e552ff31ebdb762de86f8a862eaf055171077195b85b8ee28",
       "block": 43768,
       "status": "SUCCESS"
     },
     {
-      "circuit": "rotate_enc_key_with_evm_eip712",
+      "circuit": "rotate_enc_key_with_evm_k256",
       "what": "E rotates the encryption key (facade \u2192 CustodyAccount.rotateEncKeyWithAuth)",
       "txId": "00ba94f5f5e02a62504b4f4d0aa757101f7e250b8b4ea639e4ff1dde4deaaf8a93",
       "block": 43776,
@@ -325,14 +325,14 @@
       "status": "SUCCESS"
     },
     {
-      "circuit": "withdraw_unshielded_with_evm_eip712",
+      "circuit": "withdraw_unshielded_with_evm_k256",
       "what": "E withdraws 600 to the funding wallet (facade)",
       "txId": "005233905764f3f965665c2fcd9c257c79378c8a35fa2ac3680fa6efed81e1335e",
       "block": 43792,
       "status": "SUCCESS"
     },
     {
-      "circuit": "add_device_with_evm_eip712",
+      "circuit": "add_device_with_evm_k256",
       "what": "E enrols a k256 device by readable descriptor",
       "txId": "00507bc1a24d5bbf3dcccf583fb24a5c994e91f5aa175de942e806ac810579d9bb",
       "block": 43805,
@@ -346,14 +346,14 @@
       "status": "SUCCESS"
     },
     {
-      "circuit": "remove_device_with_evm_eip712",
+      "circuit": "remove_device_with_evm_k256",
       "what": "E removes the k256 device by descriptor (its counter 1)",
       "txId": "00dc26a404e724a50d9399a0e363f84e9cfe9cdf3e605e30dc23ffb672022dc753",
       "block": 43823,
       "status": "SUCCESS"
     },
     {
-      "circuit": "revoke_all_grants_with_evm_eip712",
+      "circuit": "revoke_all_grants_with_evm_k256",
       "what": "E revokes all grants (bare type)",
       "txId": "00f95ceb96cc770a3742df0548139e42702be4fcadfdd7684d43ad4bbd10a9593a",
       "block": 43828,
@@ -372,9 +372,9 @@
     "planWaves(jubjub-first): the waves carry exactly allCircuits() (68)": true,
     "planWaves(p256-first): every wave <= 15000 verifier bytes": true,
     "planWaves(p256-first): the waves carry exactly allCircuits() (68)": true,
-    "planWaves(evm_eip712-first): every wave <= 15000 verifier bytes": true,
-    "planWaves(evm_eip712-first): the waves carry exactly allCircuits() (68)": true,
-    "allCircuits(): 68 circuits, 16 of them evm_eip712": true,
+    "planWaves(evm_k256-first): every wave <= 15000 verifier bytes": true,
+    "planWaves(evm_k256-first): the waves carry exactly allCircuits() (68)": true,
+    "allCircuits(): 68 circuits, 16 of them evm_k256": true,
     "one deploy transaction then one maintenance transaction per later wave, in order": true,
     "every wave <= 15,000 verifier bytes": true,
     "on chain: the operation set == allCircuits() (68)": true,

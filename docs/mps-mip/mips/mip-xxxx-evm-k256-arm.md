@@ -4,7 +4,7 @@ not use this file except in compliance with the License. You may obtain
 a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 -->
 
-# Readable EIP-712 arm (`evm_eip712`)
+# Readable EIP-712 arm (`evm_k256`)
 
 This document records a third ECDSA construction, specified as a
 delta to [MIP-0030](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md)
@@ -13,8 +13,8 @@ externally owned account (any EIP-712 wallet) as a device or a
 grantee. Its curve is secp256k1, as for k1; its signing bytes and
 key binding depart from MIP-0030 section 2 as stated here. Byte contract,
 frozen vectors and acceptance policy:
-[EVM-EIP712](../../../contract/EVM-EIP712.md); costs:
-[EVM-EIP712-MEASUREMENTS](../../../contract/EVM-EIP712-MEASUREMENTS.md).
+[EVM-K256](../../../contract/EVM-K256.md); costs:
+[EVM-K256-MEASUREMENTS](../../../contract/EVM-K256-MEASUREMENTS.md).
 
 **Conformance delta.** Device routes keep the state invariants of
 MIP-0030 section 1 (active-epoch membership, single-use entry rolling,

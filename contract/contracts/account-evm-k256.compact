@@ -1,4 +1,4 @@
-// EVM / EIP-712 arm (`evm_eip712`), included by account.compact. All custody,
+// EVM / EIP-712 arm (`evm_k256`), included by account.compact. All custody,
 // grant-scope and recovery mutations use the existing shared chips; this file
 // adds the arm's identity, its derivations, its activation, its readable
 // EIP-712 approvals and its seams.
@@ -21,7 +21,7 @@
 //
 // (H = persistentHash = SHA-256 of the plain concatenation.) The recipes live
 // in the shared descriptor module (modules/WalletArmDescriptors, width class
-// 52), so that every readable arm derives an `evm_eip712` target's entry
+// 52), so that every readable arm derives an `evm_k256` target's entry
 // exactly as this arm does. Without the blind, anyone could test a public
 // address against every account's entries; with it, the ledger holds nothing
 // a known address can be tested against. The blind is a private input of
@@ -30,7 +30,7 @@
 // THE ADDRESS IS ALWAYS DERIVED FROM THE PRESENTED POINT. Every path that
 // admits a key (activation, the device seam and the grant seam) takes
 // the secp256k1 point and derives the address itself
-// (`evm_eip712_address`), after refusing the point at infinity by its
+// (`evm_address`), after refusing the point at infinity by its
 // COORDINATES, so that both encodings of the identity ({0, 0, identity} and
 // {0, 0, not identity}) are refused, as upstream's `require_live_k256_key`
 // does. A caller can therefore never present an address it did not prove a
@@ -39,8 +39,9 @@
 // Tags: the arm hashes four tags, all registered in the descriptor module
 // (`midnight:account:{device,boot,grant:id,blind}:evm:v1`).
 
+import "modules/Ed25519Core";
 import "modules/WalletArmDescriptors";
-import "modules/EvmEip712";
+import "modules/EvmK256";
 
 // The descriptor module's derivations and tags, re-exported as pure circuits
 // of the account contract: a client derives any readable descriptor's entry,
@@ -49,42 +50,42 @@ import "modules/EvmEip712";
 // Pure: no proving key, no deploy cost.
 export {
   device_tag_jubjub, device_tag_k256, device_tag_p256,
-  device_tag_evm_eip712, device_tag_sol_ed25519,
-  boot_tag_evm_eip712, boot_tag_sol_ed25519,
+  device_tag_evm_k256, device_tag_sol_ed25519,
+  boot_tag_evm_k256, boot_tag_sol_ed25519,
   grant_id_tag_jubjub, grant_id_tag_k256, grant_id_tag_p256,
-  grant_id_tag_evm_eip712, grant_id_tag_sol_ed25519,
-  blind_tag_evm_eip712, blind_tag_sol_ed25519, grant_origin_tag,
-  salt_tag_evm_eip712, salt_tag_sol_ed25519,
+  grant_id_tag_evm_k256, grant_id_tag_sol_ed25519,
+  blind_tag_evm_k256, blind_tag_sol_ed25519, grant_origin_tag,
+  salt_tag_evm_k256, salt_tag_sol_ed25519,
   derive_descriptor_entry_w52, derive_descriptor_entry_w64,
   derive_descriptor_entry_w65, derive_descriptor_entry_w117,
   derive_descriptor_boot_w52,
   derive_descriptor_grant_id_w52, derive_descriptor_grant_id_w64,
   derive_descriptor_grant_id_w65,
   derive_descriptor_entry_ed25519, derive_descriptor_boot_ed25519, derive_descriptor_grant_id_ed25519,
-  encode_public_key_with_sol_ed25519,
+  encode_public_key_ed25519,
   derive_grant_origin_hash_label, derive_grant_origin_hash_origin,
   derive_blind, derive_grant_scope_salt,
 };
 
-// The arm's EIP-712 codec (modules/EvmEip712, byte contract EVM-EIP712.md):
+// The arm's EIP-712 codec (modules/EvmK256, byte contract EVM-K256.md):
 // the domain, the digest, the descriptor hashes and derivations, and the
 // struct hash of every operation, re-exported as pure oracles.
 export {
-  EvmEip712Descriptor, EvmEip712GranteeDescriptor,
-  EvmEip712Base58Hint, EvmEip712DescriptorHint, EvmEip712GranteeHint, EvmEip712AmountHint, EvmEip712CoinHint,
-  EvmEip712RemoveHint, EvmEip712IssueHint,
-  evm_eip712_verifying_contract, evm_eip712_domain_separator, evm_eip712_digest,
-  evm_eip712_site_label_hash, evm_eip712_device_scheme, evm_eip712_grantee_scheme,
-  evm_eip712_device_descriptor_hash, evm_eip712_descriptor_entry,
-  evm_eip712_sol_device_target, evm_eip712_sol_grantee_target,
-  evm_eip712_grantee_origin_hash, evm_eip712_grantee_grant_id, evm_eip712_grantee_descriptor_hash,
-  evm_eip712_struct_withdraw_unshielded, evm_eip712_struct_withdraw_shielded,
-  evm_eip712_struct_withdraw_shielded_to_contract, evm_eip712_struct_append_inbox,
-  evm_eip712_struct_rotate_enc_key, evm_eip712_struct_add_device, evm_eip712_struct_remove_device,
-  evm_eip712_struct_remove_unknown_device, evm_eip712_struct_issue_grant, evm_eip712_struct_revoke_grant,
-  evm_eip712_struct_revoke_all_grants, evm_eip712_struct_publish_recovery_session,
-  evm_eip712_struct_cancel_recovery, evm_eip712_struct_withdraw_unshielded_as_grantee,
-  evm_eip712_struct_withdraw_shielded_as_grantee, evm_eip712_struct_withdraw_shielded_to_contract_as_grantee,
+  EvmK256Descriptor, EvmK256GranteeDescriptor,
+  EvmK256Base58Hint, EvmK256DescriptorHint, EvmK256GranteeHint, EvmK256AmountHint, EvmK256CoinHint,
+  EvmK256RemoveHint, EvmK256IssueHint,
+  eip712_v1_verifying_contract, eip712_v1_domain_separator, eip712_v1_digest,
+  evm_k256_site_label_hash, evm_k256_device_scheme, evm_k256_grantee_scheme,
+  evm_k256_device_descriptor_hash, evm_k256_descriptor_entry,
+  evm_k256_sol_device_target, evm_k256_sol_grantee_target,
+  evm_k256_grantee_origin_hash, evm_k256_grantee_grant_id, evm_k256_grantee_descriptor_hash,
+  evm_k256_struct_withdraw_unshielded, evm_k256_struct_withdraw_shielded,
+  evm_k256_struct_withdraw_shielded_to_contract, evm_k256_struct_append_inbox,
+  evm_k256_struct_rotate_enc_key, evm_k256_struct_add_device, evm_k256_struct_remove_device,
+  evm_k256_struct_remove_unknown_device, evm_k256_struct_issue_grant, evm_k256_struct_revoke_grant,
+  evm_k256_struct_revoke_all_grants, evm_k256_struct_publish_recovery_session,
+  evm_k256_struct_cancel_recovery, evm_k256_struct_withdraw_unshielded_as_grantee,
+  evm_k256_struct_withdraw_shielded_as_grantee, evm_k256_struct_withdraw_shielded_to_contract_as_grantee,
 };
 
 // ── Keys ────────────────────────────────────────────────────────────────────
@@ -92,7 +93,7 @@ export {
 // Scalar-to-point on secp256k1, for software signers and degenerate-key
 // vectors (MetaMask keys never reach a client as scalars: the client recovers
 // the point from a wallet signature). The same curve as the k256 arm.
-export pure circuit compute_public_point_with_evm_eip712(scalar: Secp256k1Scalar): Secp256k1Point {
+export pure circuit compute_public_point_with_evm_k256(scalar: Secp256k1Scalar): Secp256k1Point {
   return ecMulGenerator(scalar);
 }
 
@@ -101,7 +102,7 @@ export pure circuit compute_public_point_with_evm_eip712(scalar: Secp256k1Scalar
 // `key_hash` the bytes of keccak256 of the big-endian x || y. Each is checked
 // against the value the circuit computes, so a hint passes only when it is
 // exactly that value's bytes.
-struct EvmEip712KeyHint {
+struct EvmAddressHint {
   x:        Vector<32, Uint<8>>;
   y:        Vector<32, Uint<8>>;
   key_hash: Vector<32, Uint<8>>;
@@ -117,44 +118,44 @@ struct EvmEip712KeyHint {
 // hints instead of byte-by-byte extraction. Exported so that clients and
 // tests obtain the address through the contract's own code.
 // compact row optimization | Ethereum address from checked coordinate and hash bytes | -78% rows
-export pure circuit evm_eip712_address(pk: Secp256k1Point, hint: EvmEip712KeyHint): Bytes<20> {
+export pure circuit evm_address(pk: Secp256k1Point, hint: EvmAddressHint): Bytes<20> {
   // compact row optimization | key coordinates extracted once for the guard and the hash | -50% rows
   const x = secp256k1PointX(pk) as Bytes<32>;
   const y = secp256k1PointY(pk) as Bytes<32>;
-  assert(!(x == pad(32, "") && y == pad(32, "")), "evm_eip712: device key is the point at infinity");
+  assert(!(x == pad(32, "") && y == pad(32, "")), "evm_k256: device key is the point at infinity");
   const hash = keccak256<[Vector<32, Uint<8>>, Vector<32, Uint<8>>]>([
-    evm_eip712_reversed(evm_eip712_bytes_of(x, hint.x)), evm_eip712_reversed(evm_eip712_bytes_of(y, hint.y))]);
-  return evm_eip712_low20(hash, hint.key_hash);
+    evm_k256_reversed(evm_k256_bytes_of(x, hint.x)), evm_k256_reversed(evm_k256_bytes_of(y, hint.y))]);
+  return evm_k256_low20(hash, hint.key_hash);
 }
 
 // ── Derivations (width class 52 of the descriptor module) ──────────────────
 
-export pure circuit derive_boot_commitment_with_evm_eip712(
+export pure circuit derive_boot_commitment_with_evm_k256(
   salt:    Bytes<32>,
   address: Bytes<20>,
   blind:   Bytes<32>,
 ): Bytes<32> {
-  return derive_descriptor_boot_w52(boot_tag_evm_eip712(), salt, address, blind);
+  return derive_descriptor_boot_w52(boot_tag_evm_k256(), salt, address, blind);
 }
 
-export pure circuit derive_device_entry_with_evm_eip712(
+export pure circuit derive_device_entry_with_evm_k256(
   self_addr: ContractAddress,
   address:   Bytes<20>,
   blind:     Bytes<32>,
   epoch:     Uint<32>,
   counter:   Uint<64>,
 ): Bytes<32> {
-  return derive_descriptor_entry_w52(device_tag_evm_eip712(), self_addr, address, blind, epoch, counter);
+  return derive_descriptor_entry_w52(device_tag_evm_k256(), self_addr, address, blind, epoch, counter);
 }
 
-export pure circuit derive_grant_id_with_evm_eip712(
+export pure circuit derive_grant_id_with_evm_k256(
   self_addr:   ContractAddress,
   address:     Bytes<20>,
   blind:       Bytes<32>,
   origin_hash: Bytes<32>,
   slot:        Uint<8>,
 ): Bytes<32> {
-  return derive_descriptor_grant_id_w52(grant_id_tag_evm_eip712(), self_addr, address, blind, origin_hash, slot);
+  return derive_descriptor_grant_id_w52(grant_id_tag_evm_k256(), self_addr, address, blind, origin_hash, slot);
 }
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────
@@ -163,17 +164,17 @@ export pure circuit derive_grant_id_with_evm_eip712(
 // the circuit cannot be front-run to register a foreign key. The caller
 // presents the device's POINT (recovered by the client from the blind-request
 // signature), the boot salt, and the blind; the address is derived here.
-export circuit activate_initial_device_with_evm_eip712(
+export circuit activate_initial_device_with_evm_k256(
   pk:    Secp256k1Point,
   salt:  Bytes<32>,
   blind: Bytes<32>,
-  hint:  EvmEip712KeyHint,
+  hint:  EvmAddressHint,
 ): [] {
   assert(!booted, "already activated");
-  const address = evm_eip712_address(pk, hint);
-  assert(derive_boot_commitment_with_evm_eip712(salt, address, blind) == boot,
+  const address = evm_address(pk, hint);
+  assert(derive_boot_commitment_with_evm_k256(salt, address, blind) == boot,
          "boot commitment mismatch");
-  do_activate_initial_device(derive_device_entry_with_evm_eip712(
+  do_activate_initial_device(derive_device_entry_with_evm_k256(
     kernel.self(), address, blind, device_epoch, 0 as Uint<64>
   ));
 }
@@ -184,21 +185,21 @@ export circuit activate_initial_device_with_evm_eip712(
 // argument (kept internal, as P256Auth is). `pk` is the device's point;
 // `use_counter` and `blind` are the ledger-pinned openings of the device's
 // rolling entry: the membership assert checks them, and they are never shown.
-struct EvmEip712Auth {
+struct EvmK256Auth {
   pk:          Secp256k1Point;
   use_counter: Uint<64>;
   blind:       Bytes<32>;
   sig:         Secp256k1EcdsaSignature;
-  hint:        EvmEip712SeamHint;
+  hint:        EvmK256SeamHint;
 }
 
-// The checked byte hints of the device seam (see EvmEip712KeyHint and the
+// The checked byte hints of the device seam (see EvmAddressHint and the
 // module's "Checked byte hints"): the key's; `account_hash`, the bytes of
 // keccak256 of the account's address (the domain's verifyingContract is its
 // low 20 bytes); `digest`, the bytes of the EIP-712 digest; and `nonce`,
 // auth_nonce little-endian.
-struct EvmEip712SeamHint {
-  key:          EvmEip712KeyHint;
+struct EvmK256SeamHint {
+  key:          EvmAddressHint;
   account_hash: Vector<32, Uint<8>>;
   digest:       Vector<32, Uint<8>>;
   nonce:        Vector<8, Uint<8>>;
@@ -214,8 +215,8 @@ struct EvmEip712SeamHint {
 // both identity encodings in the same circuit. r = 0 and s = 0 are refused by
 // the seams before this call.
 // compact row optimization | ECDSA verify with the digest from checked bytes | -38% rows
-circuit evm_eip712_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point): Boolean {
-  assert(Bytes[...h] == digest, "evm_eip712: digest hint does not match the digest");
+circuit k256_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point): Boolean {
+  assert(Bytes[...h] == digest, "evm_k256: digest hint does not match the digest");
   const z = Bytes[h[31], h[30], h[29], h[28], h[27], h[26], h[25], h[24], h[23], h[22], h[21], h[20], h[19], h[18], h[17], h[16],
                   h[15], h[14], h[13], h[12], h[11], h[10], h[9],  h[8],  h[7],  h[6],  h[5],  h[4],  h[3],  h[2],  h[1],  h[0]] as Secp256k1Scalar;
   const {r, s} = sig;
@@ -232,13 +233,13 @@ circuit evm_eip712_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: 
 // call.
 //
 // The seam owns the frame. An export passes only its operation's type hash
-// and tail (from the module's `evm_eip712_parts_*`, which the exported oracles
+// and tail (from the module's `evm_k256_parts_*`, which the exported oracles
 // use too). Each entry shape is one self-contained body:
-// require_authorised_with_evm_eip712 (one message type),
-// require_authorised_with_evm_eip712_either (remove_device's two forms, the
-// second type when `second`) and require_authorised_with_evm_eip712_bare (a
+// require_authorised_with_evm_k256 (one message type),
+// require_authorised_with_evm_k256_either (remove_device's two forms, the
+// second type when `second`) and require_authorised_with_evm_k256_bare (a
 // type with no members of its own). Each body derives the address from
-// auth.pk (evm_eip712_address refuses the point at infinity in both
+// auth.pk (evm_address refuses the point at infinity in both
 // encodings), builds the frame from kernel.self(), that address and
 // auth_nonce (read before this call advances it), builds the struct hash,
 // checks the entry, verifies the signature and rolls the entry. No circuit
@@ -246,27 +247,27 @@ circuit evm_eip712_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: 
 // or a struct hash from its caller, so an entry is matched, and a signature
 // verified, only for the address of the key that signed.
 //
-// The verification (evm_eip712_ecdsa_verify) accepts both S forms (FIPS
+// The verification (k256_ecdsa_verify) accepts both S forms (FIPS
 // 186-5): the rolling entry, consumed by this call, makes a malleated twin
 // single-use, as on the k256 arm. r = 0 and s = 0 are refused explicitly: with
 // s = 0 the inverse has no meaning, and r = 0 can only match the point at
 // infinity.
 //
 // Each body returns the caller's post-roll entry (remove_device's S13 guard).
-circuit require_authorised_with_evm_eip712<T>(auth: EvmEip712Auth, type_hash: Bytes<32>, tail: T): Bytes<32> {
-  const address = evm_eip712_address(auth.pk, auth.hint.key);
-  const struct_hash = evm_eip712_device_struct<T>(type_hash, kernel.self().bytes, address, auth_nonce, auth.hint.nonce, tail);
-  const entry = disclose(derive_device_entry_with_evm_eip712(
+circuit require_authorised_with_evm_k256<T>(auth: EvmK256Auth, type_hash: Bytes<32>, tail: T): Bytes<32> {
+  const address = evm_address(auth.pk, auth.hint.key);
+  const struct_hash = evm_k256_device_struct<T>(type_hash, kernel.self().bytes, address, auth_nonce, auth.hint.nonce, tail);
+  const entry = disclose(derive_device_entry_with_evm_k256(
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
   assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_eip712: signature scalar is zero");
-  assert(evm_eip712_ecdsa_verify(evm_eip712_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
+         "evm_k256: signature scalar is zero");
+  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
                                  auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
   devices.remove(entry);
-  const next = disclose(derive_device_entry_with_evm_eip712(
+  const next = disclose(derive_device_entry_with_evm_k256(
     kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64>
   ));
   devices.insert(next);
@@ -275,24 +276,24 @@ circuit require_authorised_with_evm_eip712<T>(auth: EvmEip712Auth, type_hash: By
   return next;
 }
 
-circuit require_authorised_with_evm_eip712_either<T, U>(
-  auth: EvmEip712Auth, second: Boolean, type_1: Bytes<32>, tail_1: T, type_2: Bytes<32>, tail_2: U
+circuit require_authorised_with_evm_k256_either<T, U>(
+  auth: EvmK256Auth, second: Boolean, type_1: Bytes<32>, tail_1: T, type_2: Bytes<32>, tail_2: U
 ): Bytes<32> {
-  const address = evm_eip712_address(auth.pk, auth.hint.key);
-  const h1 = evm_eip712_device_struct<T>(type_1, kernel.self().bytes, address, auth_nonce, auth.hint.nonce, tail_1);
-  const h2 = evm_eip712_device_struct<U>(type_2, kernel.self().bytes, address, auth_nonce, auth.hint.nonce, tail_2);
+  const address = evm_address(auth.pk, auth.hint.key);
+  const h1 = evm_k256_device_struct<T>(type_1, kernel.self().bytes, address, auth_nonce, auth.hint.nonce, tail_1);
+  const h2 = evm_k256_device_struct<U>(type_2, kernel.self().bytes, address, auth_nonce, auth.hint.nonce, tail_2);
   const struct_hash = second ? h2 : h1;
-  const entry = disclose(derive_device_entry_with_evm_eip712(
+  const entry = disclose(derive_device_entry_with_evm_k256(
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
   assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_eip712: signature scalar is zero");
-  assert(evm_eip712_ecdsa_verify(evm_eip712_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
+         "evm_k256: signature scalar is zero");
+  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
                                  auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
   devices.remove(entry);
-  const next = disclose(derive_device_entry_with_evm_eip712(
+  const next = disclose(derive_device_entry_with_evm_k256(
     kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64>
   ));
   devices.insert(next);
@@ -303,20 +304,20 @@ circuit require_authorised_with_evm_eip712_either<T, U>(
 
 // The device-role types with no members of their own (RevokeAllGrants,
 // CancelRecovery): the frame alone.
-circuit require_authorised_with_evm_eip712_bare(auth: EvmEip712Auth, type_hash: Bytes<32>): Bytes<32> {
-  const address = evm_eip712_address(auth.pk, auth.hint.key);
-  const struct_hash = evm_eip712_device_struct_bare(type_hash, kernel.self().bytes, address, auth_nonce, auth.hint.nonce);
-  const entry = disclose(derive_device_entry_with_evm_eip712(
+circuit require_authorised_with_evm_k256_bare(auth: EvmK256Auth, type_hash: Bytes<32>): Bytes<32> {
+  const address = evm_address(auth.pk, auth.hint.key);
+  const struct_hash = evm_k256_device_struct_bare(type_hash, kernel.self().bytes, address, auth_nonce, auth.hint.nonce);
+  const entry = disclose(derive_device_entry_with_evm_k256(
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
   assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_eip712: signature scalar is zero");
-  assert(evm_eip712_ecdsa_verify(evm_eip712_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
+         "evm_k256: signature scalar is zero");
+  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
                                  auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
   devices.remove(entry);
-  const next = disclose(derive_device_entry_with_evm_eip712(
+  const next = disclose(derive_device_entry_with_evm_k256(
     kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64>
   ));
   devices.insert(next);
@@ -328,9 +329,9 @@ circuit require_authorised_with_evm_eip712_bare(auth: EvmEip712Auth, type_hash: 
 // ── Custody: the encryption key ─────────────────────────────────────────────
 
 // RotateEncKey(bytes32 account,address device,uint64 authNonce,string effect,bytes32 newKey)
-export circuit rotate_enc_key_with_evm_eip712(new_key: Bytes<32>, auth: EvmEip712Auth): [] {
-  const [t, tail] = evm_eip712_parts_rotate_enc_key(new_key);
-  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<32>]>(auth, t, tail);
+export circuit rotate_enc_key_with_evm_k256(new_key: Bytes<32>, auth: EvmK256Auth): [] {
+  const [t, tail] = evm_k256_parts_rotate_enc_key(new_key);
+  require_authorised_with_evm_k256<[Bytes<32>, Bytes<32>]>(auth, t, tail);
   do_rotate_enc_key(new_key);
 }
 
@@ -344,15 +345,15 @@ export circuit rotate_enc_key_with_evm_eip712(new_key: Bytes<32>, auth: EvmEip71
 //                    bytes32 recipient)
 // (`amountLabel`: "This site labels it: " and the site's label for the
 // amount, its digits checked against the amount)
-export circuit withdraw_unshielded_with_evm_eip712(
+export circuit withdraw_unshielded_with_evm_k256(
   color:     Bytes<32>,
   amount:    Uint<128>,
   recipient: UserAddress,
-  auth:      EvmEip712Auth,
-  hint:      EvmEip712AmountHint,
+  auth:      EvmK256Auth,
+  hint:      EvmK256AmountHint,
 ): [] {
-  const [t, tail] = evm_eip712_parts_withdraw_unshielded(color, amount, recipient.bytes, hint);
-  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]>(auth, t, tail);
+  const [t, tail] = evm_k256_parts_withdraw_unshielded(color, amount, recipient.bytes, hint);
+  require_authorised_with_evm_k256<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]>(auth, t, tail);
   do_withdraw_unshielded(color, amount, recipient);
 }
 
@@ -374,18 +375,18 @@ export circuit withdraw_unshielded_with_evm_eip712(
 
 // WithdrawShielded(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,string amountLabel,
 //                  bytes32 recipient,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)
-export circuit withdraw_shielded_with_evm_eip712(
+export circuit withdraw_shielded_with_evm_k256(
   recipient: ZswapCoinPublicKey,
   color:     Bytes<32>,
   amount:    Uint<128>,
-  auth:      EvmEip712Auth,
-  hint:      EvmEip712CoinHint,
+  auth:      EvmK256Auth,
+  hint:      EvmK256CoinHint,
 ): Maybe<ShieldedCoinInfo> {
   const coin = held_coin(color);
   assert(coin.color == color, "held coin colour does not match the withdrawn colour");
   assert(amount <= coin.value, "amount above the spent coin's value");
-  const [t, tail] = evm_eip712_parts_withdraw_shielded(color, amount, recipient.bytes, coin.nonce, coin.value, coin.mt_index, hint);
-  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>,
+  const [t, tail] = evm_k256_parts_withdraw_shielded(color, amount, recipient.bytes, coin.nonce, coin.value, coin.mt_index, hint);
+  require_authorised_with_evm_k256<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>,
                                       Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(auth, t, tail);
   return do_withdraw_shielded(recipient, amount, coin);
 }
@@ -398,19 +399,19 @@ export circuit withdraw_shielded_with_evm_eip712(
 
 // WithdrawShieldedToContract(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,
 //                            string amountLabel,bytes32 recipientContract,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)
-export circuit withdraw_shielded_to_contract_with_evm_eip712(
+export circuit withdraw_shielded_to_contract_with_evm_k256(
   recipient: ContractAddress,
   color:     Bytes<32>,
   amount:    Uint<128>,
-  auth:      EvmEip712Auth,
-  hint:      EvmEip712CoinHint,
+  auth:      EvmK256Auth,
+  hint:      EvmK256CoinHint,
 ): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
   const coin = held_coin(color);
   assert(coin.color == color, "held coin colour does not match the withdrawn colour");
   assert(amount <= coin.value, "amount above the spent coin's value");
-  const [t, tail] = evm_eip712_parts_withdraw_shielded_to_contract(color, amount, recipient.bytes,
+  const [t, tail] = evm_k256_parts_withdraw_shielded_to_contract(color, amount, recipient.bytes,
     coin.nonce, coin.value, coin.mt_index, hint);
-  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>,
+  require_authorised_with_evm_k256<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<16>, Bytes<16>,
                                       Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(auth, t, tail);
   return do_withdraw_shielded_to_contract(recipient, amount, coin);
 }
@@ -421,9 +422,9 @@ export circuit withdraw_shielded_to_contract_with_evm_eip712(
 // approval shows the 192-byte InboxEntry v1 ciphertext in full, as `bytes`.
 
 // AppendInbox(bytes32 account,address device,uint64 authNonce,bytes entry)
-export circuit append_inbox_with_evm_eip712(entry: Bytes<192>, auth: EvmEip712Auth): [] {
-  const [t, tail] = evm_eip712_parts_append_inbox(entry);
-  require_authorised_with_evm_eip712<Bytes<32>>(auth, t, tail);
+export circuit append_inbox_with_evm_k256(entry: Bytes<192>, auth: EvmK256Auth): [] {
+  const [t, tail] = evm_k256_parts_append_inbox(entry);
+  require_authorised_with_evm_k256<Bytes<32>>(auth, t, tail);
   do_append_inbox(entry);
 }
 
@@ -446,14 +447,14 @@ export circuit append_inbox_with_evm_eip712(entry: Bytes<192>, auth: EvmEip712Au
 // device_epoch + 1 (README erratum 7), whatever the descriptor says.
 
 // AddDevice(bytes32 account,address device,uint64 authNonce,string effect,<Scheme>Device newDevice)
-export circuit add_device_with_evm_eip712(
-  new_device: EvmEip712Descriptor, sol_key: Curve25519Point, sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>,
-  auth: EvmEip712Auth, hint: EvmEip712DescriptorHint
+export circuit add_device_with_evm_k256(
+  new_device: EvmK256Descriptor, sol_key: Curve25519Point, sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>,
+  auth: EvmK256Auth, hint: EvmK256DescriptorHint
 ): [] {
-  const se = evm_eip712_sol_device_target(kernel.self(), new_device, sol_key, sol_bytes, sol_x, device_epoch, 0 as Uint<64>)[1];
-  const [t, tail] = evm_eip712_parts_add_device(new_device, sol_bytes, hint);
-  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<32>]>(auth, t, tail);
-  do_add_device(evm_eip712_descriptor_entry(kernel.self(), new_device, se, device_epoch, 0 as Uint<64>));
+  const se = evm_k256_sol_device_target(kernel.self(), new_device, sol_key, sol_bytes, sol_x, device_epoch, 0 as Uint<64>)[1];
+  const [t, tail] = evm_k256_parts_add_device(new_device, sol_bytes, hint);
+  require_authorised_with_evm_k256<[Bytes<32>, Bytes<32>]>(auth, t, tail);
+  do_add_device(evm_k256_descriptor_entry(kernel.self(), new_device, se, device_epoch, 0 as Uint<64>));
 }
 
 // Two forms in one circuit:
@@ -470,24 +471,24 @@ export circuit add_device_with_evm_eip712(
 //     descriptor under the evm tag).
 // Either way the caller's own post-roll entry can never be removed (AUTH-5,
 // S13: do_remove_device's guard), nor the last device.
-export circuit remove_device_with_evm_eip712(
-  target:         EvmEip712Descriptor,
+export circuit remove_device_with_evm_k256(
+  target:         EvmK256Descriptor,
   sol_key:        Curve25519Point,
   sol_bytes:      Vector<32, Uint<8>>,
   sol_x:          Vector<32, Uint<8>>,
   target_epoch:   Uint<32>,
   target_counter: Uint<64>,
   unknown_entry:  Maybe<Bytes<32>>,
-  auth:           EvmEip712Auth,
-  hint:           EvmEip712RemoveHint,
+  auth:           EvmK256Auth,
+  hint:           EvmK256RemoveHint,
 ): [] {
   assert(unknown_entry.is_some || unknown_entry.value == default<Bytes<32>>, "noncanonical absent entry");
-  const se = evm_eip712_sol_device_target(kernel.self(), target, sol_key, sol_bytes, sol_x, target_epoch, target_counter)[1];
-  const [t1, tail1] = evm_eip712_parts_remove_device(target, sol_bytes, target_epoch, target_counter, hint);
-  const [t2, tail2] = evm_eip712_parts_remove_unknown_device(unknown_entry.value);
-  const caller_entry = require_authorised_with_evm_eip712_either<[Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>], [Bytes<32>, Bytes<32>]>(
+  const se = evm_k256_sol_device_target(kernel.self(), target, sol_key, sol_bytes, sol_x, target_epoch, target_counter)[1];
+  const [t1, tail1] = evm_k256_parts_remove_device(target, sol_bytes, target_epoch, target_counter, hint);
+  const [t2, tail2] = evm_k256_parts_remove_unknown_device(unknown_entry.value);
+  const caller_entry = require_authorised_with_evm_k256_either<[Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>], [Bytes<32>, Bytes<32>]>(
     auth, unknown_entry.is_some, t1, tail1, t2, tail2);
-  const described = evm_eip712_descriptor_entry(kernel.self(), target, se, target_epoch, target_counter);
+  const described = evm_k256_descriptor_entry(kernel.self(), target, se, target_epoch, target_counter);
   do_remove_device(unknown_entry.is_some ? unknown_entry.value : described, caller_entry);
 }
 
@@ -525,8 +526,8 @@ export circuit remove_device_with_evm_eip712(
 // signed (the value the seam reads before advancing it). No one who builds
 // the proof can choose it, and each issuance gets its own. The issuing client
 // computes the same value and hands it to the grantee.
-export circuit issue_grant_with_evm_eip712(
-  grantee:                          EvmEip712GranteeDescriptor,
+export circuit issue_grant_with_evm_k256(
+  grantee:                          EvmK256GranteeDescriptor,
   sol_key:                          Curve25519Point,
   sol_bytes:                        Vector<32, Uint<8>>,
   sol_x:                            Vector<32, Uint<8>>,
@@ -546,46 +547,46 @@ export circuit issue_grant_with_evm_eip712(
   window_len:                       Uint<64>,
   window_cap:                       Uint<128>,
   caller:                           Maybe<ContractAddress>,
-  auth:                             EvmEip712Auth,
-  hint:                             EvmEip712IssueHint,
+  auth:                             EvmK256Auth,
+  hint:                             EvmK256IssueHint,
 ): [] {
-  const scope_salt = derive_grant_scope_salt(salt_tag_evm_eip712(), auth.blind, kernel.self(), auth_nonce);
-  assert(read || read_pk == pad(32, ""), "evm_eip712: a read key without read");
-  assert(read_pk != pad(32, "") || !read, "evm_eip712: read without a read key");
+  const scope_salt = derive_grant_scope_salt(salt_tag_evm_k256(), auth.blind, kernel.self(), auth_nonce);
+  assert(read || read_pk == pad(32, ""), "evm_k256: a read key without read");
+  assert(read_pk != pad(32, "") || !read, "evm_k256: read without a read key");
   // The RP-hash rules and the "any recipient" rule are asserted in
-  // evm_eip712_parts_issue_grant, which builds what is shown.
-  const oh = evm_eip712_grantee_origin_hash(grantee);
-  const si = evm_eip712_sol_grantee_target(kernel.self(), grantee, oh, sol_key, sol_bytes, sol_x)[1];
-  const [t, tail] = evm_eip712_parts_issue_grant(grantee, sol_bytes, op_withdraw_unshielded, op_withdraw_shielded,
+  // evm_k256_parts_issue_grant, which builds what is shown.
+  const oh = evm_k256_grantee_origin_hash(grantee);
+  const si = evm_k256_sol_grantee_target(kernel.self(), grantee, oh, sol_key, sol_bytes, sol_x)[1];
+  const [t, tail] = evm_k256_parts_issue_grant(grantee, sol_bytes, op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap,
     expires_at, rp_id_hash, read_pk, window_len, window_cap, caller, hint);
-  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<32>,
+  require_authorised_with_evm_k256<[Bytes<32>, Bytes<32>,
                                       Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>, Bytes<31>, Bytes<1>,
                                       Bytes<32>, Bytes<32>, Bytes<32>,
                                       Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>,
                                       Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>, Bytes<32>,
                                       Bytes<31>, Bytes<1>, Bytes<32>]>(auth, t, tail);
-  do_issue_grant(evm_eip712_grantee_grant_id(kernel.self(), grantee, oh, si), op_withdraw_unshielded, op_withdraw_shielded,
+  do_issue_grant(evm_k256_grantee_grant_id(kernel.self(), grantee, oh, si), op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap,
     expires_at, rp_id_hash, read ? persistentHash<Bytes<32>>(read_pk) : pad(32, ""), window_len, window_cap,
     caller, scope_salt);
 }
 
 // RevokeGrant(bytes32 account,address device,uint64 authNonce,<Scheme>Grantee grantee)
-export circuit revoke_grant_with_evm_eip712(
-  grantee: EvmEip712GranteeDescriptor, sol_key: Curve25519Point, sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>,
-  auth: EvmEip712Auth, hint: EvmEip712GranteeHint
+export circuit revoke_grant_with_evm_k256(
+  grantee: EvmK256GranteeDescriptor, sol_key: Curve25519Point, sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>,
+  auth: EvmK256Auth, hint: EvmK256GranteeHint
 ): [] {
-  const oh = evm_eip712_grantee_origin_hash(grantee);
-  const si = evm_eip712_sol_grantee_target(kernel.self(), grantee, oh, sol_key, sol_bytes, sol_x)[1];
-  const [t, tail] = evm_eip712_parts_revoke_grant(grantee, sol_bytes, hint);
-  require_authorised_with_evm_eip712<Bytes<32>>(auth, t, tail);
-  do_revoke_grant(evm_eip712_grantee_grant_id(kernel.self(), grantee, oh, si));
+  const oh = evm_k256_grantee_origin_hash(grantee);
+  const si = evm_k256_sol_grantee_target(kernel.self(), grantee, oh, sol_key, sol_bytes, sol_x)[1];
+  const [t, tail] = evm_k256_parts_revoke_grant(grantee, sol_bytes, hint);
+  require_authorised_with_evm_k256<Bytes<32>>(auth, t, tail);
+  do_revoke_grant(evm_k256_grantee_grant_id(kernel.self(), grantee, oh, si));
 }
 
 // RevokeAllGrants(bytes32 account,address device,uint64 authNonce)
-export circuit revoke_all_grants_with_evm_eip712(auth: EvmEip712Auth): [] {
-  require_authorised_with_evm_eip712_bare(auth, evm_eip712_parts_revoke_all_grants());
+export circuit revoke_all_grants_with_evm_k256(auth: EvmK256Auth): [] {
+  require_authorised_with_evm_k256_bare(auth, evm_k256_parts_revoke_all_grants());
   do_revoke_all_grants();
 }
 
@@ -596,7 +597,7 @@ export circuit revoke_all_grants_with_evm_eip712(auth: EvmEip712Auth): [] {
 // recovery gate itself (recover_submit) and finalisation (recover_finalise)
 // are arm-independent: gated by the recovery secret, not by a device.
 // Finalisation clears the device set before it installs the successor
-// (upstream #183), so every evm_eip712 entry is retired with the others,
+// (upstream #183), so every evm_k256 entry is retired with the others,
 // including one an upstream arm's raw add_device planted at
 // device_epoch + 1 (README erratum 7).
 //
@@ -612,7 +613,7 @@ export circuit revoke_all_grants_with_evm_eip712(auth: EvmEip712Auth): [] {
 // PublishRecoverySession(bytes32 account,address device,uint64 authNonce,string effect,
 //                        bytes32 recoveryKeyX,bytes32 recoveryKeyY,bytes32 sessionNonce,
 //                        bytes32 phi1,bytes32 phi2,bytes32 phi3,bytes32 phi4,uint8 phiLength,bytes wrap)
-export circuit publish_recovery_session_with_evm_eip712(
+export circuit publish_recovery_session_with_evm_k256(
   new_recovery_pk: JubjubPoint,
   session_nonce:   Bytes<32>,
   phi_1:           Field,
@@ -621,11 +622,11 @@ export circuit publish_recovery_session_with_evm_eip712(
   phi_4:           Field,
   phi_len:         Uint<8>,
   wrap:            Bytes<64>,
-  auth:            EvmEip712Auth,
+  auth:            EvmK256Auth,
 ): [] {
-  const [t, tail] = evm_eip712_parts_publish_recovery_session(new_recovery_pk, session_nonce,
+  const [t, tail] = evm_k256_parts_publish_recovery_session(new_recovery_pk, session_nonce,
     phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
-  require_authorised_with_evm_eip712<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+  require_authorised_with_evm_k256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
                                       Bytes<31>, Bytes<1>, Bytes<32>]>(auth, t, tail);
   do_publish_recovery_session(new_recovery_pk, session_nonce, phi_1, phi_2, phi_3, phi_4, phi_len, wrap);
 }
@@ -633,14 +634,14 @@ export circuit publish_recovery_session_with_evm_eip712(
 // The veto (recovery MIP §6 step 5): any live device clears a pending
 // recovery inside the window.
 // CancelRecovery(bytes32 account,address device,uint64 authNonce)
-export circuit recover_cancel_with_evm_eip712(auth: EvmEip712Auth): [] {
-  require_authorised_with_evm_eip712_bare(auth, evm_eip712_parts_cancel_recovery());
+export circuit recover_cancel_with_evm_k256(auth: EvmK256Auth): [] {
+  require_authorised_with_evm_k256_bare(auth, evm_k256_parts_cancel_recovery());
   do_recover_cancel();
 }
 
 // ── The grant seam (grantee role) ───────────────────────────────────────────
 //
-// An evm_eip712 key as a GRANTEE: its grant id is
+// An evm_k256 key as a GRANTEE: its grant id is
 //   H(pad32("midnight:account:grant:id:evm:v1") || account || address(20)
 //     || blind(32) || origin_hash || slot),
 // origin_hash = H(pad32("midnight:account:grant:origin:v1") || label(32)) of
@@ -663,18 +664,18 @@ export circuit recover_cancel_with_evm_eip712(auth: EvmEip712Auth): [] {
 // opening, cumulative cap, recipient pin), then r != 0, s != 0, the
 // signature, the record written back with its nonce advanced and the new
 // spent commitment, and round bumped.
-struct EvmEip712GrantAuth {
+struct EvmK256GrantAuth {
   pk:    Secp256k1Point;
   blind: Bytes<32>;
   sig:   Secp256k1EcdsaSignature;
-  hint:  EvmEip712GrantSeamHint;
+  hint:  EvmK256GrantSeamHint;
 }
 
-// The checked byte hints of the grant seam (see EvmEip712SeamHint): the
+// The checked byte hints of the grant seam (see EvmK256SeamHint): the
 // key's, the account hash's and the digest's, and the frame's: the site
 // label's bytes, and the record's issuedAt and nonce little-endian.
-struct EvmEip712GrantSeamHint {
-  key:          EvmEip712KeyHint;
+struct EvmK256GrantSeamHint {
+  key:          EvmAddressHint;
   account_hash: Vector<32, Uint<8>>;
   digest:       Vector<32, Uint<8>>;
   label:        Vector<32, Uint<8>>;
@@ -682,8 +683,8 @@ struct EvmEip712GrantSeamHint {
   grant_nonce:  Vector<8, Uint<8>>;
 }
 
-circuit require_grant_with_evm_eip712<T>(
-  auth:             EvmEip712GrantAuth,
+circuit require_grant_with_evm_k256<T>(
+  auth:             EvmK256GrantAuth,
   label:            Bytes<32>,
   slot:             Uint<8>,
   scope_salt:       Bytes<32>,
@@ -698,8 +699,8 @@ circuit require_grant_with_evm_eip712<T>(
   type_hash:        Bytes<32>,
   tail:             T,
 ): [] {
-  const address = evm_eip712_address(auth.pk, auth.hint.key);
-  const id = disclose(derive_grant_id_with_evm_eip712(kernel.self(), address, auth.blind,
+  const address = evm_address(auth.pk, auth.hint.key);
+  const id = disclose(derive_grant_id_with_evm_k256(kernel.self(), address, auth.blind,
     derive_grant_origin_hash_label(label), slot));
   assert(grants.member(id), "unknown grant");
   const g = grants.lookup(id);
@@ -713,10 +714,10 @@ circuit require_grant_with_evm_eip712<T>(
   const new_spent = check_spend_scope(g, admitted, scope_salt, obj_color, recipient_kind, pinned_recipient,
     max_coin_value, amount, spent_prev, op, recipient_bytes);
   assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_eip712: signature scalar is zero");
-  const struct_hash = evm_eip712_grantee_struct<T>(type_hash, kernel.self().bytes, address, label, auth.hint.label, slot,
+         "evm_k256: signature scalar is zero");
+  const struct_hash = evm_k256_grantee_struct<T>(type_hash, kernel.self().bytes, address, label, auth.hint.label, slot,
     g.issued_at, auth.hint.issued_at, g.nonce, auth.hint.grant_nonce, tail);
-  assert(evm_eip712_ecdsa_verify(evm_eip712_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
+  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
                                  auth.hint.digest, auth.sig, auth.pk),
          "invalid grant signature");
   grants.insert(id, GrantRecord {
@@ -742,7 +743,7 @@ circuit require_grant_with_evm_eip712<T>(
 
 // WithdrawUnshieldedAsGrantee(bytes32 account,address grantee,string siteLabel,uint8 slot,uint64 issuedAt,
 //                             uint64 grantNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient)
-export circuit withdraw_unshielded_with_grant_evm_eip712(
+export circuit withdraw_unshielded_with_grant_evm_k256(
   color:            Bytes<32>,
   amount:           Uint<128>,
   recipient:        UserAddress,
@@ -753,11 +754,11 @@ export circuit withdraw_unshielded_with_grant_evm_eip712(
   pinned_recipient: Bytes<32>,
   max_coin_value:   Uint<128>,
   spent_prev:       Uint<128>,
-  auth:             EvmEip712GrantAuth,
-  hint:             EvmEip712AmountHint,
+  auth:             EvmK256GrantAuth,
+  hint:             EvmK256AmountHint,
 ): [] {
-  const [t, tail] = evm_eip712_parts_withdraw_unshielded_as_grantee(color, amount, recipient.bytes, hint);
-  require_grant_with_evm_eip712<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]>(auth, label, slot, scope_salt,
+  const [t, tail] = evm_k256_parts_withdraw_unshielded_as_grantee(color, amount, recipient.bytes, hint);
+  require_grant_with_evm_k256<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>]>(auth, label, slot, scope_salt,
     recipient_kind, pinned_recipient, max_coin_value, spent_prev, 1, color, amount, recipient.bytes, t, tail);
   do_withdraw_unshielded(color, amount, recipient);
 }
@@ -770,7 +771,7 @@ export circuit withdraw_unshielded_with_grant_evm_eip712(
 
 // WithdrawShieldedAsGrantee(…grantee frame…,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient,bytes changeEntry,
 //                           bytes32 encryptionKey,bytes32 coinNonce,uint128 coinValue,uint64 coinMerkleIndex,uint128 change)
-export circuit withdraw_shielded_with_grant_evm_eip712(
+export circuit withdraw_shielded_with_grant_evm_k256(
   recipient:        ZswapCoinPublicKey,
   color:            Bytes<32>,
   amount:           Uint<128>,
@@ -783,16 +784,16 @@ export circuit withdraw_shielded_with_grant_evm_eip712(
   pinned_recipient: Bytes<32>,
   max_coin_value:   Uint<128>,
   spent_prev:       Uint<128>,
-  auth:             EvmEip712GrantAuth,
-  hint:             EvmEip712CoinHint,
+  auth:             EvmK256GrantAuth,
+  hint:             EvmK256CoinHint,
 ): Maybe<ShieldedCoinInfo> {
   const coin = held_coin(color);
   assert(coin.color == color, "held coin colour does not match the withdrawn colour");
   assert(amount <= coin.value, "amount above the spent coin's value");
   check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
-  const [t, tail] = evm_eip712_parts_withdraw_shielded_as_grantee(color, amount, recipient.bytes, change_entry, enc_pk,
+  const [t, tail] = evm_k256_parts_withdraw_shielded_as_grantee(color, amount, recipient.bytes, change_entry, enc_pk,
     coin.nonce, coin.value, coin.mt_index, hint);
-  require_grant_with_evm_eip712<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+  require_grant_with_evm_k256<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
                                  Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
     auth, label, slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev,
     2, coin.color, amount, recipient.bytes, t, tail);
@@ -806,7 +807,7 @@ export circuit withdraw_shielded_with_grant_evm_eip712(
 // WithdrawShieldedToContractAsGrantee(…grantee frame…,bytes32 color,uint128 amount,string amountLabel,bytes32 recipientContract,
 //                                     bytes changeEntry,bytes32 encryptionKey,bytes32 coinNonce,uint128 coinValue,
 //                                     uint64 coinMerkleIndex,uint128 change)
-export circuit withdraw_shielded_to_contract_with_grant_evm_eip712(
+export circuit withdraw_shielded_to_contract_with_grant_evm_k256(
   recipient:        ContractAddress,
   color:            Bytes<32>,
   amount:           Uint<128>,
@@ -819,16 +820,16 @@ export circuit withdraw_shielded_to_contract_with_grant_evm_eip712(
   pinned_recipient: Bytes<32>,
   max_coin_value:   Uint<128>,
   spent_prev:       Uint<128>,
-  auth:             EvmEip712GrantAuth,
-  hint:             EvmEip712CoinHint,
+  auth:             EvmK256GrantAuth,
+  hint:             EvmK256CoinHint,
 ): [ShieldedCoinInfo, Maybe<ShieldedCoinInfo>] {
   const coin = held_coin(color);
   assert(coin.color == color, "held coin colour does not match the withdrawn colour");
   assert(amount <= coin.value, "amount above the spent coin's value");
   check_shielded_grant_bounds(coin, max_coin_value, enc_pk);
-  const [t, tail] = evm_eip712_parts_withdraw_shielded_to_contract_as_grantee(color, amount, recipient.bytes,
+  const [t, tail] = evm_k256_parts_withdraw_shielded_to_contract_as_grantee(color, amount, recipient.bytes,
     change_entry, enc_pk, coin.nonce, coin.value, coin.mt_index, hint);
-  require_grant_with_evm_eip712<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
+  require_grant_with_evm_k256<[Bytes<32>, Bytes<16>, Bytes<16>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>,
                                  Bytes<32>, Bytes<16>, Bytes<16>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>]>(
     auth, label, slot, scope_salt, recipient_kind, pinned_recipient, max_coin_value, spent_prev,
     3, coin.color, amount, recipient.bytes, t, tail);
