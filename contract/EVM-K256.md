@@ -6,7 +6,7 @@ An ordinary Ethereum account, for example MetaMask, acts as a Passport device or
 
 | | |
 |---|---|
-| Circuits | `contracts/account-evm-k256.compact` (the arm), `contracts/modules/EvmK256.compact` (the codec) |
+| Circuits | `contracts/account-evm-k256.compact` (the arm), `contracts/modules/EvmK256.compact` (the codec), `contracts/modules/K256Core.compact` (ECDSA verification on a digest), `contracts/modules/EvmIdentity.compact` (the address) |
 | Client | `src/wallet/signer-evm-k256.ts` (wallet, device, blind, roster), `src/wallet/evm-k256-codec.ts` (typed data) |
 | Frozen vectors | `src/tests/vectors/evm-k256-v1.json`: 64 positive and 25 negative vectors, hashes computed by viem 2.45.1 |
 | Tests | `src/tests/evm-k256-offline.ts`, `src/tests/evm-k256-grants-offline.ts`, `src/tests/evm-k256-recovery-sim.ts`, `src/tests/evm-k256-seam-offline.ts` and `src/tests/evm-k256-hints-offline.ts` (all: `npm run test:evm_k256-offline`), `src/tests/evm-k256-viem.ts` (needs viem, see section 8), `src/tests/evm-k256-prover.ts` (constraint-level negatives: `npm run test:evm_k256`) |

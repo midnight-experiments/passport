@@ -58,6 +58,7 @@ module EvmK256 {
   import CompactStandardLibrary;
   import "./WalletArmDescriptors";
   import "./WalletArmRendering";
+  import "./EvmIdentity";
 
   // ── Descriptor inputs ─────────────────────────────────────────────────────
   //
@@ -647,29 +648,8 @@ module EvmK256 {
   // bits as a circuit argument, each limb has at most 31 bytes (below the
   // field size, so no wrap-around), and base-256 digits are unique, so no
   // other vector passes. A hint is bound once and the checked vector is the
-  // one used.
-
-  // `h` must be the bytes of `b`; returns them.
-  // compact row optimization | 32 bytes from a checked hint instead of a decomposition | -83% rows
-  export circuit evm_k256_bytes_of(b: Bytes<32>, h: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
-    assert(Bytes[...h] == b, "evm_k256: byte hint does not match its value");
-    return h;
-  }
-
-  // The vector in reverse order (no constraint: only element positions move).
-  export circuit evm_k256_reversed(v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
-    return [v[31], v[30], v[29], v[28], v[27], v[26], v[25], v[24], v[23], v[22], v[21], v[20], v[19], v[18], v[17], v[16],
-            v[15], v[14], v[13], v[12], v[11], v[10], v[9],  v[8],  v[7],  v[6],  v[5],  v[4],  v[3],  v[2],  v[1],  v[0]];
-  }
-
-  // The low 20 bytes of a keccak256 output (an Ethereum address), from a
-  // checked hint `h` of the output's bytes.
-  // compact row optimization | address bytes of a hash from a checked hint | -85% rows
-  export circuit evm_k256_low20(hash: Bytes<32>, h: Vector<32, Uint<8>>): Bytes<20> {
-    assert(Bytes[...h] == hash, "evm_k256: hash hint does not match the hash");
-    return Bytes[h[12], h[13], h[14], h[15], h[16], h[17], h[18], h[19], h[20], h[21],
-                 h[22], h[23], h[24], h[25], h[26], h[27], h[28], h[29], h[30], h[31]];
-  }
+  // one used. The 32-byte helpers (evm_k256_bytes_of, evm_k256_reversed,
+  // evm_k256_low20) are the EVM identity module's, which the address needs.
 
   // ── Text ──────────────────────────────────────────────────────────────────
 
