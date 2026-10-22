@@ -98,7 +98,7 @@ const SEEDS: Uint8Array[] = [new Uint8Array(32), new Uint8Array(32).fill(0xff), 
     const { pk, key } = solPublicKeyFromSeed(seed);
     const noble = ed25519.getPublicKey(seed);
     const ossl = osslPublicBytes(seed);
-    const viaEncode: Uint8Array = pureCircuits.encode_public_key_with_sol_ed25519(...kin(pk));
+    const viaEncode: Uint8Array = pureCircuits.encode_public_key_ed25519(...kin(pk));
     const strict = solPublicKeyPoint(key);
     const same = eq(key, noble) && eq(noble, ossl) && eq(viaEncode, key) && eq(solPublicKeyBytes(pk), key)
       && strict.x === pk.x && strict.y === pk.y;
@@ -113,7 +113,7 @@ const SEEDS: Uint8Array[] = [new Uint8Array(32), new Uint8Array(32).fill(0xff), 
   for (let i = 1n; i <= 64n; i++) {
     const p = ed25519.Point.BASE.multiply(i);
     const pt = { x: p.toAffine().x, y: p.toAffine().y };
-    const enc: Uint8Array = pureCircuits.encode_public_key_with_sol_ed25519(...kin(pt));
+    const enc: Uint8Array = pureCircuits.encode_public_key_ed25519(...kin(pt));
     if (!eq(enc, p.toBytes())) ok(G, `encode([${i}]B)`, false);
     if (pt.x & 1n) odd++; else even++;
   }
@@ -194,7 +194,7 @@ const SMALL_ORDER = [
   }
   // The identity is in the subgroup: the type admits it, the circuits' asserts refuse it (section 6).
   let identityTyped = true;
-  try { pureCircuits.encode_public_key_with_sol_ed25519(...kin({ x: 0n, y: 1n })); } catch { identityTyped = false; }
+  try { pureCircuits.encode_public_key_ed25519(...kin({ x: 0n, y: 1n })); } catch { identityTyped = false; }
   ok(G, 'the identity passes the point type (its refusal is the circuit assert, section 6)', identityTyped);
   // Non-canonical and malformed encodings: client decode only (the circuit never takes bytes).
   const nonCanonical: [string, Uint8Array][] = [
@@ -213,7 +213,7 @@ const SMALL_ORDER = [
   // Runtime: a coordinate outside the field (a non-canonical representation of a valid point).
   const B = ed25519.Point.BASE.toAffine();
   await refused(G, 'runtime type check refuses y + p (coordinate not below p)', 'runtime', /Curve25519Point|type/i,
-    () => pureCircuits.encode_public_key_with_sol_ed25519(...kin({ x: B.x, y: B.y + P })));
+    () => pureCircuits.encode_public_key_ed25519(...kin({ x: B.x, y: B.y + P })));
 }
 
 // ── 4. Derivations: the account's circuits, the shared module, SHA-256 ──────

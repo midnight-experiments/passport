@@ -5,10 +5,10 @@
 //
 // SCHEME. RFC 8032 PureEdDSA over edwards25519 (Ed25519), the scheme of a
 // Solana wallet's `signMessage` (Phantom and others): the wallet signs the raw
-// bytes it is given, with no prefix. Verification is this arm's
-// `sol_ed25519_verify<#n>` (the standard library's `ed25519Verify<#n>` with
-// R's and A's encodings taken from checked inputs instead of byte explosions)
-// plus an explicit `R != O` assert in each seam.
+// bytes it is given, with no prefix. Verification is the Ed25519 core's
+// `ed25519_verify<#n>` (modules/Ed25519Core: the standard library's
+// `ed25519Verify<#n>` with R's and A's encodings taken from checked inputs
+// instead of byte explosions) plus an explicit `R != O` assert in each seam.
 //
 // IDENTITY. The device is the wallet's public key A. The circuit takes A as a
 // `Curve25519Point`, whose type admits only points of the prime-order
@@ -45,28 +45,30 @@
 //     (runtime type check; ZKIR FromCoordinates at the prover);
 //   - A != O: the descriptor module's ed25519 class asserts it on every
 //     derivation (the identity is the only prime-order point whose
-//     x-coordinate is zero); `sol_ed25519_verify` asserts the same on every
-//     verification.
+//     x-coordinate is zero); the Ed25519 core's `ed25519_verify` asserts the
+//     same on every verification.
 // ---------------------------------------------------------------------------
 
+import "modules/Ed25519Core";
 import "modules/WalletArmDescriptors";
 import "modules/WalletArmRendering";
 
 // ── The 32-byte key and the derivations (the descriptor module's ed25519
 //    class) ──────────────────────────────────────────────────────────────
 //
-// The key's 32-byte RFC 8032 encoding is the descriptor module's one shared
-// function, encode_public_key_with_sol_ed25519 (y little-endian, x's parity
-// in bit 255; for a point of the prime-order subgroup the one canonical
-// encoding a strict decoder accepts). It takes the point with the encoding's
-// bytes (`pk_bytes`) and the x-coordinate's bytes little-endian (`pk_x`) as
-// inputs and checks both against the point, so no byte is taken out of a
-// point in-circuit. Every derivation of this arm, the seam's included, goes
-// through the module's ed25519 class, which takes those three inputs,
-// asserts A != O, checks the encoding, and returns the key with the derived
-// value: enrolment, removal, grants and signing use one encoding of one key.
+// The key's 32-byte RFC 8032 encoding is the Ed25519 core's one shared
+// function, encode_public_key_ed25519 (y little-endian, x's parity in bit
+// 255; for a point of the prime-order subgroup the one canonical encoding a
+// strict decoder accepts). It takes the point with the encoding's bytes
+// (`pk_bytes`) and the x-coordinate's bytes little-endian (`pk_x`) as inputs
+// and checks both against the point, so no byte is taken out of a point
+// in-circuit. Every derivation of this arm, the seam's included, goes
+// through the descriptor module's ed25519 class, which takes those three
+// inputs, asserts A != O, checks the encoding with the core's checked
+// encoding, and returns the key with the derived value: enrolment, removal,
+// grants and signing use one encoding of one key.
 // Exported for clients.
-export { encode_public_key_with_sol_ed25519 };
+export { encode_public_key_ed25519 };
 
 export pure circuit derive_boot_commitment_with_sol_ed25519(
   salt:     Bytes<32>,
@@ -116,7 +118,7 @@ export pure circuit derive_blind_with_sol_ed25519(signature: Bytes<64>): Bytes<3
 // and 255 cleared and bit 254 set ("clamped"), read little-endian; A = [s]B.
 // Returns A, so a software signer obtains exactly the point the arm's
 // circuits use; its 32-byte encoding is then checked against it by
-// encode_public_key_with_sol_ed25519. Pure: no proving key, nothing on
+// encode_public_key_ed25519. Pure: no proving key, nothing on
 // chain. There is deliberately no raw-scalar helper: a Solana secret key is a
 // seed, and a seed passed as a scalar gives another key.
 //
@@ -170,8 +172,8 @@ export circuit activate_initial_device_with_sol_ed25519(
 // `pk_bytes` and `pk_x` are the key's 32-byte RFC 8032 encoding and its
 // x-coordinate little-endian; `r_bytes` and `r_x` the same for R (for an
 // accepted signature, `r_bytes` is its first 32 bytes). Each pair is checked
-// against its point by the descriptor module's encoding, so no byte is taken
-// out of a point in-circuit.
+// against its point by the Ed25519 core's checked encoding, so no byte is
+// taken out of a point in-circuit.
 struct SolEd25519Auth {
   pk:          Curve25519Point;
   pk_bytes:    Vector<32, Uint<8>>;
@@ -194,7 +196,7 @@ struct SolEd25519Auth {
 // Then, in upstream p256's order: membership of the device's current
 // single-use entry (bound to that key and the account's blind),
 // verification — R != O (refused here; the standard library accepts it),
-// then sol_ed25519_verify<n> (cofactorless [s]B == R + [k]A with
+// then the Ed25519 core's ed25519_verify<n> (cofactorless [s]B == R + [k]A with
 // k = SHA-512(R || A || msg) mod L, A's encoding the key derived above; it
 // refuses A = O; s < L and the prime-order subgroup for A and R hold by
 // type) — the entry rolled to its
@@ -214,34 +216,13 @@ circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
   const entry = disclose(current);
   assert(devices.member(entry), "unknown device entry");
   assert((curve25519PointX(auth.sig.r) as Bytes<32>) != pad(32, ""), "R is the identity");
-  assert(sol_ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
+  assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
   devices.remove(entry);
   const next = disclose(successor);
   devices.insert(next);
   auth_nonce = (auth_nonce + 1) as Uint<64>;
   bump_round();
   return next;
-}
-
-// ── Verification ────────────────────────────────────────────────────────────
-//
-// RFC 8032 section 5.1.7 as the standard library's ed25519Verify<#n> computes
-// it (k = SHA-512(encode(R) || encode(A) || M) mod L; valid iff
-// [s]B == R + [k]A, cofactorless; the identity key refused with the same
-// message), with both encodings taken from checked values instead of
-// explosions of the points' coordinates: `key` is A's encoding the caller has
-// already derived from `pk` (the seam's own derivation, which also binds the
-// entry or grant id), and R's encoding is `r_bytes`, checked against R with
-// `r_x` by the descriptor module's encoding (the same check as the key's).
-// compact row optimization | Ed25519 verify from checked encodings | -15% rows
-circuit sol_ed25519_verify<#n>(msg: Bytes<n>, sig: Ed25519Signature, pk: Curve25519Point, key: Bytes<32>,
-                               r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
-  assert((curve25519PointX(pk) as Bytes<32>) != pad(32, ""), "Curve25519Point identity is not a permitted ed25519Verify verification key");
-  // compact row optimization | R encoding from checked signature bytes | -71% rows
-  const r_enc = encode_public_key_with_sol_ed25519(sig.r, r_bytes, r_x);
-  // compact row optimization | signing key encoded once, shared with the verify | -48% rows
-  const k = sha512<[Bytes<32>, Bytes<32>, Bytes<n>]>([r_enc, key, msg]) as Curve25519Scalar;
-  return ecMulGenerator(sig.s) == ecAdd(sig.r, ecMul(pk, k));
 }
 
 // ── Gated circuits ──────────────────────────────────────────────────────────
@@ -646,7 +627,7 @@ circuit require_grant_with_sol_ed25519<#t, #b, #n>(
     max_coin_value, amount, spent_prev, op, recipient_bytes);
   const msg = sol_grantee_message<t, b, n>(self_addr, auth.pk_bytes, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
   assert((curve25519PointX(auth.sig.r) as Bytes<32>) != pad(32, ""), "R is the identity");
-  assert(sol_ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
+  assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
   grants.insert(id, GrantRecord {
     epoch:        gr.epoch,
     gen:          gr.gen,
@@ -870,7 +851,7 @@ export struct SolCoinShow {
 
 // A readable target (add_device, remove_device): the registered device tag
 // and the key payload of its width class.
-//   w52  evm_eip712   address (20), a = blind
+//   w52  evm_k256     address (20), a = blind
 //   w64  jubjub       a = x_le, b = y_le         sol_ed25519  pk, a = key, b = blind
 //   w65  k256         a = x_le, b = y_le, envelope
 //   w117 p256         a = x_le, b = y_le, c = rp_id_hash, origin (21)
@@ -892,8 +873,8 @@ export struct SolTarget {
 
 // A Solana target's or grantee's key as the gated circuits take it: the
 // point, the key's 32-byte RFC 8032 encoding and its x-coordinate
-// little-endian, both byte vectors checked against the point by the
-// descriptor module's encoding. Any other class passes the identity and zero
+// little-endian, both byte vectors checked against the point by the Ed25519
+// core's checked encoding. Any other class passes the identity and zero
 // bytes. Internal, as SolEd25519Auth: the generated JavaScript takes it as one
 // object argument.
 struct SolKey {
@@ -914,7 +895,7 @@ export struct SolTargetShow {
 }
 
 // A grantee (issue_grant, revoke_grant): its scheme's grant-id recipe binds
-// (key, origin_hash, slot). Classes: 0 evm_eip712 (w52), 1 jubjub (w64),
+// (key, origin_hash, slot). Classes: 0 evm_k256 (w52), 1 jubjub (w64),
 // 2 sol_ed25519 (w64; with its point, as a target), 3 k256 (w65), 4 p256 (w64, key
 // only; its RP is a scope field). origin_hash: a readable grantee's 32-byte
 // label (shown as text), a passkey's 21-byte origin (shown as text), or, for
@@ -1007,7 +988,7 @@ circuit sol_chars32(b: Bytes<32>, v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
 // which the class selects; an unregistered tag is refused.
 
 circuit sol_device_class(tag: Bytes<32>): Uint<8> {
-  const cls = (tag == device_tag_evm_eip712() ? 0
+  const cls = (tag == device_tag_evm_k256() ? 0
              : tag == device_tag_jubjub() ? 1
              : tag == device_tag_sol_ed25519() ? 2
              : tag == device_tag_k256() ? 3 : 4) as Uint<8>;
@@ -1063,7 +1044,7 @@ circuit sol_device_entry(t: SolTarget, k: SolKey, self_addr: ContractAddress, ep
 }
 
 circuit sol_grantee_class(tag: Bytes<32>): Uint<8> {
-  const cls = (tag == grant_id_tag_evm_eip712() ? 0
+  const cls = (tag == grant_id_tag_evm_k256() ? 0
              : tag == grant_id_tag_jubjub() ? 1
              : tag == grant_id_tag_sol_ed25519() ? 2
              : tag == grant_id_tag_k256() ? 3 : 4) as Uint<8>;
@@ -1269,11 +1250,11 @@ circuit sol_tag_text(cls: Uint<8>, t0: Bytes<32>, t1: Bytes<32>, t2: Bytes<32>, 
              t3 as Vector<32, Uint<8>>, t4 as Vector<32, Uint<8>>);
 }
 circuit sol_device_tag_text(tag: Bytes<32>): Vector<32, Uint<8>> {
-  return sol_tag_text(sol_device_class(tag), device_tag_evm_eip712(), device_tag_jubjub(), device_tag_sol_ed25519(),
+  return sol_tag_text(sol_device_class(tag), device_tag_evm_k256(), device_tag_jubjub(), device_tag_sol_ed25519(),
                       device_tag_k256(), device_tag_p256());
 }
 circuit sol_grantee_tag_text(tag: Bytes<32>): Vector<32, Uint<8>> {
-  return sol_tag_text(sol_grantee_class(tag), grant_id_tag_evm_eip712(), grant_id_tag_jubjub(), grant_id_tag_sol_ed25519(),
+  return sol_tag_text(sol_grantee_class(tag), grant_id_tag_evm_k256(), grant_id_tag_jubjub(), grant_id_tag_sol_ed25519(),
                       grant_id_tag_k256(), grant_id_tag_p256());
 }
 

@@ -163,11 +163,11 @@ const entryLines = (entry: Uint8Array, word: string) => {
 // The class each registered tag selects (the circuits' sol_device_class and
 // sol_grantee_class), from the base's tag registry.
 const DEVICE_TAGS: Record<string, number> = {
-  [DESCRIPTOR_TAGS.device.evm_eip712]: 0, [DESCRIPTOR_TAGS.device.jubjub]: 1, [DESCRIPTOR_TAGS.device.sol_ed25519]: 2,
+  [DESCRIPTOR_TAGS.device.evm_k256]: 0, [DESCRIPTOR_TAGS.device.jubjub]: 1, [DESCRIPTOR_TAGS.device.sol_ed25519]: 2,
   [DESCRIPTOR_TAGS.device.k256]: 3, [DESCRIPTOR_TAGS.device.p256]: 4,
 };
 const GRANT_TAGS: Record<string, number> = {
-  [DESCRIPTOR_TAGS['grant-id'].evm_eip712]: 0, [DESCRIPTOR_TAGS['grant-id'].jubjub]: 1, [DESCRIPTOR_TAGS['grant-id'].sol_ed25519]: 2,
+  [DESCRIPTOR_TAGS['grant-id'].evm_k256]: 0, [DESCRIPTOR_TAGS['grant-id'].jubjub]: 1, [DESCRIPTOR_TAGS['grant-id'].sol_ed25519]: 2,
   [DESCRIPTOR_TAGS['grant-id'].k256]: 3, [DESCRIPTOR_TAGS['grant-id'].p256]: 4,
 };
 const padBlock = (s: string, n: number) => {

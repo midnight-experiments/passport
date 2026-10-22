@@ -8,12 +8,13 @@ import CompactStandardLibrary;
 // the modules are built and tested on their own, before any arm includes
 // them (upstream's probe-*.compact pattern).
 //
+//   modules/Ed25519Core           the shared RFC 8032 encoding of an
+//                                 Ed25519 key, checked against its point
 //   modules/WalletArmDescriptors  readable-descriptor derivations (device
 //                                 entries, boot commitments, grant ids,
 //                                 origin_hash, the blind and the grant scope
 //                                 salt), one per payload class, with the
-//                                 registered tags, and the shared RFC 8032
-//                                 encoding of an Ed25519 key
+//                                 registered tags
 //   modules/WalletArmRendering    decimal, hex, label, base58, date, and
 //                                 word text for readable signed bytes
 //
@@ -27,23 +28,24 @@ import CompactStandardLibrary;
 // enforced by the proof itself (constraint-level negatives).
 // ---------------------------------------------------------------------------
 
+import "modules/Ed25519Core";
 import "modules/WalletArmDescriptors";
 import "modules/WalletArmRendering";
 
 export {
   device_tag_jubjub, device_tag_k256, device_tag_p256,
-  device_tag_evm_eip712, device_tag_sol_ed25519,
-  boot_tag_evm_eip712, boot_tag_sol_ed25519,
+  device_tag_evm_k256, device_tag_sol_ed25519,
+  boot_tag_evm_k256, boot_tag_sol_ed25519,
   grant_id_tag_jubjub, grant_id_tag_k256, grant_id_tag_p256,
-  grant_id_tag_evm_eip712, grant_id_tag_sol_ed25519,
-  blind_tag_evm_eip712, blind_tag_sol_ed25519, grant_origin_tag,
-  salt_tag_evm_eip712, salt_tag_sol_ed25519,
+  grant_id_tag_evm_k256, grant_id_tag_sol_ed25519,
+  blind_tag_evm_k256, blind_tag_sol_ed25519, grant_origin_tag,
+  salt_tag_evm_k256, salt_tag_sol_ed25519,
   derive_descriptor_entry_w52, derive_descriptor_entry_w64,
   derive_descriptor_entry_w65, derive_descriptor_entry_w117,
   derive_descriptor_boot_w52,
   derive_descriptor_grant_id_w52, derive_descriptor_grant_id_w64,
   derive_descriptor_grant_id_w65,
-  encode_public_key_with_sol_ed25519,
+  encode_public_key_ed25519,
   derive_descriptor_entry_ed25519, derive_descriptor_boot_ed25519,
   derive_descriptor_grant_id_ed25519,
   derive_signer_entries_ed25519,
@@ -124,7 +126,7 @@ export circuit probe_grant_id_w65(
 // alone; the derivations add the A != O assert and return [key, value] (the
 // probes write the value).
 export circuit probe_encode_ed25519(pk: Curve25519Point, pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>): [] {
-  derived = disclose(encode_public_key_with_sol_ed25519(pk, pk_bytes, pk_x));
+  derived = disclose(encode_public_key_ed25519(pk, pk_bytes, pk_x));
 }
 
 export circuit probe_entry_ed25519(
@@ -304,7 +306,7 @@ export circuit probe_key_base58(
   pk: Curve25519Point, pk_bytes: Vector<32, Uint<8>>, pk_x: Vector<32, Uint<8>>,
   digits: Vector<44, Uint<8>>, carry: Uint<120>, low: Uint<128>, top: Uint<16>
 ): [] {
-  derived = disclose(encode_public_key_with_sol_ed25519(pk, pk_bytes, pk_x));
+  derived = disclose(encode_public_key_ed25519(pk, pk_bytes, pk_x));
   text_44 = disclose(base58_text_32(pk_bytes, digits, carry, low, top) as Bytes<44>);
 }
 

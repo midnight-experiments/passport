@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Readable device descriptors — the shared derivation module of the readable
-// authorisation arms (`evm_eip712`, `sol_ed25519`).
+// authorisation arms (`evm_k256`, `sol_ed25519`).
 //
 // A readable arm never signs an opaque entry or grant id. When it enrols,
 // removes, or grants to ANOTHER key, the signed bytes show that key as a
@@ -30,7 +30,7 @@
 // have one here (see the boot section):
 //
 //   class    device entry                    boot          grant id
-//   w52      evm_eip712: address || blind    evm_eip712    evm_eip712: address || blind
+//   w52      evm_k256: address || blind      evm_k256      evm_k256: address || blind
 //   w64      jubjub: x_le || y_le            —             jubjub: x_le || y_le
 //                                                          p256: x_le || y_le
 //   ed25519  sol_ed25519: key || blind       sol_ed25519   sol_ed25519: key || blind
@@ -40,9 +40,9 @@
 //
 // The ed25519 class takes the key as a Curve25519Point, never as bytes
 // alone: its 32-byte encoding is a checked input that must match the point
-// (encode_public_key_with_sol_ed25519 below), and the point must not be the
-// identity, so its preimage is 64 bytes like w64's, but no caller can hash
-// bytes that are not the encoding of a live key.
+// (the checked encoding of modules/Ed25519Core), and the point must not be
+// the identity, so its preimage is 64 bytes like w64's, but no caller can
+// hash bytes that are not the encoding of a live key.
 //
 // TAGS ARE NOT FREE-FORM. Each derivation takes the tag as the padded
 // 32-byte text the signed bytes show, and accepts it only if it equals one of
@@ -90,6 +90,8 @@
 
 module WalletArmDescriptors {
   import CompactStandardLibrary;
+  // The checked RFC 8032 encoding of an Ed25519 key, with its identity test.
+  import { ed25519_checked_encoding } from "./Ed25519Core";
 
   // ── Registered tags ───────────────────────────────────────────────────────
   //
@@ -107,14 +109,14 @@ module WalletArmDescriptors {
   export pure circuit device_tag_p256(): Bytes<32> {
     return pad(32, "midnight:account:device:r1:v2");
   }
-  export pure circuit device_tag_evm_eip712(): Bytes<32> {
+  export pure circuit device_tag_evm_k256(): Bytes<32> {
     return pad(32, "midnight:account:device:evm:v1");
   }
   export pure circuit device_tag_sol_ed25519(): Bytes<32> {
     return pad(32, "midnight:account:device:sol:v1");
   }
 
-  export pure circuit boot_tag_evm_eip712(): Bytes<32> {
+  export pure circuit boot_tag_evm_k256(): Bytes<32> {
     return pad(32, "midnight:account:boot:evm:v1");
   }
   export pure circuit boot_tag_sol_ed25519(): Bytes<32> {
@@ -130,14 +132,14 @@ module WalletArmDescriptors {
   export pure circuit grant_id_tag_p256(): Bytes<32> {
     return pad(32, "midnight:account:grant:id:r1:v1");
   }
-  export pure circuit grant_id_tag_evm_eip712(): Bytes<32> {
+  export pure circuit grant_id_tag_evm_k256(): Bytes<32> {
     return pad(32, "midnight:account:grant:id:evm:v1");
   }
   export pure circuit grant_id_tag_sol_ed25519(): Bytes<32> {
     return pad(32, "midnight:account:grant:id:sol:v1");
   }
 
-  export pure circuit blind_tag_evm_eip712(): Bytes<32> {
+  export pure circuit blind_tag_evm_k256(): Bytes<32> {
     return pad(32, "midnight:account:blind:evm:v1");
   }
   export pure circuit blind_tag_sol_ed25519(): Bytes<32> {
@@ -147,7 +149,7 @@ module WalletArmDescriptors {
   // The grant scope salt's tags, one per readable arm: the salt each arm's
   // issue_grant derives for the grant's commitments (derive_grant_scope_salt
   // below).
-  export pure circuit salt_tag_evm_eip712(): Bytes<32> {
+  export pure circuit salt_tag_evm_k256(): Bytes<32> {
     return pad(32, "midnight:account:salt:evm:v1");
   }
   export pure circuit salt_tag_sol_ed25519(): Bytes<32> {
@@ -161,7 +163,7 @@ module WalletArmDescriptors {
 
   // ── Device entries, by payload width ──────────────────────────────────────
 
-  // Width 52: an `evm_eip712` device, by its 20-byte Ethereum address and
+  // Width 52: an `evm_k256` device, by its 20-byte Ethereum address and
   // the account's blind.
   export pure circuit derive_descriptor_entry_w52(
     tag:       Bytes<32>,
@@ -171,7 +173,7 @@ module WalletArmDescriptors {
     epoch:     Uint<32>,
     counter:   Uint<64>,
   ): Bytes<32> {
-    assert(tag == device_tag_evm_eip712(), "descriptor: not a 52-byte device tag");
+    assert(tag == device_tag_evm_k256(), "descriptor: not a 52-byte device tag");
     return persistentHash<[Bytes<32>, ContractAddress, Bytes<20>, Bytes<32>, Uint<32>, Uint<64>]>(
       [tag, self_addr, address, blind, epoch, counter]
     );
@@ -235,7 +237,7 @@ module WalletArmDescriptors {
   // The boot commitment exists before the account does, so it binds a salt
   // instead of the account address. It exists only for an account's FIRST
   // device, and each readable arm activates only its own scheme, so this
-  // module has a boot recipe for `evm_eip712` (w52, below) and
+  // module has a boot recipe for `evm_k256` (w52, below) and
   // `sol_ed25519` (the ed25519 class) only. An account whose first device is
   // `jubjub`, `k256`, or `p256` boots through upstream's own
   // `derive_boot_commitment_with_<scheme>`.
@@ -246,7 +248,7 @@ module WalletArmDescriptors {
     address: Bytes<20>,
     blind:   Bytes<32>,
   ): Bytes<32> {
-    assert(tag == boot_tag_evm_eip712(), "descriptor: not a 52-byte boot tag");
+    assert(tag == boot_tag_evm_k256(), "descriptor: not a 52-byte boot tag");
     return persistentHash<[Bytes<32>, Bytes<32>, Bytes<20>, Bytes<32>]>(
       [tag, salt, address, blind]
     );
@@ -267,7 +269,7 @@ module WalletArmDescriptors {
     origin_hash: Bytes<32>,
     slot:        Uint<8>,
   ): Bytes<32> {
-    assert(tag == grant_id_tag_evm_eip712(), "descriptor: not a 52-byte grant-id tag");
+    assert(tag == grant_id_tag_evm_k256(), "descriptor: not a 52-byte grant-id tag");
     return persistentHash<[Bytes<32>, ContractAddress, Bytes<20>, Bytes<32>, Bytes<32>, Uint<8>]>(
       [tag, self_addr, address, blind, origin_hash, slot]
     );
@@ -321,65 +323,11 @@ module WalletArmDescriptors {
   // same circuits, so enrolment, removal, grants and signing cannot use two
   // different encodings of one key.
   //
-  // The encoding is a checked input. Taking bytes out of a coordinate costs
-  // the compiler a full decomposition per byte, so the caller passes the
-  // encoding itself (`pk_bytes`) and the x-coordinate (`pk_x`, 32 bytes
-  // little-endian), each element a Uint<8>, and the circuit checks them
-  // against the point's own coordinates: `pk_bytes` with bit 255 cleared is
-  // compared byte for byte with the canonical bytes of y, `pk_x` with the
-  // canonical bytes of x, and bit 255 must be x's low bit. A byte vector
-  // rebuilds a value exactly (each limb is below 2^248) and base 256 with
-  // digits 0..255 is unique, so for each point exactly one pair of inputs
-  // passes: a value at or above p, y + p, or a carry between bytes never
-  // matches. A caller that also SHOWS the key (an approval message, its
-  // base58 text) shows `pk_bytes` on the same path as the check, so the
-  // shown bytes are the checked ones.
-
-  // Whether a byte is odd (no bitwise operations: the higher bits are
-  // subtracted away one at a time).
-  circuit byte_is_odd(b: Uint<8>): Boolean {
-    const b6 = b  >= 128 ? b  - 128 : b;
-    const b5 = b6 >= 64  ? b6 - 64  : b6;
-    const b4 = b5 >= 32  ? b5 - 32  : b5;
-    const b3 = b4 >= 16  ? b4 - 16  : b4;
-    const b2 = b3 >= 8   ? b3 - 8   : b3;
-    const b1 = b2 >= 4   ? b2 - 4   : b2;
-    return (b1 >= 2 ? b1 - 2 : b1) == 1;
-  }
-
-  // [the encoding, x == 0]. RFC 8032 section 5.1.2: y little-endian (below
-  // p < 2^255, so bit 255 of y is clear), and x's low bit in bit 255.
-  circuit ed25519_checked_encoding(
-    pk:       Curve25519Point,
-    pk_bytes: Vector<32, Uint<8>>,
-    pk_x:     Vector<32, Uint<8>>,
-  ): [Bytes<32>, Boolean] {
-    const e = pk_bytes;
-    const sign = e[31] >= 128;
-    const top = (sign ? e[31] - 128 : e[31]) as Uint<8>;
-    assert(Bytes[e[0],  e[1],  e[2],  e[3],  e[4],  e[5],  e[6],  e[7],
-                 e[8],  e[9],  e[10], e[11], e[12], e[13], e[14], e[15],
-                 e[16], e[17], e[18], e[19], e[20], e[21], e[22], e[23],
-                 e[24], e[25], e[26], e[27], e[28], e[29], e[30], top] == curve25519PointY(pk) as Bytes<32>,
-           "descriptor: the Ed25519 key bytes do not match the point's y");
-    const x = Bytes[...pk_x];
-    assert(x == curve25519PointX(pk) as Bytes<32>, "descriptor: the Ed25519 x bytes do not match the point's x");
-    assert(byte_is_odd(pk_x[0]) == sign, "descriptor: the Ed25519 sign bit is not x's parity");
-    return [Bytes[...e], x == pad(32, "")];
-  }
-
-  // The RFC 8032 encoding of a point, from its checked inputs. For a point of
-  // the prime-order subgroup it is the one canonical encoding a strict
-  // decoder accepts, so the map from keys to their 32 bytes is one-to-one.
-  // The one shared encoding: every arm calls it, none keeps a copy.
-  // compact row optimization | checked Ed25519 key encoding | -71% rows
-  export pure circuit encode_public_key_with_sol_ed25519(
-    pk:       Curve25519Point,
-    pk_bytes: Vector<32, Uint<8>>,
-    pk_x:     Vector<32, Uint<8>>,
-  ): Bytes<32> {
-    return ed25519_checked_encoding(pk, pk_bytes, pk_x)[0];
-  }
+  // The key's encoding is a checked input: modules/Ed25519Core checks it
+  // against the point (ed25519_checked_encoding, from the encoding and the
+  // x-coordinate's bytes the caller passes; no byte is taken out of a
+  // coordinate), and every derivation below binds the bytes that check
+  // returns.
 
   // The key a recipe binds: the encoding, then A != O. In the prime-order
   // subgroup the identity is the only point whose x-coordinate is zero (the
@@ -461,7 +409,7 @@ module WalletArmDescriptors {
 
   // ── Grant origin_hash ─────────────────────────────────────────────────────
 
-  // A readable (`evm_eip712` / `sol_ed25519`) grantee's origin label: 32
+  // A readable (`evm_k256` / `sol_ed25519`) grantee's origin label: 32
   // bytes of zero-padded ASCII, shown as text.
   export pure circuit derive_grant_origin_hash_label(label: Bytes<32>): Bytes<32> {
     return persistentHash<[Bytes<32>, Bytes<32>]>([grant_origin_tag(), label]);
@@ -479,7 +427,7 @@ module WalletArmDescriptors {
   // client when it enrols a device or restores an account; exported so that
   // every implementation reproduces it through the contract's own toolchain.
   export pure circuit derive_blind(tag: Bytes<32>, signature: Bytes<64>): Bytes<32> {
-    assert(tag == blind_tag_evm_eip712() || tag == blind_tag_sol_ed25519(),
+    assert(tag == blind_tag_evm_k256() || tag == blind_tag_sol_ed25519(),
            "descriptor: not a blind tag");
     return persistentHash<[Bytes<32>, Bytes<64>]>([tag, signature]);
   }
@@ -496,7 +444,7 @@ module WalletArmDescriptors {
   // commitments with it when it spends.
   export pure circuit derive_grant_scope_salt(tag: Bytes<32>, blind: Bytes<32>, self_addr: ContractAddress,
                                               auth_nonce: Uint<64>): Bytes<32> {
-    assert(tag == salt_tag_evm_eip712() || tag == salt_tag_sol_ed25519(),
+    assert(tag == salt_tag_evm_k256() || tag == salt_tag_sol_ed25519(),
            "descriptor: not a grant salt tag");
     return persistentHash<[Bytes<32>, Bytes<32>, ContractAddress, Uint<64>]>([tag, blind, self_addr, auth_nonce]);
   }
