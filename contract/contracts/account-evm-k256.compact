@@ -45,6 +45,7 @@ import "modules/K256Core";
 import "modules/EvmIdentity";
 import "modules/WalletArmDescriptors";
 import "modules/EvmK256";
+import "modules/Eip712V1";
 
 // The descriptor module's derivations and tags, re-exported as pure circuits
 // of the account contract: a client derives any readable descriptor's entry,
@@ -70,14 +71,21 @@ export {
   derive_blind, derive_grant_scope_salt,
 };
 
+// The signing format (modules/Eip712V1): the fixed domain's type hash, name
+// and version hashes, verifying contract and separator, and the digest,
+// re-exported as pure oracles.
+export {
+  eip712_v1_domain_type_hash, eip712_v1_name_hash, eip712_v1_version_hash,
+  eip712_v1_verifying_contract, eip712_v1_domain_separator, eip712_v1_digest,
+};
+
 // The arm's EIP-712 codec (modules/EvmK256, byte contract EVM-K256.md):
-// the domain, the digest, the descriptor hashes and derivations, and the
-// struct hash of every operation, re-exported as pure oracles.
+// the descriptor hashes and derivations, and the struct hash of every
+// operation, re-exported as pure oracles.
 export {
   EvmK256Descriptor, EvmK256GranteeDescriptor,
   EvmK256Base58Hint, EvmK256DescriptorHint, EvmK256GranteeHint, EvmK256AmountHint, EvmK256CoinHint,
   EvmK256RemoveHint, EvmK256IssueHint,
-  eip712_v1_verifying_contract, eip712_v1_domain_separator, eip712_v1_digest,
   evm_k256_site_label_hash, evm_k256_device_scheme, evm_k256_grantee_scheme,
   evm_k256_device_descriptor_hash, evm_k256_descriptor_entry,
   evm_k256_sol_device_target, evm_k256_sol_grantee_target,
@@ -173,15 +181,12 @@ struct EvmK256Auth {
 }
 
 // The checked byte hints of the device seam (see EvmAddressHint and the
-// module's "Checked byte hints"): the key's; `account_hash`, the bytes of
-// keccak256 of the account's address (the domain's verifyingContract is its
-// low 20 bytes); `digest`, the bytes of the EIP-712 digest; and `nonce`,
-// auth_nonce little-endian.
+// module's "Checked byte hints"): the key's; `digest`, the bytes of the
+// EIP-712 digest; and `nonce`, auth_nonce little-endian.
 struct EvmK256SeamHint {
-  key:          EvmAddressHint;
-  account_hash: Vector<32, Uint<8>>;
-  digest:       Vector<32, Uint<8>>;
-  nonce:        Vector<8, Uint<8>>;
+  key:    EvmAddressHint;
+  digest: Vector<32, Uint<8>>;
+  nonce:  Vector<8, Uint<8>>;
 }
 
 // The device seam, in upstream p256's order (MIP-0013 §4): membership of the
@@ -216,8 +221,7 @@ circuit require_authorised_with_evm_k256<T>(auth: EvmK256Auth, type_hash: Bytes<
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
-  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
-                                 auth.hint.digest, auth.sig, auth.pk),
+  assert(k256_ecdsa_verify(eip712_v1_digest(struct_hash), auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
   devices.remove(entry);
   const next = disclose(derive_device_entry_with_evm_k256(
@@ -240,8 +244,7 @@ circuit require_authorised_with_evm_k256_either<T, U>(
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
-  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
-                                 auth.hint.digest, auth.sig, auth.pk),
+  assert(k256_ecdsa_verify(eip712_v1_digest(struct_hash), auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
   devices.remove(entry);
   const next = disclose(derive_device_entry_with_evm_k256(
@@ -262,8 +265,7 @@ circuit require_authorised_with_evm_k256_bare(auth: EvmK256Auth, type_hash: Byte
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
-  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
-                                 auth.hint.digest, auth.sig, auth.pk),
+  assert(k256_ecdsa_verify(eip712_v1_digest(struct_hash), auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
   devices.remove(entry);
   const next = disclose(derive_device_entry_with_evm_k256(
@@ -622,15 +624,14 @@ struct EvmK256GrantAuth {
 }
 
 // The checked byte hints of the grant seam (see EvmK256SeamHint): the
-// key's, the account hash's and the digest's, and the frame's: the site
-// label's bytes, and the record's issuedAt and nonce little-endian.
+// key's and the digest's, and the frame's: the site label's bytes, and the
+// record's issuedAt and nonce little-endian.
 struct EvmK256GrantSeamHint {
-  key:          EvmAddressHint;
-  account_hash: Vector<32, Uint<8>>;
-  digest:       Vector<32, Uint<8>>;
-  label:        Vector<32, Uint<8>>;
-  issued_at:    Vector<8, Uint<8>>;
-  grant_nonce:  Vector<8, Uint<8>>;
+  key:         EvmAddressHint;
+  digest:      Vector<32, Uint<8>>;
+  label:       Vector<32, Uint<8>>;
+  issued_at:   Vector<8, Uint<8>>;
+  grant_nonce: Vector<8, Uint<8>>;
 }
 
 circuit require_grant_with_evm_k256<T>(
@@ -665,8 +666,7 @@ circuit require_grant_with_evm_k256<T>(
     max_coin_value, amount, spent_prev, op, recipient_bytes);
   const struct_hash = evm_k256_grantee_struct<T>(type_hash, kernel.self().bytes, address, label, auth.hint.label, slot,
     g.issued_at, auth.hint.issued_at, g.nonce, auth.hint.grant_nonce, tail);
-  assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
-                                 auth.hint.digest, auth.sig, auth.pk),
+  assert(k256_ecdsa_verify(eip712_v1_digest(struct_hash), auth.hint.digest, auth.sig, auth.pk),
          "invalid grant signature");
   grants.insert(id, GrantRecord {
     epoch:        g.epoch,

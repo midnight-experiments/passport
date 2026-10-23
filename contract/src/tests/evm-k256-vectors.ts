@@ -2,9 +2,10 @@
 // and role, and the two adapters that turn one input into (a) a call of the
 // contract's pure struct-hash circuit and (b) the typed data a wallet signs.
 //
-// The frozen file src/tests/vectors/evm-k256-v1.json holds these inputs
-// with the struct hashes, domain separators and digests viem computed for
-// them. evm-k256-offline.ts checks the contract and the client codec
+// The frozen file src/tests/vectors/evm-k256-v1.json holds these inputs,
+// drawn from VECTOR_SEED, with the struct hashes, domain separators and
+// digests viem computed for them under the fixed V1 domain, and the domain's
+// pinned constants. evm-k256-offline.ts checks the contract and the client codec
 // against it; evm-k256-viem.ts recomputes it with viem.
 
 import { createHash } from 'node:crypto';
@@ -16,7 +17,7 @@ import { padTag } from '../wallet/descriptors.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { solKeyOf } from '../wallet/signer-evm-k256.js';
 import {
-  bytesHint, leHint, accountHashHint, evmK256Base58Hint,
+  bytesHint, leHint, evmK256Base58Hint,
 } from '../wallet/evm-k256-hints.js';
 import { utcDateTimeInputs } from '../wallet/rendering.js';
 
@@ -42,10 +43,12 @@ const solKey = (seedHex: string) => hex(ed25519.getPublicKey(new Uint8Array(Buff
 const label = (text: string) => { const o = new Uint8Array(32); o.set(new TextEncoder().encode(text)); return o; };
 const unhex = (s: string) => new Uint8Array(Buffer.from(String(s).replace(/^0x/, ''), 'hex'));
 const U128 = (1n << 128n) - 1n;
-/** Ed25519 public keys whose encoding starts with one and two zero bytes
- *  (found by a seeded search; seeds sha256("evm-k256-vectors/solana-leading-zeros" || i), i = 28 and 3270). */
-const SOL_KEY_LEAD1 = solKey('00600f8ce708d50e6ab791c35cd7443b78edcc81b030b79136fdbcd8e4ced1f6');
-const SOL_KEY_LEAD2 = solKey('8d02f99afb0e0e3c3d4132b0cbadee783c72d63c5c6d1e4dc2bfb104b9b37ce1');
+/** Ed25519 public keys whose encoding starts with exactly one and with two
+ *  zero bytes, from a seeded search: the seeds are
+ *  sha256("evm-k256-vectors/solana-leading-zeros" || i), i = 0, 1, … in
+ *  decimal, and these are the first such keys (i = 215 and i = 48917). */
+const SOL_KEY_LEAD1 = solKey('9573f41334fb8a92ace2a41272aa2fdf954681bdd0d5a85ef3076902fa57b9c3');
+const SOL_KEY_LEAD2 = solKey('5a232b7fa9f0e2493a7cc92b32da0dbc898317eeebad0d604a5a3fb0aeab0941');
 const U64 = (1n << 64n) - 1n;
 const U32 = (1n << 32n) - 1n;
 
@@ -247,7 +250,6 @@ export function vectorHints(v: VectorInput) {
     return undefined;
   };
   return {
-    accountHash: accountHashHint(unhex(f.account)),
     nonce: f.authNonce !== undefined ? leOr0(big(f.authNonce), 8) : undefined,
     label: f.label !== undefined ? bytesHint(unhex(f.label)) : undefined,
     issuedAt: f.issuedAt !== undefined ? leOr0(big(f.issuedAt), 8) : undefined,
@@ -295,7 +297,7 @@ export function contractStructHash(pc: any, v: VectorInput): Uint8Array {
 
 /** The contract's digest for a vector (its exported pure circuit). */
 export const contractDigest = (pc: any, v: VectorInput): Uint8Array =>
-  pc.eip712_v1_digest(unhex((v.frame as any).account), contractStructHash(pc, v), vectorHints(v).accountHash);
+  pc.eip712_v1_digest(contractStructHash(pc, v));
 
 /** Negative vectors: inputs every layer named must refuse. */
 export interface NegativeVector { name: string; base: string; patch: (v: VectorInput) => VectorInput; refusedBy: ('client' | 'runtime')[]; why: string }

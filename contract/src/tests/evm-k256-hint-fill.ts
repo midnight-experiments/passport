@@ -17,7 +17,7 @@
 // hash and digest are the ones that module computes.
 
 import {
-  evmK256KeyHint, accountHashHint, bytesHint, leHint, evmK256CoinHint, evmK256Base58Hint,
+  evmK256KeyHint, bytesHint, leHint, evmK256CoinHint, evmK256Base58Hint,
 } from '../wallet/evm-k256-hints.js';
 import { solanaKeyInputs } from '../wallet/descriptors.js';
 import { siteAmountLabelBytes, utcDateTimeInputs } from '../wallet/rendering.js';
@@ -113,7 +113,6 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
   }
   const keyHint = keyHintOf(ctx, auth.pk);
   const address = attempt(() => pc.evm_address(auth.pk, keyHint)) as Uint8Array | undefined;
-  const ah = accountHashHint(ctx.account);
   const self = { bytes: ctx.account };
   const a = args;
   let op: unknown;
@@ -172,8 +171,8 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
       case 'recover_cancel_with_evm_k256': structHash = attempt(() => pc.evm_k256_struct_cancel_recovery(...f)); break;
       case 'publish_recovery_session_with_evm_k256': structHash = attempt(() => pc.evm_k256_struct_publish_recovery_session(...f, ...a.slice(0, 8))); break;
     }
-    const digest = structHash && attempt(() => pc.eip712_v1_digest(ctx.account, structHash, ah)) as Uint8Array | undefined;
-    out[ai] = { ...auth, hint: { key: keyHint, account_hash: ah, digest: digest ? bytesHint(digest) : zero32(), nonce: nh } };
+    const digest = structHash && attempt(() => pc.eip712_v1_digest(structHash)) as Uint8Array | undefined;
+    out[ai] = { ...auth, hint: { key: keyHint, digest: digest ? bytesHint(digest) : zero32(), nonce: nh } };
     if (dev[2]) out.push(op);
     return out;
   }
@@ -199,8 +198,8 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
       ? pc.evm_k256_struct_withdraw_shielded_as_grantee : pc.evm_k256_struct_withdraw_shielded_to_contract_as_grantee;
     structHash = c && attempt(() => oracle(...gf, a[1], a[2], (a[0] as any).bytes, a[3], a[4], c.nonce, c.value, c.mtIndex, op));
   }
-  const digest = structHash && attempt(() => pc.eip712_v1_digest(ctx.account, structHash, ah)) as Uint8Array | undefined;
-  out[ai] = { ...auth, hint: { key: keyHint, account_hash: ah, digest: digest ? bytesHint(digest) : zero32(), label: lh, issued_at: ih, grant_nonce: gh } };
+  const digest = structHash && attempt(() => pc.eip712_v1_digest(structHash)) as Uint8Array | undefined;
+  out[ai] = { ...auth, hint: { key: keyHint, digest: digest ? bytesHint(digest) : zero32(), label: lh, issued_at: ih, grant_nonce: gh } };
   out.push(op);
   return out;
 }
