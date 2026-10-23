@@ -6,7 +6,7 @@
 // SCHEME. RFC 8032 PureEdDSA over edwards25519 (Ed25519), the scheme of a
 // Solana wallet's `signMessage` (Phantom and others): the wallet signs the raw
 // bytes it is given, with no prefix. Verification is the Ed25519 core's
-// `ed25519_verify<#n>` (modules/Ed25519Core: the standard library's
+// `ed25519_verify<T>` (modules/Ed25519Core: the standard library's
 // `ed25519Verify<#n>` with R's and A's encodings taken from checked inputs
 // instead of byte explosions, and R = O refused, which the standard library
 // accepts).
@@ -196,7 +196,7 @@ struct SolEd25519Auth {
 //
 // Then, in upstream p256's order: membership of the device's current
 // single-use entry (bound to that key and the account's blind),
-// verification by the Ed25519 core's ed25519_verify<n> (cofactorless
+// verification by the Ed25519 core's ed25519_verify (cofactorless
 // [s]B == R + [k]A with k = SHA-512(R || A || msg) mod L, A's encoding the
 // key derived above; it refuses A = O and R = O; s < L and the prime-order
 // subgroup for A and R hold by type), the entry rolled to its successor,
@@ -215,7 +215,7 @@ circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
   const msg = sol_device_message<t, b, n>(kernel.self(), auth.pk_bytes, auth_nonce, title, body, show, frame);
   const entry = disclose(current);
   assert(devices.member(entry), "unknown device entry");
-  assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
+  assert(ed25519_verify<Bytes<n>>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
   devices.remove(entry);
   const next = disclose(successor);
   devices.insert(next);
@@ -626,7 +626,7 @@ circuit require_grant_with_sol_ed25519<#t, #b, #n>(
   const new_spent = check_spend_scope(gr, admitted, scope_salt, obj_color, recipient_kind, pinned_recipient,
     max_coin_value, amount, spent_prev, op, recipient_bytes);
   const msg = sol_grantee_message<t, b, n>(self_addr, auth.pk_bytes, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
-  assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
+  assert(ed25519_verify<Bytes<n>>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
   grants.insert(id, GrantRecord {
     epoch:        gr.epoch,
     gen:          gr.gen,
