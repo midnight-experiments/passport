@@ -1365,7 +1365,7 @@
     "sites": [
      {
       "file": "Ed25519Core.compact",
-      "line": 108,
+      "line": 123,
       "helper": "ed25519_verify",
       "inProvedCircuit": true
      }
@@ -1405,7 +1405,7 @@
     "sites": [
      {
       "file": "Ed25519Core.compact",
-      "line": 105,
+      "line": 120,
       "helper": "ed25519_verify",
       "inProvedCircuit": true
      }
