@@ -13,6 +13,15 @@ are sections S11 to S14 below. It also left one number as prose rather than as
 a measurement, the per-update verifier-byte ceiling, which a bisection probe
 now closes to one key. Those five are what this revision adds.
 
+**Snapshot boundary.** The historical `snapshot()` helper records six
+fields: `round`, `auth_nonce`, `inbox_count`, `device_count`,
+`grant_generation`, and grant-map size. References below to an unchanged
+snapshot mean those fields, not complete contract state or the UTXO set.
+Eight grantee-key refusals include these snapshots; the ninth fails in
+the client encoder and records no before/after snapshot. The expiry-margin,
+reordered-composition and losing-spend rows use the same helper, with
+additional grant-record observations where stated.
+
 **Verdict in one paragraph.** The roster deploys, the seam works on both
 grantee arms, and eleven of the twelve evidence groups are PASS; the twelfth,
 the deploy, is PARTIAL for one reason only, that Testing item 6's
@@ -20,8 +29,8 @@ the deploy, is PARTIAL for one reason only, that Testing item 6's
 grant call advances the record `nonce` and `spent_commit`, advances `round` by
 one, leaves `auth_nonce`, the device set, and `enc_key` untouched, and appends
 the change entry inside the same transaction. Twelve rejection rows abort at
-build time with the message the specification names, no transaction, and a
-byte-identical ledger snapshot either side. Nine grantee-key rows, on both
+build time with the message the specification names, no transaction, and an
+unchanged six-field snapshot either side. Nine grantee-key rows, on both
 arms, are refused with no transaction, and the tenth, a device key issued as a
 grantee, is not refused at all, which is GR-2 measured rather than assumed.
 The expiry rows are green on the grant twins themselves, with the transaction
@@ -301,8 +310,15 @@ row was set up by first spending an admitted 200 to bring grant A to 500 of 500
 admissible amount can breach the cumulative cap; that spend also extended the
 consecutive-nonce chain to 1, 2, 3.
 
-Row 12 also demonstrates the retained-secret property: five inbox entries sealed
-before the rotation stayed readable with the retained old secret.
+Row 12 signs the JubJub shielded grant call before the owner's
+`rotate_enc_key_with_k256` is included, then attempts the original signed
+call. It fails at build with `stale encryption key`, before submission.
+All six snapshot fields remain unchanged, including `inbox_count` at
+5 before and after: the attempted call appends no inbox entry. Complete
+contract state and the UTXO set were not snapshotted, so this is bounded
+evidence for the no-orphaned-change requirement. The row also demonstrates
+the retained-secret property: five inbox entries sealed before the rotation
+stayed readable with the retained old secret.
 
 ### The refusals the run measured outside those twelve rows
 
@@ -320,10 +336,11 @@ only on `failed assert:` will miss every one of them.
 | The grantee losing the one-coin race (S14) | node, at admission | `1010: Invalid Transaction: Custom error: 239`, node `Zswap(NullifierAlreadyPresent(…))` | built, proved, submitted, not included |
 | A maintenance update above the per-update ceiling (the ceiling probe) | node, at admission | `1010: Invalid Transaction: Transaction would exhaust the block limits` | built, priced, submitted, not included |
 
-Every row leaves the state it targets unmoved: the account's ledger snapshot
-for the grant rows, which is the same property the twelve build-time rows
-carry, and the maintenance authority counter for the ceiling probe, which is
-why a refused probe could be retried on the same throwaway account.
+Where snapshots were recorded, the grant rows leave their six recorded
+fields unchanged, as do the twelve build-time rows. The client-encoder
+refusal has no state snapshot. The ceiling probe separately observes an
+unchanged maintenance authority counter, allowing a refused probe to be
+retried on the same throwaway account.
 
 ## The change prediction
 
@@ -399,10 +416,12 @@ section 3.3 checks at issuance either, which is a gap in the implementation
 rather than in the specification, and an argument for 3.3 to state the
 authoriser's checks as an obligation with a name rather than as a description.
 
-Each row issues a record at the key's own `grant_id`, so a refusal can never be
-read as "unknown grant", and then attempts one shielded spend of 10 under it,
-recording the ledger snapshot either side. No row produced a transaction and no
-row moved the ledger.
+The first eight rows issue a record at the key's own `grant_id`, so their
+refusal cannot be read as "unknown grant", then attempt one shielded spend
+of 10 under it and record the same six-field snapshot either side. Those
+snapshots remain unchanged. The ninth row fails in the client encoder
+before that sequence and has no snapshot. No rejected key row produced a
+transaction.
 
 | # | Row | Refused at | Verbatim |
 |---|---|---|---|
@@ -469,7 +488,7 @@ records.
 |---|---|---|---|---|
 | Z0 | `0` | builds | included at block 6,176, `SUCCESS` | `round` 40 → 41, record `nonce` 1 |
 | Z1 | head + 3,600 s (`1789148172`) | builds | included at block 6,183, `SUCCESS` | `round` 41 → 42, record `nonce` 1 |
-| Z2 | wall clock + 10 s (`1789144903`) | builds | REFUSED at admission | unchanged |
+| Z2 | wall clock + 10 s (`1789144903`) | builds | REFUSED at admission | recorded six-field snapshot unchanged |
 
 **The transcripts.** Both accepted transactions were read back through the
 indexer (`transactions(offset: { identifier }) { raw }`), deserialised with
@@ -499,7 +518,7 @@ transaction at admission, `1010: Invalid Transaction: Custom error: 104`, with
 🚫 Rejected transaction 762492d060d98721fec4c0dd01985bd6d73449db78252b81fb1e4cff04ab5759 from mempool: guaranteed execution would fail: Transcript(Execution(ReadMismatch { expected: <[01]: b1>, actual: <[-]: b1> }))
 ```
 
-and the ledger snapshot was identical either side. Build to outcome took
+and the recorded six-field snapshot was identical either side. Build to outcome took
 14,515 ms, nearly all of it the k = 17 proof.
 
 E3 measured the node's admission-time block time 8.2 to 10.2 s ahead of the wall
@@ -562,7 +581,7 @@ transaction rather than mutating in place.
 | revoke plus issue over ONE grant id | `revoke_grant_with_jubjub` at `auth_nonce` 26 and `issue_grant_with_jubjub` at 27, segments 55,658 and 55,659 | ACCEPTED, `005e74a2b8289c83…`; `auth_nonce` 26 → 28, `round` 44 → 46; the record ends a fresh incarnation: `active`, `nonce 0`, `issued_at` 26 → 28, a new `spent_commit` and a narrower scope (`cap` 40 → 30) |
 | batch issuance of two grants | two `issue_grant_with_jubjub`, segments 28,169 and 28,170 | ACCEPTED, `00482117f8ac3419…`; `auth_nonce` 28 → 30, `round` 46 → 48, both records present with `issued_at` 29 and 30 |
 | two grant calls under ONE grant | two `withdraw_shielded_with_grant_jubjub` on two different coins, grant nonces 0 and 1, segments 3,762 and 3,763 | ACCEPTED, `007bfe4fd7ea93f0…`; record `nonce` 0 → 2, `spent_commit` matches the cumulative 20, `round` 49 → 51, `inbox_count` 18 → 20 (both change entries appended in the same transaction), `auth_nonce` untouched |
-| the same pair, REORDERED | the nonce n + 1 call grafted into the LOWER segment | REFUSED at admission, `Custom error: 104`, `Transcript(Execution(ReadMismatch …))` over the grant record, ledger unchanged |
+| the same pair, REORDERED | the nonce n + 1 call grafted into the LOWER segment | REFUSED at admission, `Custom error: 104`, `Transcript(Execution(ReadMismatch …))` over the grant record, recorded six-field snapshot unchanged |
 
 Readings.
 
@@ -600,7 +619,7 @@ was then proved and submitted and the node refused it,
 🚫 Rejected transaction df060b7bb6b70c4aedb0642671259ec38a731fd7ca35120bf9fa7d9cd1c2c6f5 from mempool: guaranteed execution would fail: Zswap(NullifierAlreadyPresent(Nullifier(d820a7661f5e4ae3a822b92544b02b8b7f5bbff66486d1da3afc74bedfe184c0)))
 ```
 
-The ledger snapshot was identical either side, the grant record stayed at
+The recorded six-field snapshot was identical either side, the grant record stayed at
 `nonce 0`, and no coin was spent twice.
 
 **Where the refusal is, and where it is not.** Testing item 10 describes this
@@ -752,7 +771,7 @@ not the retry.
      `per_call_cap`; over `cap`; a witness coin above `max_coin_value`; wrong
      recipient under a pin; a stale `enc_pk`; revoked; `expires_at` in the
      past; `expires_at` inside the admission margin (built by the client,
-     refused by the node on `Custom error: 104`, state unchanged); identical
+     refused by the node on `Custom error: 104`, recorded snapshot unchanged); identical
      resubmission after success; a cross-scheme key, in both directions; an
      envelope-1 grantee against a withdraw twin; a grantee calling a
      device-gated circuit; the identity on both deployed arms, an off-curve
@@ -798,10 +817,12 @@ not the retry.
      append is inside the circuit, and on the indexer showing no other contract
      action between the call and the appended entry; the suite's own assertion
      is only the `inbox_count` delta across the call, which is weaker.
-     Missing: a `rotate_enc_key` between signing and submission shown to abort
-     the call with NO orphaned change. The stale-`enc_pk` row proves the abort
-     and says nothing about orphaned change, which is the half the item asks
-     for. Correct the parenthetical on the same-coin row too: the loser is
+     The stale-`enc_pk` row already signs the shielded grant call before an
+     on-node key rotation and then attempts that original call: build
+     refuses it before submission, with all six snapshot fields unchanged
+     and `inbox_count` remaining 5. This establishes the rotation refusal
+     and no inbox append in this run; it does not include complete-state
+     or UTXO snapshots. Correct the parenthetical on the same-coin row too: the loser is
      refused by the NODE as a double spend, and the same call rebuilt against
      the post-spend state still proves, so "proving failure" names the wrong
      component.
