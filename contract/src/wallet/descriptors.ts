@@ -1,13 +1,13 @@
 // Readable device descriptors — client encoders and strict decoders.
 //
-// A readable arm (`evm_k256`, `sol_ed25519`) shows another key as a
-// DESCRIPTOR: the target recipe's tag text and the key payload in the target
-// scheme's own form. The contract derives the target's device entry, boot
-// commitment, or grant id from exactly those values, one circuit per payload
-// class (contracts/modules/WalletArmDescriptors.compact): the byte classes
-// w52, w64, w65 and w117, and the ed25519 class, which takes a Solana key as
-// its Curve25519Point with the key's 32 bytes and x-coordinate as checked
-// inputs (solanaKeyInputs). This module:
+// A readable arm (one entry of READABLE_ARMS: `evm_k256`, `sol_ed25519`)
+// shows another key as a DESCRIPTOR: the target recipe's tag text and the key
+// payload in the target scheme's own form. The contract derives the target's
+// device entry, boot commitment, or grant id from exactly those values, one
+// circuit per payload class (contracts/modules/WalletArmDescriptors.compact):
+// the byte classes w52, w64, w65 and w117, and the ed25519 class, which takes
+// an Ed25519 key as its Curve25519Point with the key's 32 bytes and
+// x-coordinate as checked inputs (ed25519KeyInputs). This module:
 //
 //   - parses the forms a person or a wallet presents (an Ethereum address, a
 //     Solana public key, a SEC1 secp256k1 or P-256 key, a passkey's RP ID and
@@ -41,17 +41,129 @@ import { k256EnvelopeLabel } from './labels.js';
 
 // ── Schemes, recipes, and tags ───────────────────────────────────────────────
 
-export type DescriptorScheme = 'jubjub' | 'k256' | 'p256' | 'evm_k256' | 'sol_ed25519';
+/** Upstream's schemes: device entries and grant ids only, with fixed tags and
+ *  classes. They have no blind, and an account whose first device is one of
+ *  them boots through upstream's own `derive_boot_commitment_with_<scheme>`. */
+export type LegacyScheme = 'jubjub' | 'k256' | 'p256';
+export const LEGACY_SCHEMES: readonly LegacyScheme[] = ['jubjub', 'k256', 'p256'];
+
 export type DescriptorRecipe = 'device' | 'boot' | 'grant-id';
-export const DESCRIPTOR_SCHEMES: readonly DescriptorScheme[] = ['jubjub', 'k256', 'p256', 'evm_k256', 'sol_ed25519'];
+
+/** A readable arm's payload class (the module's ReadableClass): the
+ *  derivation circuits that take its key, `derive_descriptor_<recipe>_<class>`.
+ *  w52 for an identity of 20 bytes, ed25519 for an Ed25519 key. */
+export type ReadableClass = 'w52' | 'ed25519';
+
+/** What a readable arm's wallet signs its blind requests with, which fixes
+ *  the canonical signature form its blind hashes (blind.ts). */
+export type ReadableSignature = 'secp256k1-ecdsa' | 'ed25519';
+
+/** How a readable arm's identity is named, parsed and shown: a w52 arm's
+ *  20-byte address, an ed25519 arm's 32-byte RFC 8032 key. */
+export interface ReadableIdentity {
+  /** The identity's name in client errors ("Ethereum address", "Solana key"). */
+  readonly name: string;
+  /** Parses the forms a person or a wallet presents, strictly, refusing
+   *  anything that is not exactly one admissible identity; returns its bytes. */
+  readonly parse: (input: string | Uint8Array) => Uint8Array;
+  /** The lines describeDescriptor shows for the identity, after the tag and
+   *  before the privacy salt. */
+  readonly lines: (identity: Uint8Array) => DescriptorLine[];
+  /** The value of a blind request's Wallet line (blind.ts); refuses a value
+   *  that is not an identity of this arm. */
+  readonly walletText: (identity: Uint8Array) => string;
+}
+
+/** One readable arm: its entry in the module's registry (readable_arms: the
+ *  class and the five tags) and the client's rules for its identity. */
+export interface ReadableArm {
+  /** The code the arm's tags carry (`evm`, `sol`). */
+  readonly code: string;
+  readonly payloadClass: ReadableClass;
+  readonly signature: ReadableSignature;
+  /** The arm's registered tags, one per recipe, the blind and the grant
+   *  scope salt. */
+  readonly tags: {
+    readonly device: string; readonly boot: string; readonly 'grant-id': string;
+    readonly blind: string; readonly salt: string;
+  };
+  readonly identity: ReadableIdentity;
+}
+
+/** The registry of readable arms, keyed by scheme: the same arms, classes and
+ *  tags as the module's readable_arms(), in the same order (the offline suite
+ *  checks the two against each other). An arm of an existing class is added
+ *  as one entry here; every table, type and dispatch below follows from it.
+ *  The codes `nea` (NEAR) and `cdo` (Cardano) are reserved for further
+ *  ed25519 arms. */
+export const READABLE_ARMS = {
+  evm_k256: {
+    code: 'evm', payloadClass: 'w52', signature: 'secp256k1-ecdsa',
+    tags: {
+      device: 'midnight:account:device:evm:v1', boot: 'midnight:account:boot:evm:v1',
+      'grant-id': 'midnight:account:grant:id:evm:v1', blind: 'midnight:account:blind:evm:v1',
+      salt: 'midnight:account:salt:evm:v1',
+    },
+    identity: {
+      name: 'Ethereum address',
+      parse: (input) => {
+        const a = typeof input === 'string' ? parseEvmAddress(input) : new Uint8Array(input);
+        if (a.length !== 20) throw new Error('descriptor: an Ethereum address is 20 bytes');
+        if (a.every((b) => b === 0)) throw new Error('descriptor: the zero address is not a device');
+        return a;
+      },
+      lines: (address) => [{ label: 'Ethereum address', value: evmChecksumAddress(address), verifiableByEye: true }],
+      walletText: (address) => {
+        if (address.length !== 20 || address.every((b) => b === 0)) throw new Error('blind: an Ethereum address is 20 bytes, not zero');
+        return `Ethereum address ${evmChecksumAddress(address)}`;
+      },
+    },
+  },
+  sol_ed25519: {
+    code: 'sol', payloadClass: 'ed25519', signature: 'ed25519',
+    tags: {
+      device: 'midnight:account:device:sol:v1', boot: 'midnight:account:boot:sol:v1',
+      'grant-id': 'midnight:account:grant:id:sol:v1', blind: 'midnight:account:blind:sol:v1',
+      salt: 'midnight:account:salt:sol:v1',
+    },
+    identity: {
+      name: 'Solana key',
+      parse: (input) => parseSolanaPublicKey(input),
+      lines: (key) => [
+        { label: 'Solana public key', value: base58Encode(key), verifiableByEye: true },
+        { label: 'Solana public key (hex)', value: toHex(key), verifiableByEye: true },
+      ],
+      walletText: (key) => `Solana public key ${base58Encode(parseSolanaPublicKey(key))}`,
+    },
+  },
+} as const satisfies Readonly<Record<string, ReadableArm>>;
+
+export type ReadableScheme = keyof typeof READABLE_ARMS;
+export const READABLE_SCHEMES: readonly ReadableScheme[] = Object.keys(READABLE_ARMS) as ReadableScheme[];
+type SchemesOfClass<C extends ReadableClass> =
+  { [S in ReadableScheme]: (typeof READABLE_ARMS)[S]['payloadClass'] extends C ? S : never }[ReadableScheme];
+/** The readable schemes of each payload class. */
+export type W52Scheme = SchemesOfClass<'w52'>;
+export type Ed25519Scheme = SchemesOfClass<'ed25519'>;
+
+/** The registry entry of a readable scheme, or undefined for any other value
+ *  (an unknown scheme, a legacy one, an Object.prototype member, a non-string). */
+export function readableArm(scheme: unknown): ReadableArm | undefined {
+  return typeof scheme === 'string' && Object.prototype.hasOwnProperty.call(READABLE_ARMS, scheme)
+    ? (READABLE_ARMS as Readonly<Record<string, ReadableArm>>)[scheme]
+    : undefined;
+}
+
+export type DescriptorScheme = LegacyScheme | ReadableScheme;
+export const DESCRIPTOR_SCHEMES: readonly DescriptorScheme[] = [...LEGACY_SCHEMES, ...READABLE_SCHEMES];
 
 /** The schemes with a boot recipe in the module: the readable arms. A boot
  *  commitment exists only for an account's first device, and each readable
  *  arm activates only its own scheme; an account whose first device is
  *  `jubjub`, `k256`, or `p256` boots through upstream's own
  *  `derive_boot_commitment_with_<scheme>`. */
-export type BootScheme = 'evm_k256' | 'sol_ed25519';
-export const BOOT_SCHEMES: readonly BootScheme[] = ['evm_k256', 'sol_ed25519'];
+export type BootScheme = ReadableScheme;
+export const BOOT_SCHEMES: readonly BootScheme[] = READABLE_SCHEMES;
 
 /** Per recipe, a table over the schemes that recipe has: every scheme for
  *  device entries and grant ids, the readable schemes for boot commitments. */
@@ -61,61 +173,59 @@ export interface DescriptorTable<V> {
   readonly 'grant-id': Readonly<Record<DescriptorScheme, V>>;
 }
 
+/** A value per readable scheme, in registry order, read from its entry. */
+function readableColumn<V>(f: (arm: ReadableArm) => V): Record<ReadableScheme, V> {
+  return Object.fromEntries(READABLE_SCHEMES.map((s) => [s, f(READABLE_ARMS[s])])) as Record<ReadableScheme, V>;
+}
+
 /** The registered tag of each recipe and scheme (the module's constants). */
 export const DESCRIPTOR_TAGS: DescriptorTable<string> = {
   device: {
     jubjub: 'midnight:account:device:v1',
     k256: 'midnight:account:device:k1:v2',
     p256: 'midnight:account:device:r1:v2',
-    evm_k256: 'midnight:account:device:evm:v1',
-    sol_ed25519: 'midnight:account:device:sol:v1',
+    ...readableColumn((a) => a.tags.device),
   },
-  boot: {
-    evm_k256: 'midnight:account:boot:evm:v1',
-    sol_ed25519: 'midnight:account:boot:sol:v1',
-  },
+  boot: readableColumn((a) => a.tags.boot),
   'grant-id': {
     jubjub: 'midnight:account:grant:id:v1',
     k256: 'midnight:account:grant:id:k1:v1',
     p256: 'midnight:account:grant:id:r1:v1',
-    evm_k256: 'midnight:account:grant:id:evm:v1',
-    sol_ed25519: 'midnight:account:grant:id:sol:v1',
+    ...readableColumn((a) => a.tags['grant-id']),
   },
 };
 
 /** The blind's tag per readable scheme. */
-export const BLIND_TAGS: Readonly<Record<'evm_k256' | 'sol_ed25519', string>> = {
-  evm_k256: 'midnight:account:blind:evm:v1',
-  sol_ed25519: 'midnight:account:blind:sol:v1',
-};
+export const BLIND_TAGS: Readonly<Record<ReadableScheme, string>> = readableColumn((a) => a.tags.blind);
 
 /** Upstream's grant origin tag (scoped-grants MIP section 4.4). */
 export const GRANT_ORIGIN_TAG = 'midnight:account:grant:origin:v1';
 
 /** The grant scope salt's tag per readable scheme: the salt an arm's
  *  issue_grant derives for the grant's commitments. */
-export const SALT_TAGS: Readonly<Record<'evm_k256' | 'sol_ed25519', string>> = {
-  evm_k256: 'midnight:account:salt:evm:v1',
-  sol_ed25519: 'midnight:account:salt:sol:v1',
-};
+export const SALT_TAGS: Readonly<Record<ReadableScheme, string>> = readableColumn((a) => a.tags.salt);
+
+/** The preimage width of each readable class's payload (bytes): a 20-byte
+ *  identity and the blind, or an Ed25519 key's 32-byte encoding and the blind. */
+const READABLE_WIDTH = { w52: 52, ed25519: 64 } as const;
 
 /** The width of the payload each recipe and scheme hashes (bytes). */
 export const PAYLOAD_WIDTH: DescriptorTable<52 | 64 | 65 | 117> = {
-  device: { jubjub: 64, k256: 65, p256: 117, evm_k256: 52, sol_ed25519: 64 },
-  boot: { evm_k256: 52, sol_ed25519: 64 },
-  'grant-id': { jubjub: 64, k256: 65, p256: 64, evm_k256: 52, sol_ed25519: 64 },
+  device: { jubjub: 64, k256: 65, p256: 117, ...readableColumn((a) => READABLE_WIDTH[a.payloadClass]) },
+  boot: readableColumn((a) => READABLE_WIDTH[a.payloadClass]),
+  'grant-id': { jubjub: 64, k256: 65, p256: 64, ...readableColumn((a) => READABLE_WIDTH[a.payloadClass]) },
 };
 
-export type DescriptorClass = 'w52' | 'w64' | 'w65' | 'w117' | 'ed25519';
+export type DescriptorClass = 'w52' | 'w64' | 'w65' | 'w117' | ReadableClass;
 
 /** The circuit class of each recipe and scheme: the suffix of the module's
- *  `derive_descriptor_<recipe>_<class>` circuit. A `sol_ed25519` key has its
+ *  `derive_descriptor_<recipe>_<class>` circuit. An ed25519 arm's key has its
  *  own class (its payload is a Curve25519Point, not bytes), although the
  *  preimage it hashes is 64 bytes wide. */
 export const DESCRIPTOR_CLASS: DescriptorTable<DescriptorClass> = {
-  device: { jubjub: 'w64', k256: 'w65', p256: 'w117', evm_k256: 'w52', sol_ed25519: 'ed25519' },
-  boot: { evm_k256: 'w52', sol_ed25519: 'ed25519' },
-  'grant-id': { jubjub: 'w64', k256: 'w65', p256: 'w64', evm_k256: 'w52', sol_ed25519: 'ed25519' },
+  device: { jubjub: 'w64', k256: 'w65', p256: 'w117', ...readableColumn((a) => a.payloadClass) },
+  boot: readableColumn((a) => a.payloadClass),
+  'grant-id': { jubjub: 'w64', k256: 'w65', p256: 'w64', ...readableColumn((a) => a.payloadClass) },
 };
 
 const TEXT = new TextEncoder();
@@ -159,14 +269,13 @@ export function unknownScheme(value: never, where: string, registered: readonly 
  *  it (upstream's own), and an unknown scheme as everywhere else. */
 export function bootScheme(scheme: DescriptorScheme, where: string): BootScheme {
   switch (scheme) {
-    case 'evm_k256':
-    case 'sol_ed25519':
-      return scheme;
     case 'jubjub':
     case 'k256':
     case 'p256':
       throw new Error(`descriptor: ${scheme} boots through upstream's derive_boot_commitment_with_${scheme}, not through a descriptor (${where})`);
-    default: return unknownScheme(scheme, where);
+    default:
+      if (readableArm(scheme) === undefined) return unknownScheme(scheme as never, where);
+      return scheme;
   }
 }
 
@@ -207,16 +316,29 @@ export interface PasskeyPolicy { rpIdHash: Uint8Array; origin: Uint8Array; rpId?
 /** A passkey: its key and, for device entries and boot commitments, its
  *  policy. A grant id binds the key only (the RP is a scope field). */
 export interface P256Descriptor { scheme: 'p256'; x: bigint; y: bigint; policy?: PasskeyPolicy }
-export interface EvmDescriptor { scheme: 'evm_k256'; address: Uint8Array; blind: Uint8Array }
-/** A Solana key: its 32-byte RFC 8032 encoding (what the wallet exports and a
- *  person compares) and the account's blind. The circuits take the key as
- *  its point with these 32 bytes and its x-coordinate as checked inputs
- *  (solanaKeyInputs), and check them against the point. */
-export interface SolDescriptor { scheme: 'sol_ed25519'; key: Uint8Array; blind: Uint8Array }
+/** A key of a w52 arm: its 20-byte address (for `evm_k256`, the Ethereum
+ *  address) and the account's blind. */
+export interface W52Descriptor<S extends W52Scheme = W52Scheme> { scheme: S; address: Uint8Array; blind: Uint8Array }
+/** A key of an ed25519 arm: its 32-byte RFC 8032 encoding (what the wallet
+ *  exports and a person compares) and the account's blind. The circuits take
+ *  the key as its point with these 32 bytes and its x-coordinate as checked
+ *  inputs (ed25519KeyInputs), and check them against the point. */
+export interface Ed25519Descriptor<S extends Ed25519Scheme = Ed25519Scheme> { scheme: S; key: Uint8Array; blind: Uint8Array }
+export type EvmDescriptor = W52Descriptor<'evm_k256'>;
+export type SolDescriptor = Ed25519Descriptor<'sol_ed25519'>;
+export type ReadableDescriptor = W52Descriptor | Ed25519Descriptor;
+/** The descriptor type of one readable scheme. */
+export type ReadableDescriptorOf<S extends ReadableScheme> =
+  S extends W52Scheme ? W52Descriptor<S> : S extends Ed25519Scheme ? Ed25519Descriptor<S> : never;
 /** A Curve25519Point as the generated JavaScript takes it: affine twisted
  *  Edwards coordinates. */
 export interface Curve25519Affine { x: bigint; y: bigint }
-export type Descriptor = JubjubDescriptor | K256Descriptor | P256Descriptor | EvmDescriptor | SolDescriptor;
+export type Descriptor = JubjubDescriptor | K256Descriptor | P256Descriptor | ReadableDescriptor;
+
+/** Whether a readable descriptor is of the ed25519 class (by its arm's entry). */
+function isEd25519Descriptor(d: ReadableDescriptor): d is Ed25519Descriptor {
+  return READABLE_ARMS[d.scheme].payloadClass === 'ed25519';
+}
 
 // ── Strict parsers: the forms a person or a wallet presents ─────────────────
 
@@ -278,13 +400,13 @@ export function base58Decode(text: string, length: number): Uint8Array {
   return out;
 }
 
-/** A Solana public key: base58 text or the 32-byte RFC 8032 encoding.
- *  RFC 8032 strict decoding (canonical y < p, no "negative zero" x), and only
- *  keys of the prime-order subgroup other than the identity: small-order and
- *  mixed-order points are refused. Returns the 32 bytes. */
-export function parseSolanaPublicKey(input: string | Uint8Array): Uint8Array {
-  const bytes = typeof input === 'string' ? base58Decode(input, 32) : new Uint8Array(input);
-  if (bytes.length !== 32) throw new Error('descriptor: a Solana public key is 32 bytes');
+/** An Ed25519 public key's 32-byte RFC 8032 encoding, decoded strictly
+ *  (canonical y < p, no "negative zero" x), and only keys of the prime-order
+ *  subgroup other than the identity: small-order and mixed-order points are
+ *  refused. The rule every ed25519-class key passes. Returns a copy. */
+export function parseEd25519PublicKey(input: Uint8Array): Uint8Array {
+  const bytes = new Uint8Array(input);
+  if (bytes.length !== 32) throw new Error('descriptor: an Ed25519 public key is 32 bytes');
   let point;
   try { point = ed25519.Point.fromBytes(bytes, false); } catch (e: any) {
     throw new Error(`descriptor: not a canonical Ed25519 point (${e?.message ?? e})`);
@@ -293,6 +415,14 @@ export function parseSolanaPublicKey(input: string | Uint8Array): Uint8Array {
   if (point.isSmallOrder()) throw new Error('descriptor: Ed25519 key of small order (identity included)');
   if (!point.isTorsionFree()) throw new Error('descriptor: Ed25519 key of mixed order');
   return bytes;
+}
+
+/** A Solana public key: base58 text or the 32-byte RFC 8032 encoding, with
+ *  parseEd25519PublicKey's strict rules. Returns the 32 bytes. */
+export function parseSolanaPublicKey(input: string | Uint8Array): Uint8Array {
+  const bytes = typeof input === 'string' ? base58Decode(input, 32) : new Uint8Array(input);
+  if (bytes.length !== 32) throw new Error('descriptor: a Solana public key is 32 bytes');
+  return parseEd25519PublicKey(bytes);
 }
 
 /** The Curve25519Point of a Solana public key (base58 text or the 32-byte
@@ -307,7 +437,7 @@ export function solanaKeyPoint(input: string | Uint8Array): Curve25519Affine {
  *  with the same strict rules: canonical coordinates (below p), on the
  *  curve, of prime order, not the identity. Small-order and mixed-order
  *  points are refused. */
-export function solanaKeyFromPoint(p: Curve25519Affine): Uint8Array {
+export function ed25519KeyFromPoint(p: Curve25519Affine): Uint8Array {
   if (typeof p !== 'object' || p === null || typeof p.x !== 'bigint' || typeof p.y !== 'bigint') {
     throw new Error('descriptor: an Ed25519 key point is { x, y } with bigint coordinates');
   }
@@ -320,19 +450,28 @@ export function solanaKeyFromPoint(p: Curve25519Affine): Uint8Array {
   }
   if (point.isSmallOrder()) throw new Error('descriptor: Ed25519 key of small order (identity included)');
   if (!point.isTorsionFree()) throw new Error('descriptor: Ed25519 key of mixed order');
-  return parseSolanaPublicKey(point.toBytes());
+  return parseEd25519PublicKey(point.toBytes());
 }
 
-/** The ed25519 class's key arguments for a Solana public key (base58 text,
- *  the 32-byte encoding, or its point), after the strict checks of
- *  parseSolanaPublicKey / solanaKeyFromPoint: the point, the encoding's
- *  bytes (`pkBytes`) and the x-coordinate's 32 bytes, little-endian
- *  (`pkX`), each byte as the generated JavaScript takes a Uint<8>. The
- *  circuits check both byte vectors against the point. */
-export function solanaKeyInputs(input: string | Uint8Array | Curve25519Affine): { point: Curve25519Affine; pkBytes: bigint[]; pkX: bigint[] } {
-  const key = typeof input === 'string' || input instanceof Uint8Array ? parseSolanaPublicKey(input) : solanaKeyFromPoint(input);
+/** A Solana key's encoding from its point (ed25519KeyFromPoint). */
+export const solanaKeyFromPoint = ed25519KeyFromPoint;
+
+/** The ed25519 class's key arguments for an Ed25519 key (its 32-byte
+ *  encoding or its point), after the strict checks of parseEd25519PublicKey
+ *  / ed25519KeyFromPoint: the point, the encoding's bytes (`pkBytes`) and
+ *  the x-coordinate's 32 bytes, little-endian (`pkX`), each byte as the
+ *  generated JavaScript takes a Uint<8>. The circuits check both byte
+ *  vectors against the point. */
+export function ed25519KeyInputs(input: Uint8Array | Curve25519Affine): { point: Curve25519Affine; pkBytes: bigint[]; pkX: bigint[] } {
+  const key = input instanceof Uint8Array ? parseEd25519PublicKey(input) : ed25519KeyFromPoint(input);
   const { x, y } = ed25519.Point.fromBytes(key, false).toAffine();
   return { point: { x, y }, pkBytes: [...key].map(BigInt), pkX: [...bytesLE(x, 32)].map(BigInt) };
+}
+
+/** ed25519KeyInputs for a Solana public key (base58 text, the 32-byte
+ *  encoding, or its point), after parseSolanaPublicKey's checks. */
+export function solanaKeyInputs(input: string | Uint8Array | Curve25519Affine): { point: Curve25519Affine; pkBytes: bigint[]; pkX: bigint[] } {
+  return ed25519KeyInputs(typeof input === 'string' || input instanceof Uint8Array ? parseSolanaPublicKey(input) : input);
 }
 
 type Curve = typeof secp256k1 | typeof p256;
@@ -395,19 +534,27 @@ export function parseJubjubPoint(input: Uint8Array | { x: bigint; y: bigint }): 
   return { scheme: 'jubjub', x, y };
 }
 
-/** A readable device: its identity (20-byte address or 32-byte Ed25519 key)
- *  and the account's 32-byte blind. */
-export function evmDescriptor(address: Uint8Array | string, blind: Uint8Array): EvmDescriptor {
-  const a = typeof address === 'string' ? parseEvmAddress(address) : new Uint8Array(address);
-  if (a.length !== 20) throw new Error('descriptor: an Ethereum address is 20 bytes');
-  if (a.every((b) => b === 0)) throw new Error('descriptor: the zero address is not a device');
+/** A readable device or grantee: its identity, parsed by its arm's rules
+ *  (READABLE_ARMS: a w52 arm's 20-byte address, an ed25519 arm's 32-byte
+ *  key), and the account's 32-byte blind. */
+export function readableDescriptor<S extends ReadableScheme>(scheme: S, identity: string | Uint8Array, blind: Uint8Array): ReadableDescriptorOf<S>;
+export function readableDescriptor(scheme: ReadableScheme, identity: string | Uint8Array, blind: Uint8Array): ReadableDescriptor {
+  const arm = readableArm(scheme);
+  if (arm === undefined) return unknownScheme(scheme as never, 'readableDescriptor');
+  const id = arm.identity.parse(identity);
   if (blind.length !== 32) throw new Error('descriptor: a blind is 32 bytes');
-  return { scheme: 'evm_k256', address: a, blind: new Uint8Array(blind) };
+  const b = new Uint8Array(blind);
+  return arm.payloadClass === 'w52'
+    ? { scheme: scheme as W52Scheme, address: id, blind: b }
+    : { scheme: scheme as Ed25519Scheme, key: id, blind: b };
+}
+
+export function evmDescriptor(address: Uint8Array | string, blind: Uint8Array): EvmDescriptor {
+  return readableDescriptor('evm_k256', address, blind);
 }
 
 export function solDescriptor(key: Uint8Array | string, blind: Uint8Array): SolDescriptor {
-  if (blind.length !== 32) throw new Error('descriptor: a blind is 32 bytes');
-  return { scheme: 'sol_ed25519', key: parseSolanaPublicKey(key), blind: new Uint8Array(blind) };
+  return readableDescriptor('sol_ed25519', key, blind);
 }
 
 /** Re-checks a descriptor built elsewhere (for example decoded from a dApp's
@@ -436,9 +583,10 @@ export function checkDescriptor(d: Descriptor): Descriptor {
       }
       return { scheme: 'p256', ...key, policy: { rpIdHash: new Uint8Array(rpIdHash), origin: new Uint8Array(origin), ...(rpId !== undefined ? { rpId } : {}) } };
     }
-    case 'evm_k256': return evmDescriptor(d.address, d.blind);
-    case 'sol_ed25519': return solDescriptor(d.key, d.blind);
-    default: return unknownScheme(d, 'checkDescriptor');
+    default: {
+      if (readableArm(d.scheme) === undefined) return unknownScheme(d as never, 'checkDescriptor');
+      return readableDescriptor(d.scheme, isEd25519Descriptor(d) ? d.key : d.address, d.blind);
+    }
   }
 }
 
@@ -454,9 +602,9 @@ const pickOf = (cls: DescriptorClass): { pick?: number } => (cls === 'ed25519' ?
 
 const xyLE = (d: { x: bigint; y: bigint }): [Uint8Array, Uint8Array] => [bytesLE(d.x, 32), bytesLE(d.y, 32)];
 
-/** The payload parts of a descriptor for a recipe, in circuit order. A
- *  `sol_ed25519` key is passed as its point, then its 32 bytes and its
- *  x-coordinate as byte vectors (solanaKeyInputs), never as bytes alone. A
+/** The payload parts of a descriptor for a recipe, in circuit order. An
+ *  ed25519 arm's key is passed as its point, then its 32 bytes and its
+ *  x-coordinate as byte vectors (ed25519KeyInputs), never as bytes alone. A
  *  boot commitment's parts exist only for the readable schemes (bootScheme). */
 export function payloadParts(d: Descriptor, recipe: DescriptorRecipe): unknown[] {
   if (recipe === 'boot') bootScheme(d.scheme, 'payloadParts');
@@ -468,12 +616,12 @@ export function payloadParts(d: Descriptor, recipe: DescriptorRecipe): unknown[]
       if (!d.policy) throw new Error('descriptor: a passkey device entry needs its policy');
       return [...xyLE(d), d.policy.rpIdHash, d.policy.origin];
     }
-    case 'evm_k256': return [d.address, d.blind];
-    case 'sol_ed25519': {
-      const k = solanaKeyInputs(d.key);
+    default: {
+      if (readableArm(d.scheme) === undefined) return unknownScheme(d as never, 'payloadParts');
+      if (!isEd25519Descriptor(d)) return [d.address, d.blind];
+      const k = ed25519KeyInputs(d.key);
       return [k.point, k.pkBytes, k.pkX, d.blind];
     }
-    default: return unknownScheme(d, 'payloadParts');
   }
 }
 
@@ -494,10 +642,9 @@ export function entryCall(d: Descriptor, account: Uint8Array, epoch: bigint, cou
   };
 }
 
-/** The boot commitment of `d` under a salt: an `evm_k256` or
- *  `sol_ed25519` key only (BOOT_SCHEMES). A `jubjub`, `k256`, or `p256`
- *  first device boots through upstream's derive_boot_commitment_with_<scheme>,
- *  so bootCall refuses it. */
+/** The boot commitment of `d` under a salt: a readable arm's key only
+ *  (BOOT_SCHEMES). A `jubjub`, `k256`, or `p256` first device boots through
+ *  upstream's derive_boot_commitment_with_<scheme>, so bootCall refuses it. */
 export function bootCall(d: Descriptor, salt: Uint8Array): DescriptorCall {
   // The scheme first: an unknown scheme, or one without a boot recipe here,
   // is refused before any table lookup.
@@ -535,8 +682,8 @@ export function derive(pureCircuits: Record<string, any>, call: DescriptorCall):
 /** Decodes the tag and payload parts of a class call (as payloadParts
  *  returns them) into a descriptor, then checks the key strictly. Refuses an
  *  unregistered tag, a tag of another recipe than `recipe`, parts of the
- *  wrong number or width, a Solana key given as anything but a point, and a
- *  Solana key whose byte vectors are not its point's encoding and
+ *  wrong number or width, an Ed25519 key given as anything but a point, and
+ *  an Ed25519 key whose byte vectors are not its point's encoding and
  *  x-coordinate. */
 export function decodeDescriptor(recipe: DescriptorRecipe, tag: Uint8Array, parts: unknown[]): Descriptor {
   const t = tagOf(tag);
@@ -568,28 +715,31 @@ export function decodeDescriptor(recipe: DescriptorRecipe, tag: Uint8Array, part
         policy: { rpIdHash: bytes(parts[2], 32, 'rp_id_hash'), origin: bytes(parts[3], WEBAUTHN_ORIGIN_BYTES, 'origin') },
       });
     }
-    case 'evm_k256':
-      want(2);
-      return evmDescriptor(bytes(parts[0], 20, 'address'), bytes(parts[1], 32, 'blind'));
-    case 'sol_ed25519': {
+    default: {
+      const arm = readableArm(t.scheme);
+      if (arm === undefined) return unknownScheme(t.scheme as never, 'decodeDescriptor');
+      if (arm.payloadClass === 'w52') {
+        want(2);
+        return readableDescriptor(t.scheme, bytes(parts[0], 20, 'address'), bytes(parts[1], 32, 'blind'));
+      }
       want(4);
       // The point first (refusing bytes in its place), then its byte vectors.
-      const k = solanaKeyInputs(solanaKeyFromPoint(parts[0] as Curve25519Affine));
+      const k = ed25519KeyInputs(ed25519KeyFromPoint(parts[0] as Curve25519Affine));
+      const key = arm.identity.name;
       const vec = (v: unknown, what: string): bigint[] => {
         if (!Array.isArray(v) || v.length !== 32 || !v.every((b) => typeof b === 'bigint' && b >= 0n && b <= 255n)) {
           throw new Error(`descriptor: ${what} must be 32 byte values`);
         }
         return v as bigint[];
       };
-      if (!vec(parts[1], 'the Solana key bytes').every((b, i) => b === k.pkBytes[i])) {
-        throw new Error('descriptor: the Solana key bytes are not its point\'s encoding');
+      if (!vec(parts[1], `the ${key} bytes`).every((b, i) => b === k.pkBytes[i])) {
+        throw new Error(`descriptor: the ${key} bytes are not its point's encoding`);
       }
-      if (!vec(parts[2], 'the Solana key x bytes').every((b, i) => b === k.pkX[i])) {
-        throw new Error('descriptor: the Solana key x bytes are not its point\'s x-coordinate');
+      if (!vec(parts[2], `the ${key} x bytes`).every((b, i) => b === k.pkX[i])) {
+        throw new Error(`descriptor: the ${key} x bytes are not its point's x-coordinate`);
       }
-      return solDescriptor(Uint8Array.from(k.pkBytes, Number), bytes(parts[3], 32, 'blind'));
+      return readableDescriptor(t.scheme, Uint8Array.from(k.pkBytes, Number), bytes(parts[3], 32, 'blind'));
     }
-    default: return unknownScheme(t.scheme, 'decodeDescriptor');
   }
 }
 
@@ -626,14 +776,17 @@ export function privacySaltLabel(recipe: DescriptorRecipe): 'Device privacy salt
 }
 
 /** The lines a client shows for a descriptor, the same values the arms'
- *  approval messages show. Keys are shown in full: an EVM address in EIP-55
- *  form, a Solana key in base58 and hex, a passkey origin as text, and
+ *  approval messages show. Keys are shown in full, in the form their arm's
+ *  entry gives (an EVM address in EIP-55 form, a Solana key in base58 and
+ *  hex), a passkey origin as text, and
  *  coordinates per COORDINATE_DISPLAY_ORDER (secp256k1 and P-256 big-endian,
  *  JubJub little-endian). `rp_id_hash` and the blind are the two labelled
  *  hash-like values (the blind under privacySaltLabel); the client shows the
  *  RP ID beside the RP hash when it knows it. */
 export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): DescriptorLine[] {
-  const tagText = recipe === 'boot' ? DESCRIPTOR_TAGS.boot[bootScheme(d.scheme, 'describeDescriptor')] : DESCRIPTOR_TAGS[recipe][d.scheme];
+  const known = (DESCRIPTOR_SCHEMES as readonly unknown[]).includes(d.scheme);
+  const tagText = recipe === 'boot' ? DESCRIPTOR_TAGS.boot[bootScheme(d.scheme, 'describeDescriptor')]
+    : known ? DESCRIPTOR_TAGS[recipe][d.scheme] : '';
   const tag = { label: 'Scheme tag', value: tagText, verifiableByEye: true };
   const salt = (blind: Uint8Array) => ({ label: privacySaltLabel(recipe), value: '0x' + toHex(blind), verifiableByEye: false });
   const coord = (name: string, scheme: keyof typeof COORDINATE_DISPLAY_ORDER, v: bigint) =>
@@ -650,12 +803,11 @@ export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): Des
       }
       return lines;
     }
-    case 'evm_k256': return [tag, { label: 'Ethereum address', value: evmChecksumAddress(d.address), verifiableByEye: true },
-      salt(d.blind)];
-    case 'sol_ed25519': return [tag, { label: 'Solana public key', value: base58Encode(d.key), verifiableByEye: true },
-      { label: 'Solana public key (hex)', value: toHex(d.key), verifiableByEye: true },
-      salt(d.blind)];
-    default: return unknownScheme(d, 'describeDescriptor');
+    default: {
+      const arm = readableArm(d.scheme);
+      if (arm === undefined) return unknownScheme(d as never, 'describeDescriptor');
+      return [tag, ...arm.identity.lines(isEd25519Descriptor(d) ? d.key : d.address), salt(d.blind)];
+    }
   }
 }
 
@@ -673,7 +825,7 @@ export function grantOriginHash(fixedWidth: Uint8Array): Uint8Array {
  *  32-byte blind, the 32-byte account address and auth_nonce (the value the
  *  device signed, 8 bytes little-endian). The issuing client hands it to the
  *  grantee, which opens the grant's commitments with it when it spends. */
-export function grantScopeSalt(scheme: 'evm_k256' | 'sol_ed25519', blind: Uint8Array, account: Uint8Array, authNonce: bigint): Uint8Array {
+export function grantScopeSalt(scheme: ReadableScheme, blind: Uint8Array, account: Uint8Array, authNonce: bigint): Uint8Array {
   const tag = Object.prototype.hasOwnProperty.call(SALT_TAGS, scheme) ? SALT_TAGS[scheme] : undefined;
   if (tag === undefined) return unknownScheme(scheme as never, 'grantScopeSalt', Object.keys(SALT_TAGS));
   if (!(blind instanceof Uint8Array) || blind.length !== 32) throw new Error('descriptor: a blind is 32 bytes');
