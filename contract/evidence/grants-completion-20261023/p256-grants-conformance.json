@@ -1,0 +1,299 @@
+{
+  "testId": "p256-grants",
+  "name": "conformance",
+  "fileName": "p256-grants-conformance.json",
+  "verdict": "PASS",
+  "description": "P-256 wa-json134 owner and grantee: real unshielded spends, grant restrictions, freshness, and revocation",
+  "note": "Accepted operations proved and included on node. Negative cases bypass the client WebAuthn adapter and fail during circuit build, with zero prover/submission calls and byte-identical contract state. OpenSSL software authenticator; no browser or PRF ceremony claim.",
+  "details": {
+    "account": "767c5b76d0dd51b3385e785f03924def66e7b21f2f6fb9868c62793f4709478d",
+    "schema": 3,
+    "profile": "wa-json134",
+    "transactions": [
+      {
+        "label": "mint 100 non-native units",
+        "txId": "008f75fda9ab41671347df7083c0f760dc7dbde7b8e706e69e6e794e31a0a94966",
+        "blockHeight": 296,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "deposit 100 units",
+        "txId": "00322f3fb45755683d0b8d61e22de6f8d9bf4f4a6cad3d4228b9b2635639dbb312",
+        "blockHeight": 302,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "P-256 owner issues P-256 spend grant",
+        "txId": "00bc0a5a0d7bfa5669205e7d3432d79284fd4c4870dab9317d830fd3b16bb6cfb4",
+        "blockHeight": 310,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "P-256 grantee spends 5 units",
+        "txId": "005bcd4922b82a637a2fc7a9efffa8610fab5b2a90396000ab0928c28dff42f8af",
+        "blockHeight": 318,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "pre-grant owner signature still executes",
+        "txId": "00774cc79b0a535a1b7dd95b2f56b74e37cd60f5926405cec21bc94e22b4da8a23",
+        "blockHeight": 326,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "P-256 grantee spends next 5 units",
+        "txId": "00fbb2280fc5a03c68aaad1dae9bc37b08a8b1ab71110630051fce5ed986e28bd3",
+        "blockHeight": 333,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "P-256 owner revokes grant",
+        "txId": "00842cf38493fffa6033380529c2f33d44db0ed1e696b7dca9a3f81a3435f32b03",
+        "blockHeight": 341,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "P-256 owner reissues same grant id",
+        "txId": "005149974fb0fa0abcdfc946c35af08d574ecfc71489724f8451ae77ca1e52efe1",
+        "blockHeight": 349,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "fresh reissued grant spends 5 units",
+        "txId": "00843faef8fba523374096aa9d5791b3bac2fd2dbdb379a190f9a216e44ebb03eb",
+        "blockHeight": 357,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "issue read-only grant cannot spend",
+        "txId": "00e0703dc810ccde6955c1b0332af3757b883184730a846afd79398b0b4e378196",
+        "blockHeight": 365,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "issue caller-restricted grant rejects root call",
+        "txId": "000389d9cf0bef9e97a70c77053ea4f4ce34529f1e0720cb6021d79d2fa8e31ad9",
+        "blockHeight": 372,
+        "status": "SUCCESS"
+      }
+    ],
+    "negatives": [
+      {
+        "label": "origin opening mismatch",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant origin mismatch",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "RP commitment mismatch",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant RP mismatch",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "signed envelope RP differs from policy",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: WebAuthn RP mismatch",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "policy origin mismatch",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant origin mismatch",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "valid ES256 assertion outside wa-json134",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "modified signature scalar",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "modified signed amount",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "amount above per-call cap",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: amount above per-call cap",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "different token color",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: scope object mismatch",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "recipient outside pin",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: recipient not admitted by pin",
+        "stateHash": "d2d162610a273506c4ef8f22789bae53f836712afe0ed0cbbe5135682d0fb7a9"
+      },
+      {
+        "label": "replay with current spent opening",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "stateHash": "93faa0506024b0661fa840d16a277bad7757263615e27ae6ec3a28d511494ef2"
+      },
+      {
+        "label": "cumulative cap exceeded with a valid signature",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: cumulative cap exceeded",
+        "stateHash": "0e0f39be47c035d954f08a20963c7ad26822977f99215547d3d7fb6d770ef20b"
+      },
+      {
+        "label": "revoked grant with pre-revocation signature",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant revoked",
+        "stateHash": "365babfad7f470890339cef319b4dfd483e59e9cff65ff228319716ae4954e41"
+      },
+      {
+        "label": "original nonce-zero signature under reissued grant",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: invalid grant signature",
+        "stateHash": "1be96eb51675d9a4f84695c1fd90256f886b5892631fb60a9d3a65ca2b98e2b3"
+      },
+      {
+        "label": "read-only grant cannot spend",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: operation not in scope",
+        "stateHash": "19d073ecab3cbd3d443fc2400a6fd7c03f2de3200e79f740476343c199216da7"
+      },
+      {
+        "label": "caller-restricted grant rejects root call",
+        "stage": "circuit-build",
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: grant requires a contract caller",
+        "stateHash": "15b8f626973dd99be2fe6f764f1a4f5d2e8b040f86b1d707f9acf69f8a910994"
+      }
+    ],
+    "provenance": {
+      "./p256-grants.ts": {
+        "bytes": 13861,
+        "sha256": "164bb7aa5979607f26e3b81468a1efea2676730d161f8a9a497636d09a3d5470"
+      },
+      "./p256-fixtures.ts": {
+        "bytes": 1974,
+        "sha256": "2e381e5cece4814b2e71de9920649851191e73b6ac997c72addcb94c8c2995ee"
+      },
+      "../wallet/account.ts": {
+        "bytes": 40657,
+        "sha256": "c77ca763e13a349b3bc8b32c6218ff60511d041a99aed699456417ea0a64580b"
+      },
+      "../wallet/signer.ts": {
+        "bytes": 39435,
+        "sha256": "4c3d593c0947641a116bfca059de399c1fcff24d37c430a38bbbf493c8e3cc8b"
+      },
+      "../wallet/signer-p256.ts": {
+        "bytes": 5787,
+        "sha256": "5a2b9e646283425fefcdf2f70dd058976aa772b1c11a10522df0eaa059787c76"
+      },
+      "../wallet/webauthn.ts": {
+        "bytes": 8610,
+        "sha256": "b49c26fcb9a405885e18c44e40e94b20ca7c2c18c638344557b7a5b18602c108"
+      },
+      "../../package-lock.json": {
+        "bytes": 112661,
+        "sha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51"
+      },
+      "../../contracts/account.compact": {
+        "bytes": 130095,
+        "sha256": "ef1e3d6eb873e91e205c12e07f33cda744d228470dd43a4794cb3784447fd6ae"
+      },
+      "../../contracts/account-p256.compact": {
+        "bytes": 19918,
+        "sha256": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4"
+      },
+      "../../contracts/webauthn.compact": {
+        "bytes": 4778,
+        "sha256": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb"
+      },
+      "../../contracts/managed/account/contract/index.js": {
+        "bytes": 1695762,
+        "sha256": "afdc3aaa5bb426329122427ed65876bd820fc5bb452c02cb4eb48a7b97ed5697"
+      },
+      "../../contracts/managed/account/compiler/contract-manifest.json": {
+        "bytes": 37703,
+        "sha256": "3b48c46e4d21097e1839fc982db17022df9466e22c48f84fdceaa3f98f83d3a0"
+      },
+      "../../contracts/managed/account/zkir/activate_initial_device_with_p256.bzkir": {
+        "bytes": 2280,
+        "sha256": "12f725bccb2efa1e7efee56a6167a150464604e4ef7bc28bf4a11e5ea8e868d9"
+      },
+      "../../contracts/managed/account/keys/activate_initial_device_with_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "042ef4684a953bd2a2b3a246a517b999c5fa77e2c5a9851b4d55fed5db092ccd"
+      },
+      "../../contracts/managed/account/zkir/deposit_unshielded.bzkir": {
+        "bytes": 1654,
+        "sha256": "b64d5d0243053a4b383493835a3a2412e09c89248d351076c5097f528eb7e2f8"
+      },
+      "../../contracts/managed/account/keys/deposit_unshielded.verifier": {
+        "bytes": 1353,
+        "sha256": "bb4421a5909564377d15f0756299bef99740089b842e8d9796ad2d3d75831de9"
+      },
+      "../../contracts/managed/account/zkir/issue_grant_with_p256.bzkir": {
+        "bytes": 94497,
+        "sha256": "1291bf1fd25ec9960392ec3a92c2679961244209df19447fe18a19f021433754"
+      },
+      "../../contracts/managed/account/keys/issue_grant_with_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "75cfd2a144aa4135075fb8eefa3f0aece57efea745c19cc687f1b388db85ef82"
+      },
+      "../../contracts/managed/account/zkir/revoke_grant_with_p256.bzkir": {
+        "bytes": 88673,
+        "sha256": "a317336fafb5befff3a31da0c0f768821f1fafa0b7345997c524716e59314622"
+      },
+      "../../contracts/managed/account/keys/revoke_grant_with_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "48829cf7ec8401b6e54bc639d3c9baf03495ecdf921e74021c3fe91fc2d38fa8"
+      },
+      "../../contracts/managed/account/zkir/rotate_enc_key_with_p256.bzkir": {
+        "bytes": 87134,
+        "sha256": "2f4bf0b5bce44c87d23de6e33276bc0dd6db19c6547e37bb4b53d81b574d1a83"
+      },
+      "../../contracts/managed/account/keys/rotate_enc_key_with_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "4b649df25e091e5ae49bf7b89e36a227e1a2f5ab13adacc22ce2c1a06926591f"
+      },
+      "../../contracts/managed/account/zkir/withdraw_unshielded_with_grant_p256.bzkir": {
+        "bytes": 92588,
+        "sha256": "e7b394a60fe6deb93b52bd109b48005e861fbedb40d3da03587a37f94044cb9e"
+      },
+      "../../contracts/managed/account/keys/withdraw_unshielded_with_grant_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "0e0800a7594733b079f1c88f27855fe6af44d858c6ee0ae69bec4281aa26b4b5"
+      },
+      "../../contracts/managed/faucet/contract/index.js": {
+        "bytes": 47780,
+        "sha256": "c823d20dbd1acfb3b9cd1a0b43ee764257147fc8d9476e63a096b6e9a33f6382"
+      },
+      "../../contracts/managed/faucet/compiler/contract-manifest.json": {
+        "bytes": 3618,
+        "sha256": "05d313f47e66c4d83e3748e1e8d1fc3cabc2728473d594b7d0d7588698a401dc"
+      }
+    },
+    "finalBalance": "85",
+    "originalIssuedAt": "1",
+    "reissuedAt": "4",
+    "limitations": [
+      "Non-native unshielded assets only; no P-256 shielded grant spend in this suite.",
+      "Caller restriction has a root-rejection control; a successful forwarded P-256 call is not exercised.",
+      "Rejection controls execute the real circuit against indexed state, but are not submitted invalid proofs."
+    ]
+  },
+  "ranAt": "2026-10-23T16:00:20.916Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-rc.4",
+    "indexer": "ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8"
+  }
+}

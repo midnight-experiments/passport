@@ -50,7 +50,10 @@
     "probe:wave-ceiling": "tsx src/tests/probe-wave-ceiling.ts",
     "probe:onchain-vk": "tsx src/tests/probe-onchain-vk.ts ../experiments/proving-key-regeneration/onchain",
     "probe:vk-derived-pk": "tsx src/tests/probe-vk-derived-pk.ts",
-    "probe:dismiss-cost": "tsx src/tests/probe-dismiss-cost.ts"
+    "probe:dismiss-cost": "tsx src/tests/probe-dismiss-cost.ts",
+    "test:p256-grants": "tsx src/tests/p256-grants.ts",
+    "test:p256-grant-refusals": "tsx src/tests/p256-grant-refusals.ts",
+    "test:grants-capability-offline": "tsx src/tests/grants-capability-offline.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

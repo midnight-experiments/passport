@@ -15,24 +15,18 @@ new way to satisfy `require_authorised()`, not a parallel mechanism.
 What this canvas owns is the grant schema and semantics that extension
 will carry.
 
-**Status 2026/09 — specified.** The scoped-grants and dApp-connection
-MIP is drafted (`docs/mps-mip/mips/mip-xxxx-scoped-grants.md`),
-co-authored with the Midnight Foundation. A grant is a
-contract-maintained record admitting one grantee key of a registered
-signature scheme (C5) to a bounded subset of the asset-facing
-circuits: three spend operations, one token color, a per-call and a
-cumulative cap, a bound on the value of any coin touched, an optional
-recipient pin, and an explicit expiry. The record is keyed by a
-contract-recomputable identity over the account, the grantee key, its
-origin, and a slot; color, recipient, coin bound, relying-party host,
-and the running spent total are salted commitments opened in-circuit,
-so the MIP-0012 custody invariants hold unchanged and observers learn
-neither which dApps an account uses nor what it spends. Implemented on
-the reference contract at `spec_version = 2` and exercised on node
-(`contract/GRANTS-E1.md`, `GRANTS-E2.md`); the byte recipes agree
-three ways (TypeScript, Rust, and the circuit). Outstanding: editors'
-rulings collected at the head of the draft, and the companion
-MIP-0013 erratum.
+**Status 2026/10 — specified; conformance work in progress.** The
+scoped-grants and dApp-connection MIP is drafted at
+`docs/mps-mip/mips/mip-xxxx-scoped-grants.md`, co-authored with the
+Midnight Foundation. It specifies a separate grant credential class,
+bounded spend authority, device-controlled lifecycle and an optional
+immediate-contract caller restriction. Section 12 defines combined
+conformance with MIP-0013; a prior parent amendment is not required.
+The reference schema is `spec_version = 3` and includes JubJub, k256
+and profiled P-256 arms. Historical v2 and subsequent caller/P-256
+measurements remain distinct. The first submission is to Passport;
+independent review and remaining contract/ceremony conformance work
+are recorded as Path to Active items in the MIP.
 
 ## Dependencies
 
