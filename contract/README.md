@@ -80,7 +80,7 @@ once, below every arm.
   records a real Safari approval accepted on-node, with signed assertion
   evidence and an offline Node/OpenSSL verifier.
 
-- **Arm `evm_eip712`** — an Ethereum externally owned account (MetaMask,
+- **Arm `evm_k256`** — an Ethereum externally owned account (MetaMask,
   or any EIP-712 wallet) as a device or a grantee, authorising every
   operation with **readable EIP-712 typed data**: one type per operation
   and role, whose members are every operand and every consumed witness
@@ -99,10 +99,10 @@ once, below every arm.
   base58, each text checked in-circuit against the value. Byte
   encodings come in as checked arguments (each byte range-checked and
   the value rebuilt). See
-  [EVM-EIP712.md](EVM-EIP712.md) (byte contract, frozen vectors,
-  acceptance policy) and [EVM-EIP712-MEASUREMENTS.md](EVM-EIP712-MEASUREMENTS.md).
+  [EVM-K256.md](EVM-K256.md) (byte contract, frozen vectors,
+  acceptance policy) and [EVM-K256-MEASUREMENTS.md](EVM-K256-MEASUREMENTS.md).
   The arm's specification, a delta to MIP-0030, is
-  [mip-xxxx-evm-eip712-arm.md](../docs/mps-mip/mips/mip-xxxx-evm-eip712-arm.md).
+  [mip-xxxx-evm-k256-arm.md](../docs/mps-mip/mips/mip-xxxx-evm-k256-arm.md).
 
 - **Arm `sol_ed25519`** — a Solana wallet (Phantom, or any wallet whose
   `signMessage` signs raw bytes with RFC 8032 Ed25519) as a device or a
@@ -286,11 +286,11 @@ npm run test:recovery-sim            # recovery MIP circuit matrix in the simula
                                      # refusals, veto window, cancel, finalisation,
                                      # epoch-bump revocation
 npx tsx src/tests/crossimpl-offline.ts  # Rust challenge bit-exactness per arm
-npm run test:evm_eip712-offline      # evm_eip712: frozen EIP-712 vectors (contract ==
+npm run test:evm_k256-offline      # evm_k256: frozen EIP-712 vectors (contract ==
                                      # client), the grant and recovery matrices,
                                      # every gated export's authorisation and every
                                      # checked byte argument forged, in the simulator
-VIEM_DIR=<viem 2.x> npx tsx src/tests/evm-eip712-viem.ts  # evm_eip712: the vectors,
+VIEM_DIR=<viem 2.x> npx tsx src/tests/evm-k256-viem.ts  # evm_k256: the vectors,
                                      # addresses, blinds and signatures against viem
                                      # (not a dependency; loaded at run time)
 npm run test:sol-ed25519-offline     # sol_ed25519: the frozen sol v1 corpus (contract ==
@@ -301,7 +301,7 @@ npm run verify:p256-browser         # recorded live assertion + account binding 
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
 npm run test:p256-browser           # interactive experiment: real browser passkey approval
-npm run test:evm_eip712              # evm_eip712: constraint-level negatives,
+npm run test:evm_k256              # evm_k256: constraint-level negatives,
                                      # each refused by the proof server after a
                                      # positive control (needs only the proof server)
 npm run test:sol-ed25519             # sol_ed25519 at the constraint level: every negative
@@ -575,9 +575,9 @@ two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
 | `sol-ed25519-offline` (+ `-message-`, `-seam-`, `-custody-`, `-devices-`, `-grants-offline`, `-recovery-sim`) | n/a | n/a | The `sol_ed25519` arm off-node: the RFC 8032 key relation against OpenSSL and noble, the blind protocol, the frozen `sol v1` corpus (contract pure circuits == the independent renderer), the Solana parse bound, the display-input checks, the seam's binding and replay matrix, custody with witness substitution, devices of all five schemes, the grant matrix and the recovery matrix incl. the entry planted at `device_epoch + 1` — see [SOL-ED25519.md](SOL-ED25519.md) |
 | `sol-ed25519` (prover) | n/a (local account states) | n/a | The `sol_ed25519` arm at the constraint level: every negative refused by the generated JavaScript and, with that check bypassed in a patched copy that first proved the honest call, by the proof server for the circuit under test (the activation, the device seam and its replays, custody and the shielded witness, devices, grants and every scope check of the three grantee twins, recovery, the canonical rendering of a `Field`, the exact words, the RP hash and any-recipient rules, the base modules' asserts it reaches); each refusal labelled by its layer — see [SOL-ED25519-MEASUREMENTS.md](SOL-ED25519-MEASUREMENTS.md) and `evidence/sol-ed25519/prover-suite.json` |
 | `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
-| `evm-eip712-offline` (+ `-grants-offline`, `-recovery-sim`, `-seam-offline`, `-hints-offline`) | n/a | n/a | The `evm_eip712` arm off-node: the frozen EIP-712 vectors (contract pure circuits == client codec == the frozen hashes), the no-blob classification of every member, the enumerated-member labels and the readable texts (UTC expiry, window word, amount label, base58 key) against the base's text circuits, every checked byte argument with one byte changed and with the carry attack, the blind protocol, the grant matrices (owner and grantee on every scheme pair), the recovery matrix, and the authorisation of every gated export (a foreign frame, another key and zero scalars refused, then the honest call; colour and recipient pin on the shielded paths) — see [EVM-EIP712.md](EVM-EIP712.md) |
-| `evm-eip712-viem` | n/a | n/a | The `evm_eip712` frozen vectors, addresses, blinds and `signTypedData` bytes against viem (independent implementation; viem loaded at run time) |
-| `evm-eip712-prover` | n/a | n/a (arm-level) | The `evm_eip712` arm at the proof server: binding and replay matrices, degenerate keys and scalars, witness substitution, descriptors, the grant matrix of all three grantee twins, recovery, the forged-address mutant on every gated export, and forged byte arguments (one byte changed, and a byte above 8 bits refused by the range check), each refusal attributed to the circuit under test |
+| `evm-k256-offline` (+ `-grants-offline`, `-recovery-sim`, `-seam-offline`, `-hints-offline`) | n/a | n/a | The `evm_k256` arm off-node: the frozen EIP-712 vectors (contract pure circuits == client codec == the frozen hashes), the no-blob classification of every member, the enumerated-member labels and the readable texts (UTC expiry, window word, amount label, base58 key) against the base's text circuits, every checked byte argument with one byte changed and with the carry attack, the blind protocol, the grant matrices (owner and grantee on every scheme pair), the recovery matrix, and the authorisation of every gated export (a foreign frame, another key and zero scalars refused, then the honest call; colour and recipient pin on the shielded paths) — see [EVM-K256.md](EVM-K256.md) |
+| `evm-k256-viem` | n/a | n/a | The `evm_k256` frozen vectors, addresses, blinds and `signTypedData` bytes against viem (independent implementation; viem loaded at run time) |
+| `evm-k256-prover` | n/a | n/a (arm-level) | The `evm_k256` arm at the proof server: binding and replay matrices, degenerate keys and scalars, witness substitution, descriptors, the grant matrix of all three grantee twins, recovery, the forged-address mutant on every gated export, and forged byte arguments (one byte changed, and a byte above 8 bits refused by the range check), each refusal attributed to the circuit under test |
 
 Arm coverage: `unit-offline`, `crossimpl-offline`, and `auth-coinless`
 exercise BOTH arms; the remaining on-node suites drive the k256 arm (the

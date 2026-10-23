@@ -1,28 +1,28 @@
-// The `evm_eip712` frozen vectors: deterministic inputs for every operation
+// The `evm_k256` frozen vectors: deterministic inputs for every operation
 // and role, and the two adapters that turn one input into (a) a call of the
 // contract's pure struct-hash circuit and (b) the typed data a wallet signs.
 //
-// The frozen file src/tests/vectors/evm-eip712-v1.json holds these inputs
+// The frozen file src/tests/vectors/evm-k256-v1.json holds these inputs
 // with the struct hashes, domain separators and digests viem computed for
-// them. evm-eip712-offline.ts checks the contract and the client codec
-// against it; evm-eip712-viem.ts recomputes it with viem.
+// them. evm-k256-offline.ts checks the contract and the client codec
+// against it; evm-k256-viem.ts recomputes it with viem.
 
 import { createHash } from 'node:crypto';
 import {
-  evmEip712Messages, toHex, fieldLE,
-  type Eip712TypedData, type EvmEip712DescriptorInput, type EvmEip712GranteeInput, type IssueScope,
-} from '../wallet/evm-eip712-codec.js';
+  evmK256Messages, toHex, fieldLE,
+  type Eip712TypedData, type EvmK256DescriptorInput, type EvmK256GranteeInput, type IssueScope,
+} from '../wallet/evm-k256-codec.js';
 import { padTag } from '../wallet/descriptors.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { solKeyOf } from '../wallet/signer-evm-eip712.js';
+import { solKeyOf } from '../wallet/signer-evm-k256.js';
 import {
-  bytesHint, leHint, accountHashHint, evmEip712Base58Hint,
-} from '../wallet/evm-eip712-hints.js';
+  bytesHint, leHint, accountHashHint, evmK256Base58Hint,
+} from '../wallet/evm-k256-hints.js';
 import { utcDateTimeInputs } from '../wallet/rendering.js';
 
-export const VECTOR_SEED = 'evm-eip712-vectors/v1';
+export const VECTOR_SEED = 'evm-k256-vectors/v1';
 /** The frozen file (src/tests/vectors/). */
-export const VECTOR_FILE = 'evm-eip712-v1.json';
+export const VECTOR_FILE = 'evm-k256-v1.json';
 /** The blind's tag text (the descriptor module's registered tag). */
 export const BLIND_TAG_TEXT = 'midnight:account:blind:evm:v1';
 
@@ -43,7 +43,7 @@ const label = (text: string) => { const o = new Uint8Array(32); o.set(new TextEn
 const unhex = (s: string) => new Uint8Array(Buffer.from(String(s).replace(/^0x/, ''), 'hex'));
 const U128 = (1n << 128n) - 1n;
 /** Ed25519 public keys whose encoding starts with one and two zero bytes
- *  (found by a seeded search; seeds sha256("evm-eip712-vectors/solana-leading-zeros" || i), i = 28 and 3270). */
+ *  (found by a seeded search; seeds sha256("evm-k256-vectors/solana-leading-zeros" || i), i = 28 and 3270). */
 const SOL_KEY_LEAD1 = solKey('00600f8ce708d50e6ab791c35cd7443b78edcc81b030b79136fdbcd8e4ced1f6');
 const SOL_KEY_LEAD2 = solKey('8d02f99afb0e0e3c3d4132b0cbadee783c72d63c5c6d1e4dc2bfb104b9b37ce1');
 const U64 = (1n << 64n) - 1n;
@@ -92,7 +92,7 @@ export function vectorInputs(): VectorInput[] {
 
   // Descriptors: one per target scheme, plus edge cases.
   const devices: Record<string, unknown>[] = [
-    { scheme: 'evm_eip712', tag: hex(padTag('midnight:account:device:evm:v1')), key: '00'.repeat(32), key2: r(32), address: r(20), envelope: '0', rp_id_hash: '00'.repeat(32), origin: '00'.repeat(21) },
+    { scheme: 'evm_k256', tag: hex(padTag('midnight:account:device:evm:v1')), key: '00'.repeat(32), key2: r(32), address: r(20), envelope: '0', rp_id_hash: '00'.repeat(32), origin: '00'.repeat(21) },
     { scheme: 'sol_ed25519', tag: hex(padTag('midnight:account:device:sol:v1')), key: solKey(r(32)), key2: r(32), address: '00'.repeat(20), envelope: '0', rp_id_hash: '00'.repeat(32), origin: '00'.repeat(21) },
     { scheme: 'jubjub', tag: hex(padTag('midnight:account:device:v1')), key: lead0(32, 1), key2: r(32), address: '00'.repeat(20), envelope: '0', rp_id_hash: '00'.repeat(32), origin: '00'.repeat(21) },
     { scheme: 'k256', tag: hex(padTag('midnight:account:device:k1:v2')), key: r(32), key2: r(32), address: '00'.repeat(20), envelope: '1', rp_id_hash: '00'.repeat(32), origin: '00'.repeat(21) },
@@ -103,7 +103,7 @@ export function vectorInputs(): VectorInput[] {
     v.push({ name: `remove_device/${d.scheme}`, op: 'removeDevice', frame: frames[(i + 1) % 3], args: { descriptor: d, targetEpoch: [0n, 1n, U32, 2n, 0n][i].toString(), targetCounter: [0n, 9n, 1n, U64, 3n][i].toString() } });
   });
   const grantees: Record<string, unknown>[] = [
-    { scheme: 'evm_eip712', tag: hex(padTag('midnight:account:grant:id:evm:v1')), key: '00'.repeat(32), key2: r(32), address: r(20), envelope: '0', origin: '00'.repeat(21), label: hex(label('Midnight Night Market')), origin_hash: '00'.repeat(32), slot: '0' },
+    { scheme: 'evm_k256', tag: hex(padTag('midnight:account:grant:id:evm:v1')), key: '00'.repeat(32), key2: r(32), address: r(20), envelope: '0', origin: '00'.repeat(21), label: hex(label('Midnight Night Market')), origin_hash: '00'.repeat(32), slot: '0' },
     { scheme: 'sol_ed25519', tag: hex(padTag('midnight:account:grant:id:sol:v1')), key: solKey(r(32)), key2: r(32), address: '00'.repeat(20), envelope: '0', origin: '00'.repeat(21), label: hex(label('x')), origin_hash: '00'.repeat(32), slot: '255' },
     { scheme: 'jubjub', tag: hex(padTag('midnight:account:grant:id:v1')), key: r(32), key2: lead0(32, 2), address: '00'.repeat(20), envelope: '0', origin: '00'.repeat(21), label: '00'.repeat(32), origin_hash: r(32), slot: '1' },
     { scheme: 'k256', tag: hex(padTag('midnight:account:grant:id:k1:v1')), key: r(32), key2: r(32), address: '00'.repeat(20), envelope: '0', origin: '00'.repeat(21), label: '00'.repeat(32), origin_hash: r(32), slot: '2' },
@@ -155,10 +155,10 @@ export function vectorInputs(): VectorInput[] {
 // ── Adapters ─────────────────────────────────────────────────────────────────
 
 const big = (s: unknown) => BigInt(s as string);
-export const descriptorInput = (d: any): EvmEip712DescriptorInput => ({
+export const descriptorInput = (d: any): EvmK256DescriptorInput => ({
   tag: unhex(d.tag), key: unhex(d.key), key2: unhex(d.key2), address: unhex(d.address), envelope: big(d.envelope), rp_id_hash: unhex(d.rp_id_hash), origin: unhex(d.origin),
 });
-export const granteeInput = (g: any): EvmEip712GranteeInput => ({
+export const granteeInput = (g: any): EvmK256GranteeInput => ({
   tag: unhex(g.tag), key: unhex(g.key), key2: unhex(g.key2), address: unhex(g.address), envelope: big(g.envelope),
   origin: unhex(g.origin), label: unhex(g.label), origin_hash: unhex(g.origin_hash), slot: big(g.slot),
 });
@@ -175,7 +175,7 @@ const gframeIn = (f: any) => ({ account: unhex(f.account), grantee: unhex(f.gran
 /** The typed data a wallet signs for a vector (the client codec's builders). */
 export function typedDataOf(v: VectorInput): Eip712TypedData {
   const a: any = v.args;
-  const m = evmEip712Messages as any;
+  const m = evmK256Messages as any;
   switch (v.op) {
     case 'withdrawUnshielded': return m.withdrawUnshielded(dframe(v.frame), unhex(a.color), big(a.amount), unhex(a.recipient), a.site);
     case 'withdrawShielded': return m.withdrawShielded(dframe(v.frame), unhex(a.color), big(a.amount), unhex(a.recipient), coinInput(a.coin), a.site);
@@ -217,12 +217,12 @@ export function rawAmountLabel(amount: bigint, site: { decimals: number; symbol:
 /** The base58 inputs of the key bytes a descriptor shows under the Solana
  *  type (solKeyOf), or of 32 zero bytes when the key is no valid key (a
  *  negative vector, refused before the base58 text matters). */
-const b58Of = (d: any) => { try { return evmEip712Base58Hint(Uint8Array.from(solKeyOf(d), Number)); } catch { return evmEip712Base58Hint(new Uint8Array(32)); } };
+const b58Of = (d: any) => { try { return evmK256Base58Hint(Uint8Array.from(solKeyOf(d), Number)); } catch { return evmK256Base58Hint(new Uint8Array(32)); } };
 const solKeyOr0 = (d: any): bigint[] => { try { return solKeyOf(d); } catch { return new Array(32).fill(0n); } };
 const descriptorHintOf = (d: any) => ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: b58Of(d) });
 const granteeHintOf = (g: any) => ({ key: bytesHint(g.key), key2: bytesHint(g.key2), origin: bytesHint(g.origin), label: bytesHint(g.label), b58: b58Of(g) });
 
-/** The checked byte hints of a vector's oracle call (evm-eip712-hints.ts),
+/** The checked byte hints of a vector's oracle call (evm-k256-hints.ts),
  *  derived from the vector's own values. */
 export function vectorHints(v: VectorInput) {
   const a: any = v.args;
@@ -267,35 +267,35 @@ export function contractStructHash(pc: any, v: VectorInput): Uint8Array {
   const gr = () => [unhex(f.account), unhex(f.grantee), unhex(f.label), h.label, big(f.slot), big(f.issuedAt), h.issuedAt, big(f.grantNonce), h.grantNonce];
   const c = a.coin ? [unhex(a.coin.nonce), big(a.coin.value), big(a.coin.mtIndex)] : [];
   switch (v.op) {
-    case 'withdrawUnshielded': return pc.evm_eip712_struct_withdraw_unshielded(...dev, unhex(a.color), big(a.amount), unhex(a.recipient), h.op);
-    case 'withdrawShielded': return pc.evm_eip712_struct_withdraw_shielded(...dev, unhex(a.color), big(a.amount), unhex(a.recipient), ...c, h.op);
-    case 'withdrawShieldedToContract': return pc.evm_eip712_struct_withdraw_shielded_to_contract(...dev, unhex(a.color), big(a.amount), unhex(a.recipientContract), ...c, h.op);
-    case 'appendInbox': return pc.evm_eip712_struct_append_inbox(...dev, unhex(a.entry));
-    case 'rotateEncKey': return pc.evm_eip712_struct_rotate_enc_key(...dev, unhex(a.newKey));
-    case 'addDevice': { const d = descriptorInput(a.descriptor); return pc.evm_eip712_struct_add_device(...dev, d, solKeyOr0(d), h.op); }
-    case 'removeDevice': return pc.evm_eip712_struct_remove_device(...dev, descriptorInput(a.descriptor), solKeyOr0(descriptorInput(a.descriptor)), big(a.targetEpoch), big(a.targetCounter), h.op);
-    case 'removeUnknownDevice': return pc.evm_eip712_struct_remove_unknown_device(...dev, unhex(a.entry));
+    case 'withdrawUnshielded': return pc.evm_k256_struct_withdraw_unshielded(...dev, unhex(a.color), big(a.amount), unhex(a.recipient), h.op);
+    case 'withdrawShielded': return pc.evm_k256_struct_withdraw_shielded(...dev, unhex(a.color), big(a.amount), unhex(a.recipient), ...c, h.op);
+    case 'withdrawShieldedToContract': return pc.evm_k256_struct_withdraw_shielded_to_contract(...dev, unhex(a.color), big(a.amount), unhex(a.recipientContract), ...c, h.op);
+    case 'appendInbox': return pc.evm_k256_struct_append_inbox(...dev, unhex(a.entry));
+    case 'rotateEncKey': return pc.evm_k256_struct_rotate_enc_key(...dev, unhex(a.newKey));
+    case 'addDevice': { const d = descriptorInput(a.descriptor); return pc.evm_k256_struct_add_device(...dev, d, solKeyOr0(d), h.op); }
+    case 'removeDevice': return pc.evm_k256_struct_remove_device(...dev, descriptorInput(a.descriptor), solKeyOr0(descriptorInput(a.descriptor)), big(a.targetEpoch), big(a.targetCounter), h.op);
+    case 'removeUnknownDevice': return pc.evm_k256_struct_remove_unknown_device(...dev, unhex(a.entry));
     case 'issueGrant': {
       const s = scopeInput(a.scope);
-      return pc.evm_eip712_struct_issue_grant(...dev, granteeInput(a.grantee), solKeyOr0(granteeInput(a.grantee)), s.opWithdrawUnshielded, s.opWithdrawShielded, s.opWithdrawShieldedToContract,
+      return pc.evm_k256_struct_issue_grant(...dev, granteeInput(a.grantee), solKeyOr0(granteeInput(a.grantee)), s.opWithdrawUnshielded, s.opWithdrawShielded, s.opWithdrawShieldedToContract,
         s.read, s.color, s.recipientKind, s.recipient, s.maxCoinValue, s.perCallCap, s.cap, s.expiresAt, s.rpIdHash, s.readPk, s.windowLen, s.windowCap,
         s.caller ? { is_some: true, value: { bytes: s.caller } } : { is_some: false, value: { bytes: new Uint8Array(32) } }, h.op);
     }
-    case 'revokeGrant': { const g = granteeInput(a.grantee); return pc.evm_eip712_struct_revoke_grant(...dev, g, solKeyOr0(g), h.op); }
-    case 'revokeAllGrants': return pc.evm_eip712_struct_revoke_all_grants(...dev);
-    case 'publishRecoverySession': return pc.evm_eip712_struct_publish_recovery_session(...dev, { x: big(a.recoveryPk.x), y: big(a.recoveryPk.y) },
+    case 'revokeGrant': { const g = granteeInput(a.grantee); return pc.evm_k256_struct_revoke_grant(...dev, g, solKeyOr0(g), h.op); }
+    case 'revokeAllGrants': return pc.evm_k256_struct_revoke_all_grants(...dev);
+    case 'publishRecoverySession': return pc.evm_k256_struct_publish_recovery_session(...dev, { x: big(a.recoveryPk.x), y: big(a.recoveryPk.y) },
       unhex(a.sessionNonce), ...a.phi.map(big), big(a.phiLen), unhex(a.wrap));
-    case 'cancelRecovery': return pc.evm_eip712_struct_cancel_recovery(...dev);
-    case 'withdrawUnshieldedAsGrantee': return pc.evm_eip712_struct_withdraw_unshielded_as_grantee(...gr(), unhex(a.color), big(a.amount), unhex(a.recipient), h.op);
-    case 'withdrawShieldedAsGrantee': return pc.evm_eip712_struct_withdraw_shielded_as_grantee(...gr(), unhex(a.color), big(a.amount), unhex(a.recipient), unhex(a.changeEntry), unhex(a.encPk), ...c, h.op);
-    case 'withdrawShieldedToContractAsGrantee': return pc.evm_eip712_struct_withdraw_shielded_to_contract_as_grantee(...gr(), unhex(a.color), big(a.amount), unhex(a.recipientContract), unhex(a.changeEntry), unhex(a.encPk), ...c, h.op);
+    case 'cancelRecovery': return pc.evm_k256_struct_cancel_recovery(...dev);
+    case 'withdrawUnshieldedAsGrantee': return pc.evm_k256_struct_withdraw_unshielded_as_grantee(...gr(), unhex(a.color), big(a.amount), unhex(a.recipient), h.op);
+    case 'withdrawShieldedAsGrantee': return pc.evm_k256_struct_withdraw_shielded_as_grantee(...gr(), unhex(a.color), big(a.amount), unhex(a.recipient), unhex(a.changeEntry), unhex(a.encPk), ...c, h.op);
+    case 'withdrawShieldedToContractAsGrantee': return pc.evm_k256_struct_withdraw_shielded_to_contract_as_grantee(...gr(), unhex(a.color), big(a.amount), unhex(a.recipientContract), unhex(a.changeEntry), unhex(a.encPk), ...c, h.op);
   }
   throw new Error(`vector: unknown op ${v.op}`);
 }
 
 /** The contract's digest for a vector (its exported pure circuit). */
 export const contractDigest = (pc: any, v: VectorInput): Uint8Array =>
-  pc.evm_eip712_digest(unhex((v.frame as any).account), contractStructHash(pc, v), vectorHints(v).accountHash);
+  pc.eip712_v1_digest(unhex((v.frame as any).account), contractStructHash(pc, v), vectorHints(v).accountHash);
 
 /** Negative vectors: inputs every layer named must refuse. */
 export interface NegativeVector { name: string; base: string; patch: (v: VectorInput) => VectorInput; refusedBy: ('client' | 'runtime')[]; why: string }
@@ -303,7 +303,7 @@ const clone = (v: VectorInput): VectorInput => JSON.parse(JSON.stringify(v));
 export const NEGATIVES: NegativeVector[] = [
   { name: 'unregistered device tag', base: 'add_device/k256', refusedBy: ['client', 'runtime'], why: 'tag midnight:account:device:ed:v1 is no registered device tag',
     patch: (v) => { const c = clone(v); (c.args as any).descriptor.tag = hex(padTag('midnight:account:device:ed:v1')); return c; } },
-  { name: 'space-padded device tag', base: 'add_device/evm_eip712', refusedBy: ['client', 'runtime'], why: 'a registered text with non-zero padding',
+  { name: 'space-padded device tag', base: 'add_device/evm_k256', refusedBy: ['client', 'runtime'], why: 'a registered text with non-zero padding',
     patch: (v) => { const c = clone(v); const t = padTag('midnight:account:device:evm:v1'); t.fill(32, 'midnight:account:device:evm:v1'.length); (c.args as any).descriptor.tag = hex(t); return c; } },
   { name: 'grant-id tag as a device tag', base: 'remove_device/sol_ed25519', refusedBy: ['client', 'runtime'], why: 'a tag of another recipe',
     patch: (v) => { const c = clone(v); (c.args as any).descriptor.tag = hex(padTag('midnight:account:grant:id:sol:v1')); return c; } },
@@ -311,7 +311,7 @@ export const NEGATIVES: NegativeVector[] = [
     patch: (v) => { const c = clone(v); (c.args as any).descriptor.origin = hex(new TextEncoder().encode('https://a example.com')); return c; } },
   { name: 'passkey grantee origin with a NUL', base: 'issue_grant/p256', refusedBy: ['client', 'runtime'], why: 'the origin is not visible ASCII',
     patch: (v) => { const c = clone(v); const o = new TextEncoder().encode('https://a.example.com'); o[20] = 0; (c.args as any).grantee.origin = hex(o); return c; } },
-  { name: 'site label ending in a space', base: 'issue_grant/evm_eip712', refusedBy: ['client', 'runtime'], why: 'a label whose text ends in a space is not one-to-one',
+  { name: 'site label ending in a space', base: 'issue_grant/evm_k256', refusedBy: ['client', 'runtime'], why: 'a label whose text ends in a space is not one-to-one',
     patch: (v) => { const c = clone(v); (c.args as any).grantee.label = hex(label('Midnight ')); return c; } },
   { name: 'site label with a double space', base: 'revoke_grant/sol_ed25519', refusedBy: ['client', 'runtime'], why: 'words are separated by single spaces',
     patch: (v) => { const c = clone(v); (c.args as any).grantee.label = hex(label('a  b')); return c; } },
@@ -319,7 +319,7 @@ export const NEGATIVES: NegativeVector[] = [
     patch: (v) => { const c = clone(v); (c.frame as any).label = '00'.repeat(32); return c; } },
   { name: 'unregistered grant-id tag', base: 'revoke_grant/k256', refusedBy: ['client', 'runtime'], why: 'a device tag is no grant-id tag',
     patch: (v) => { const c = clone(v); (c.args as any).grantee.tag = hex(padTag('midnight:account:device:k1:v2')); return c; } },
-  { name: 'recipient kind with no label', base: 'issue_grant/evm_eip712', refusedBy: ['client', 'runtime'], why: 'recipientKind 4 has no text label',
+  { name: 'recipient kind with no label', base: 'issue_grant/evm_k256', refusedBy: ['client', 'runtime'], why: 'recipientKind 4 has no text label',
     patch: (v) => { const c = clone(v); (c.args as any).scope.recipientKind = '4'; return c; } },
   { name: 'passkey device with a zero RP hash', base: 'add_device/p256', refusedBy: ['client', 'runtime'], why: "a passkey's own RP pin is never zero",
     patch: (v) => { const c = clone(v); (c.args as any).descriptor.rp_id_hash = '00'.repeat(32); return c; } },

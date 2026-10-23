@@ -1,0 +1,40 @@
+// ---------------------------------------------------------------------------
+// k256 core: ECDSA over secp256k1 (k256) on a 32-byte digest, for every arm
+// whose keys are secp256k1 keys. It knows no chain, wallet or signing format:
+// an arm's format computes the digest the wallet signs, and this module
+// verifies a signature over it.
+//
+// CHECKED DIGEST BYTES. Taking bytes out of a value costs a full
+// decomposition per byte, so the caller passes the digest's bytes as a
+// checked hint: a Uint<8> vector (each element range-checked to 8 bits as a
+// circuit argument) that must equal the digest byte for byte. Only one vector
+// passes, and the check binds it before the bytes are read big-endian.
+//
+// The circuit reads no ledger state, so the module is imported rather than
+// included.
+// ---------------------------------------------------------------------------
+
+module K256Core {
+  import CompactStandardLibrary;
+
+  // ECDSA verification over secp256k1: the standard library's
+  // secp256k1EcdsaVerify with the same arithmetic and semantics (both S forms
+  // accepted, the digest read big-endian and reduced mod n, x(R) reduced mod
+  // n), without its comparison with the default point and with the digest's
+  // big-endian bytes taken from the checked hint `h` instead of reversed byte
+  // by byte. The caller MUST refuse the point at infinity (both of its
+  // encodings) and r = 0 or s = 0 before this call: this circuit checks none
+  // of them.
+  // compact row optimization | ECDSA verify with the digest from checked bytes | -38% rows
+  export circuit k256_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point): Boolean {
+    assert(Bytes[...h] == digest, "evm_k256: digest hint does not match the digest");
+    const z = Bytes[h[31], h[30], h[29], h[28], h[27], h[26], h[25], h[24], h[23], h[22], h[21], h[20], h[19], h[18], h[17], h[16],
+                    h[15], h[14], h[13], h[12], h[11], h[10], h[9],  h[8],  h[7],  h[6],  h[5],  h[4],  h[3],  h[2],  h[1],  h[0]] as Secp256k1Scalar;
+    const {r, s} = sig;
+    const w = inv(s);
+    const u1 = z * w;
+    const u2 = r * w;
+    const point = ecAdd(ecMulGenerator(u1), ecMul(pk, u2));
+    return (secp256k1PointX(point) as Bytes<32>) as Secp256k1Scalar == r;
+  }
+}

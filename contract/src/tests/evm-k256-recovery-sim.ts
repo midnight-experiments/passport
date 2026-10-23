@@ -1,4 +1,4 @@
-// Recovery with `evm_eip712` devices, through the compact-runtime local
+// Recovery with `evm_k256` devices, through the compact-runtime local
 // simulator (no node, no proof), with explicit wall-clock control. It extends
 // upstream's recovery-sim.ts, which is left unchanged and drives the JubJub
 // arm only, to an account whose devices are Ethereum accounts:
@@ -9,18 +9,18 @@
 //     phi values little-endian; the session identifier; phiLength; the
 //     64-byte wrap as `bytes`), exactly the values the chip then stores; the
 //     digest is the contract's own;
-//   - publish_recovery_session_with_evm_eip712: the binding matrix (every
+//   - publish_recovery_session_with_evm_k256: the binding matrix (every
 //     signed member changed after signing, every operand changed after
 //     signing), the shared chip's freshness and slot rules under a valid
 //     signature, the client's refusals, unauthorised keys;
 //   - the shared JubJub recovery gate (recover_submit) on an evm account,
 //     pending exclusivity (no session while a recovery is pending), the veto
 //     window;
-//   - recover_cancel_with_evm_eip712 by a second evm device: its binding (a
+//   - recover_cancel_with_evm_k256 by a second evm device: its binding (a
 //     RevokeAllGrants signature over the same bare frame, a stale nonce, an
 //     unenrolled key), the cancelled submission replayed, nothing to cancel;
 //   - finalisation (upstream #183: the device set is cleared): every old
-//     evm_eip712 device is refused afterwards, INCLUDING an entry an upstream
+//     evm_k256 device is refused afterwards, INCLUDING an entry an upstream
 //     arm planted at device_epoch + 1 before the recovery (README erratum 7:
 //     without the clear it would be live at the new epoch); the old JubJub
 //     device too; the JubJub successor enrols a fresh evm device at the new
@@ -28,9 +28,9 @@
 //   - a grant issued before the recovery is refused after the finalisation
 //     (its epoch is one behind), while a grant the new device issues lands.
 //
-// Writes $EVIDENCE_DIR/evm-eip712-recovery-sim.json when EVIDENCE_DIR is set.
+// Writes $EVIDENCE_DIR/evm-k256-recovery-sim.json when EVIDENCE_DIR is set.
 
-import { withExecutedHints, storeCoin, TEST_SITE } from './evm-eip712-hint-fill.js';
+import { withExecutedHints, storeCoin, TEST_SITE } from './evm-k256-hint-fill.js';
 import { pureCircuits as hintPure } from '../wallet/contract.js';
 import { randomBytes } from 'node:crypto';
 import {
@@ -44,10 +44,10 @@ import { hexToBytes } from '../wallet/hex.js';
 import { makeWitnesses, emptyCoinStore, type CoinStorePrivateState } from '../wallet/witnesses.js';
 import { JubjubDevice, K256Device, jubjubChallenges, authArgs, grantAuthArgs, RECIPIENT_USER_ADDRESS, type GrantOpening } from '../wallet/signer.js';
 import {
-  SoftwareEvmWallet, EvmEip712Device, EvmEip712Grantee, evmEip712DescriptorInput, evmDeviceDescriptor, evmEip712RecoverySession, evmEip712IssueArgs, evmEip712GrantScopeSalt, solArgs, EVM_EIP712_UNUSED_DESCRIPTOR } from '../wallet/signer-evm-eip712.js';
-import { evmEip712Messages, typedDataDigest, typeString, fieldLE, type Eip712TypedData, type IssueScope, type RecoverySession } from '../wallet/evm-eip712-codec.js';
+  SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmDeviceDescriptor, evmK256RecoverySession, evmK256IssueArgs, evmK256GrantScopeSalt, solArgs, EVM_K256_UNUSED_DESCRIPTOR } from '../wallet/signer-evm-k256.js';
+import { evmK256Messages, typedDataDigest, typeString, fieldLE, type Eip712TypedData, type IssueScope, type RecoverySession } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
-import { leHint, accountHashHint } from '../wallet/evm-eip712-hints.js';
+import { leHint, accountHashHint } from '../wallet/evm-k256-hints.js';
 import {
   recoveryKey, signRecoverSubmit, recoverSubmitArgs, recoverSubmitChallenge, readArtefactSet, matchesRecoveryPk, eqPoint,
   JUBJUB_IDENTITY, JUBJUB_ORDER_TWO,
@@ -92,9 +92,9 @@ async function section(label: string, f: () => Promise<void>) {
 // ── The simulated account ───────────────────────────────────────────────────
 
 const WINDOW = 3n * 24n * 3600n; // upstream recovery-sim's window
-const PUBLISH = 'publish_recovery_session_with_evm_eip712';
-const CANCEL = 'recover_cancel_with_evm_eip712';
-const ROTATE = 'rotate_enc_key_with_evm_eip712';
+const PUBLISH = 'publish_recovery_session_with_evm_k256';
+const CANCEL = 'recover_cancel_with_evm_k256';
+const ROTATE = 'rotate_enc_key_with_evm_k256';
 const EFFECT = "Sets this account's recovery key";
 
 const contract: any = new (Contract as any)(makeWitnesses());
@@ -106,7 +106,7 @@ let privateState: CoinStorePrivateState = emptyCoinStore();
 let time = 1_800_000_000;
 const encSecret = rnd();
 const birth = newRecoverySecret();
-const E = await EvmEip712Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
+const E = await EvmK256Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
 const salt = rnd();
 const init = await contract.initialState(createConstructorContext(privateState, coinPk),
   E.bootCommitment(salt), rnd(), recoveryKey(birth.field).pk, sealWrap(birth.bytes, new Uint8Array(32), encSecret), WINDOW);
@@ -134,24 +134,24 @@ async function refused(label: string, f: () => Promise<unknown>, needle: string 
 
 // evm devices: the live counter (MIP-0013 S11 rescan) and an authorisation
 // over a typed message (signed as given: a tampered message signs the tamper)
-const counterOf = (d: EvmEip712Device): bigint => {
+const counterOf = (d: EvmK256Device): bigint => {
   for (let k = 0n; k < 256n; k++) if (L().devices.member(d.entryAt(address, L().device_epoch, k))) return k;
   return -1n;
 };
-const frame = (d: EvmEip712Device) => ({ account: address, device: d.address, authNonce: L().auth_nonce as bigint });
-const authOf = async (d: EvmEip712Device, td: Eip712TypedData, counter = counterOf(d)) => {
+const frame = (d: EvmK256Device) => ({ account: address, device: d.address, authNonce: L().auth_nonce as bigint });
+const authOf = async (d: EvmK256Device, td: Eip712TypedData, counter = counterOf(d)) => {
   const { arm, ...a } = await d.authorise(td, counter < 0n ? 0n : counter);
   return a;
 };
 const sessionArgs = (s: RecoverySession) => [s.recoveryPk, s.sessionNonce, ...s.phi, s.phiLen, s.wrap];
-async function publish(d: EvmEip712Device, s: RecoverySession, tamper?: (t: any) => void, executed: RecoverySession = s) {
-  const td = evmEip712Messages.publishRecoverySession(frame(d), s);
+async function publish(d: EvmK256Device, s: RecoverySession, tamper?: (t: any) => void, executed: RecoverySession = s) {
+  const td = evmK256Messages.publishRecoverySession(frame(d), s);
   const signed = tamper ? clone(td) : td;
   if (tamper) tamper(signed);
   return call(PUBLISH, [...sessionArgs(executed), await authOf(d, signed)]);
 }
-async function cancel(d: EvmEip712Device, td?: Eip712TypedData) {
-  return call(CANCEL, [await authOf(d, td ?? evmEip712Messages.cancelRecovery(frame(d)))]);
+async function cancel(d: EvmK256Device, td?: Eip712TypedData) {
+  return call(CANCEL, [await authOf(d, td ?? evmK256Messages.cancelRecovery(frame(d)))]);
 }
 const jctx = () => ({ contractAddress: address, authNonce: L().auth_nonce as bigint });
 const jCounter = (j: JubjubDevice): bigint => {
@@ -169,7 +169,7 @@ function newSession(): Session {
   const sid = newSessionNonce();
   const shares: IndexedShare[] = guardians.map((g, i) => ({ index: i + 1, sigma: deriveShare(sid, address, g) }));
   const phi = split(sec.field, shares, t);
-  const s = evmEip712RecoverySession({ recoveryPk: recoveryKey(sec.field).pk, sessionNonce: sid, phi, wrap: sealWrap(sec.bytes, address, encSecret) });
+  const s = evmK256RecoverySession({ recoveryPk: recoveryKey(sec.field).pk, sessionNonce: sid, phi, wrap: sealWrap(sec.bytes, address, encSecret) });
   return { secretField: sec.field, secretBytes: sec.bytes, sid, phi, shares, t, s };
 }
 /** The shared JubJub recovery gate (recover_submit), as sim.ts drives it. */
@@ -184,22 +184,22 @@ function submitArgs(sField: bigint, successor: JubjubDevice, successorRecoveryPk
 
 // ═════════════════════════════════════════════════════════════════════════════
 
-await call('activate_initial_device_with_evm_eip712', E.activationArgs(salt));
+await call('activate_initial_device_with_evm_k256', E.activationArgs(salt));
 const S1 = newSession();
-const E2 = await EvmEip712Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
+const E2 = await EvmK256Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
 const J = JubjubDevice.generate();
-const W = await EvmEip712Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
-const stranger = await EvmEip712Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
+const W = await EvmK256Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
+const stranger = await EvmK256Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
 let plant: Uint8Array = new Uint8Array(32);
 let epochBefore = 0n;
 
-await section('recovery at birth on an evm_eip712 account', async () => {
-  ok(L().booted === true && L().device_count === 1n && counterOf(E) === 0n, 'the evm_eip712 device is the only device (counter 0)');
+await section('recovery at birth on an evm_k256 account', async () => {
+  ok(L().booted === true && L().device_count === 1n && counterOf(E) === 0n, 'the evm_k256 device is the only device (counter 0)');
   ok(L().recovery_phi_len === 0n && L().recovery_version === 1n && L().pending_recovery === false, 'commitment and wrap present, no vector, nothing pending');
 });
 
 await section('the readable approval: every recovery operand in full, the consequence line', async () => {
-  const td = evmEip712Messages.publishRecoverySession(frame(E), S1.s);
+  const td = evmK256Messages.publishRecoverySession(frame(E), S1.s);
   const m: any = td.message;
   ok(typeString('PublishRecoverySession') === 'PublishRecoverySession(bytes32 account,address device,uint64 authNonce,string effect,bytes32 recoveryKeyX,bytes32 recoveryKeyY,bytes32 sessionNonce,bytes32 phi1,bytes32 phi2,bytes32 phi3,bytes32 phi4,uint8 phiLength,bytes wrap)',
     'the frozen type: frame, effect, the key, the session nonce, four phi values, the length, the wrap');
@@ -211,12 +211,12 @@ await section('the readable approval: every recovery operand in full, the conseq
     'phi1..phi4: each Field value in full, little-endian (unused slots shown as zero)');
   ok(m.phiLength === '2', 'phiLength shown as a number');
   ok(m.wrap === '0x' + hex(S1.s.wrap) && m.wrap.length === 2 + 128, 'the 64-byte wrap in full hex (no fingerprint, no truncation)');
-  const oracle = pc.evm_eip712_digest(address, pc.evm_eip712_struct_publish_recovery_session(address, E.address, L().auth_nonce,
+  const oracle = pc.eip712_v1_digest(address, pc.evm_k256_struct_publish_recovery_session(address, E.address, L().auth_nonce,
     leHint(L().auth_nonce, 8), S1.s.recoveryPk, S1.s.sessionNonce, ...S1.s.phi, S1.s.phiLen, S1.s.wrap), accountHashHint(address));
   ok(eq(typedDataDigest(td), oracle), "the digest the wallet signs == the contract's own oracle");
 });
 
-await section('publish_recovery_session_with_evm_eip712: the session lands, exactly the shown values stored', async () => {
+await section('publish_recovery_session_with_evm_k256: the session lands, exactly the shown values stored', async () => {
   const before = L();
   await publish(E, S1.s);
   const l = L();
@@ -262,7 +262,7 @@ await section('binding: every signed member changed after signing (the circuit r
   ];
   for (const [name, x] of executed) await refused(`signed the session, executed with ${name}: refused`, () => publish(E, S.s, undefined, x), 'invalid signature');
   await refused('a CancelRecovery signature presented as the session approval', async () =>
-    call(PUBLISH, [...sessionArgs(S.s), await authOf(E, evmEip712Messages.cancelRecovery(frame(E)))]), 'invalid signature');
+    call(PUBLISH, [...sessionArgs(S.s), await authOf(E, evmK256Messages.cancelRecovery(frame(E)))]), 'invalid signature');
 });
 
 await section('the shared chip under a VALID signature: freshness and slot gating (recovery MIP §5)', async () => {
@@ -287,8 +287,8 @@ await section('the shared chip under a VALID signature: freshness and slot gatin
     ['a 63-byte wrap', { recoveryPk: S.s.recoveryPk, sessionNonce: S.sid, phi: S.phi, wrap: rnd(63) }],
   ] as const) {
     let threw = '';
-    try { evmEip712RecoverySession(a as any); } catch (e: any) { threw = String(e?.message ?? e); }
-    ok(threw.startsWith('evm_eip712:'), `client layer: ${label} refused before signing (${threw.slice(0, 60)})`);
+    try { evmK256RecoverySession(a as any); } catch (e: any) { threw = String(e?.message ?? e); }
+    ok(threw.startsWith('evm_k256:'), `client layer: ${label} refused before signing (${threw.slice(0, 60)})`);
   }
 });
 
@@ -296,33 +296,33 @@ await section('unauthorised keys', async () => {
   const S = newSession();
   await refused('an unenrolled evm key signs the session', () => publish(stranger, S.s), 'unknown device entry');
   await refused('the device key with another account\'s blind', async () => {
-    const other = await EvmEip712Device.enrol(E.wallet!, 'undeployed', 1);
-    const td = evmEip712Messages.publishRecoverySession(frame(E), S.s);
+    const other = await EvmK256Device.enrol(E.wallet!, 'undeployed', 1);
+    const td = evmK256Messages.publishRecoverySession(frame(E), S.s);
     const { arm, ...a } = await E.authorise(td, counterOf(E));
     return call(PUBLISH, [...sessionArgs(S.s), { ...a, blind: other.blind }]);
   }, 'unknown device entry');
   await refused('a stale use counter (the entry already rolled)', async () => {
-    const td = evmEip712Messages.publishRecoverySession(frame(E), S.s);
+    const td = evmK256Messages.publishRecoverySession(frame(E), S.s);
     return call(PUBLISH, [...sessionArgs(S.s), await authOf(E, td, 0n)]);
   }, 'unknown device entry');
 });
 
 await section('more devices: a second evm device and a JubJub device, and the upstream plant at device_epoch + 1', async () => {
-  const e2In = evmEip712DescriptorInput(evmDeviceDescriptor(E2));
-  await call('add_device_with_evm_eip712', [e2In, ...solArgs(e2In), await authOf(E, evmEip712Messages.addDevice(frame(E), e2In))]);
-  const jIn = evmEip712DescriptorInput({ scheme: 'jubjub', x: J.pk.x, y: J.pk.y });
-  await call('add_device_with_evm_eip712', [jIn, ...solArgs(jIn), await authOf(E, evmEip712Messages.addDevice(frame(E), jIn))]);
-  ok(counterOf(E2) === 0n && jCounter(J) === 0n && L().device_count === 3n, 'E2 (evm_eip712) and J (jubjub) enrolled at epoch 0, counter 0');
+  const e2In = evmK256DescriptorInput(evmDeviceDescriptor(E2));
+  await call('add_device_with_evm_k256', [e2In, ...solArgs(e2In), await authOf(E, evmK256Messages.addDevice(frame(E), e2In))]);
+  const jIn = evmK256DescriptorInput({ scheme: 'jubjub', x: J.pk.x, y: J.pk.y });
+  await call('add_device_with_evm_k256', [jIn, ...solArgs(jIn), await authOf(E, evmK256Messages.addDevice(frame(E), jIn))]);
+  ok(counterOf(E2) === 0n && jCounter(J) === 0n && L().device_count === 3n, 'E2 (evm_k256) and J (jubjub) enrolled at epoch 0, counter 0');
   // README erratum 7: an upstream arm's raw add_device takes any entry; J
-  // enrols W's evm_eip712 entry at device_epoch + 1, counter 0
+  // enrols W's evm_k256 entry at device_epoch + 1, counter 0
   epochBefore = L().device_epoch;
   plant = W.entryAt(address, epochBefore + 1n, 0n);
   const a = J.sign(jubjubChallenges.addDevice(jctx(), J.pk, plant), jCounter(J));
   await call('add_device_with_jubjub', [plant, ...authArgs(a)]);
-  ok(L().devices.member(plant) && L().device_count === 4n, 'the planted evm_eip712 entry (epoch + 1) is in the set');
+  ok(L().devices.member(plant) && L().device_count === 4n, 'the planted evm_k256 entry (epoch + 1) is in the set');
   await refused('the planted device cannot act before the bump (its entry is not at the live epoch)', async () => {
     const k = rnd();
-    return call(ROTATE, [k, await authOf(W, evmEip712Messages.rotateEncKey(frame(W), k), 0n)]);
+    return call(ROTATE, [k, await authOf(W, evmK256Messages.rotateEncKey(frame(W), k), 0n)]);
   }, 'unknown device entry');
 });
 
@@ -333,20 +333,20 @@ const U_COLOR = rnd(), RCPT = rnd();
 const grantScope: IssueScope = { opWithdrawUnshielded: true, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: false,
   color: U_COLOR, recipientKind: RECIPIENT_USER_ADDRESS, recipient: RCPT, maxCoinValue: 100n, perCallCap: 100n, cap: 500n, expiresAt: 0n,
   rpIdHash: new Uint8Array(32), readPk: new Uint8Array(32), windowLen: 0n, windowCap: 0n, caller: null };
-interface Held { g: EvmEip712Grantee; salt: Uint8Array; spent: bigint }
-async function issueTo(d: EvmEip712Device, slot: bigint): Promise<Held> {
-  const g = await EvmEip712Grantee.enrol(G_WALLET, 'undeployed', address, grantLabel('bank.example'), slot);
+interface Held { g: EvmK256Grantee; salt: Uint8Array; spent: bigint }
+async function issueTo(d: EvmK256Device, slot: bigint): Promise<Held> {
+  const g = await EvmK256Grantee.enrol(G_WALLET, 'undeployed', address, grantLabel('bank.example'), slot);
   const gin = g.descriptor();
   // the salt the circuit derives from the issuing device's blind, the account and auth_nonce
-  const s = evmEip712GrantScopeSalt(d.blind, address, frame(d).authNonce);
-  await call('issue_grant_with_evm_eip712', [gin, ...solArgs(gin), ...evmEip712IssueArgs(grantScope), await authOf(d, evmEip712Messages.issueGrant(frame(d), gin, grantScope))]);
+  const s = evmK256GrantScopeSalt(d.blind, address, frame(d).authNonce);
+  await call('issue_grant_with_evm_k256', [gin, ...solArgs(gin), ...evmK256IssueArgs(grantScope), await authOf(d, evmK256Messages.issueGrant(frame(d), gin, grantScope))]);
   return { g, salt: s, spent: 0n };
 }
 async function grantWithdraw(h: Held, amount: bigint) {
   const rec = L().grants.lookup(h.g.grantId(address));
-  const td = evmEip712Messages.withdrawUnshieldedAsGrantee({ account: address, grantee: h.g.address, label: h.g.label, slot: h.g.slot, issuedAt: rec.issued_at, grantNonce: rec.nonce }, U_COLOR, amount, RCPT, TEST_SITE);
+  const td = evmK256Messages.withdrawUnshieldedAsGrantee({ account: address, grantee: h.g.address, label: h.g.label, slot: h.g.slot, issuedAt: rec.issued_at, grantNonce: rec.nonce }, U_COLOR, amount, RCPT, TEST_SITE);
   const opening: GrantOpening = { originHash: h.g.originHash, slot: h.g.slot, scopeSalt: h.salt, recipientKind: RECIPIENT_USER_ADDRESS, pinnedRecipient: RCPT, maxCoinValue: 100n, spentPrev: h.spent };
-  await call('withdraw_unshielded_with_grant_evm_eip712', [U_COLOR, amount, { bytes: RCPT }, ...grantAuthArgs(opening, await h.g.authorise(td))]);
+  await call('withdraw_unshielded_with_grant_evm_k256', [U_COLOR, amount, { bytes: RCPT }, ...grantAuthArgs(opening, await h.g.authorise(td))]);
   h.spent += amount;
 }
 let oldGrant: Held | undefined;
@@ -361,7 +361,7 @@ await section('a grant issued at the first epoch: its grantee withdraws', async 
 let firstSubmit: unknown[] = [];
 const Q = JubjubDevice.generate();
 const QR = newRecoverySecret();
-await section('the shared recovery gate on an evm_eip712 account; pending exclusivity; the veto window', async () => {
+await section('the shared recovery gate on an evm_k256 account; pending exclusivity; the veto window', async () => {
   const set = readArtefactSet(L());
   const sRec = reconstruct(set.phi, S1.shares.slice(0, 2), S1.t);
   ok(matchesRecoveryPk(sRec, set.recoveryPk), 'the secret reconstructed from the on-chain phi (published by the evm device) opens the stored recovery key');
@@ -372,25 +372,25 @@ await section('the shared recovery gate on an evm_eip712 account; pending exclus
   await call('recover_submit', firstSubmit);
   ok(L().pending_recovery === true && L().device_epoch === epochBefore, 'pending recovery recorded; the epoch unchanged');
   const S = newSession();
-  await refused('publish_recovery_session_with_evm_eip712 while a recovery is pending (valid signature)', () => publish(E, S.s), 'recovery pending; cancel first');
+  await refused('publish_recovery_session_with_evm_k256 while a recovery is pending (valid signature)', () => publish(E, S.s), 'recovery pending; cancel first');
   await refused('finalisation inside the veto window', () => call('recover_finalise', []), 'veto window still open');
   time += 3600;
   await refused('still inside the window an hour later', () => call('recover_finalise', []), 'veto window still open');
 });
 
-await section('recover_cancel_with_evm_eip712: binding, then the veto by a second evm device', async () => {
-  await refused('a RevokeAllGrants signature over the same bare frame presented as CancelRecovery', () => cancel(E2, evmEip712Messages.revokeAllGrants(frame(E2))), 'invalid signature');
+await section('recover_cancel_with_evm_k256: binding, then the veto by a second evm device', async () => {
+  await refused('a RevokeAllGrants signature over the same bare frame presented as CancelRecovery', () => cancel(E2, evmK256Messages.revokeAllGrants(frame(E2))), 'invalid signature');
   await refused('a CancelRecovery signature over authNonce + 1', async () => {
-    const td = clone(evmEip712Messages.cancelRecovery(frame(E2))); (td.message as any).authNonce = String(L().auth_nonce + 1n);
+    const td = clone(evmK256Messages.cancelRecovery(frame(E2))); (td.message as any).authNonce = String(L().auth_nonce + 1n);
     return cancel(E2, td);
   }, 'invalid signature');
   await refused('a CancelRecovery signature for another account', async () => {
-    const td = evmEip712Messages.cancelRecovery({ ...frame(E2), account: rnd() });
+    const td = evmK256Messages.cancelRecovery({ ...frame(E2), account: rnd() });
     return cancel(E2, td);
   }, 'invalid signature');
   await refused('an unenrolled evm key cancels', () => cancel(stranger), 'unknown device entry');
   const before = L();
-  const td = evmEip712Messages.cancelRecovery(frame(E2));
+  const td = evmK256Messages.cancelRecovery(frame(E2));
   ok(typeString('CancelRecovery') === 'CancelRecovery(bytes32 account,address device,uint64 authNonce)', 'the frozen type: the frame alone');
   const auth = await authOf(E2, td);
   await call(CANCEL, [auth]);
@@ -404,7 +404,7 @@ await section('recover_cancel_with_evm_eip712: binding, then the veto by a secon
   await refused('nothing to finalise after the cancel', () => call('recover_finalise', []), 'no recovery pending');
 });
 
-await section('finalisation clears every old device, the planted evm_eip712 entry included (#183; replaces erratum 7)', async () => {
+await section('finalisation clears every old device, the planted evm_k256 entry included (#183; replaces erratum 7)', async () => {
   const set = readArtefactSet(L());
   const sRec = reconstruct(set.phi, [S1.shares[0], S1.shares[2]], S1.t);
   await call('recover_submit', submitArgs(sRec, Q, recoveryKey(QR.field).pk, BigInt(time)));
@@ -419,22 +419,22 @@ await section('finalisation clears every old device, the planted evm_eip712 entr
   ok(l.device_epoch === epochBefore + 1n && l.device_count === 1n, 'the epoch bumped; one device');
   ok(l.devices.size() === 1n && l.devices.member(successorEntry), 'the set holds only the successor\'s entry');
   ok(eq(plant, W.entryAt(address, l.device_epoch, 0n)), 'the plant IS the planted device\'s entry at the new live epoch, counter 0 (erratum 7: it would be live without the clear)');
-  ok(!l.devices.member(plant), 'the planted evm_eip712 entry is gone');
+  ok(!l.devices.member(plant), 'the planted evm_k256 entry is gone');
   ok(l.auth_nonce === before.auth_nonce + 1n && l.pending_recovery === false && l.recovery_phi_len === 0n && eqPoint(l.recovery_pk, recoveryKey(QR.field).pk as JubjubPoint),
     'auth_nonce +1, nothing pending, the vector retired, the successor recovery key installed');
   // every old device signs a gated call: each is refused by membership
   const k = rnd();
-  await refused('the planted evm_eip712 device (counter 0 at the new epoch) rotates', async () =>
-    call(ROTATE, [k, await authOf(W, evmEip712Messages.rotateEncKey(frame(W), k), 0n)]), 'unknown device entry');
-  await refused('the planted evm_eip712 device publishes a session', async () =>
-    call(PUBLISH, [...sessionArgs(newSession().s), await authOf(W, evmEip712Messages.publishRecoverySession(frame(W), newSession().s), 0n)]), 'unknown device entry');
+  await refused('the planted evm_k256 device (counter 0 at the new epoch) rotates', async () =>
+    call(ROTATE, [k, await authOf(W, evmK256Messages.rotateEncKey(frame(W), k), 0n)]), 'unknown device entry');
+  await refused('the planted evm_k256 device publishes a session', async () =>
+    call(PUBLISH, [...sessionArgs(newSession().s), await authOf(W, evmK256Messages.publishRecoverySession(frame(W), newSession().s), 0n)]), 'unknown device entry');
   for (const [name, d, c] of [['E (the original evm device)', E, cE], ['E2 (the cancelling evm device)', E2, cE2]] as const) {
     for (const ctr of [0n, c]) {
-      await refused(`${name}, counter ${ctr}, rotates`, async () => call(ROTATE, [k, await authOf(d, evmEip712Messages.rotateEncKey(frame(d), k), ctr)]), 'unknown device entry');
+      await refused(`${name}, counter ${ctr}, rotates`, async () => call(ROTATE, [k, await authOf(d, evmK256Messages.rotateEncKey(frame(d), k), ctr)]), 'unknown device entry');
     }
     const S = newSession();
-    await refused(`${name} publishes a session`, async () => call(PUBLISH, [...sessionArgs(S.s), await authOf(d, evmEip712Messages.publishRecoverySession(frame(d), S.s), c)]), 'unknown device entry');
-    await refused(`${name} cancels`, async () => call(CANCEL, [await authOf(d, evmEip712Messages.cancelRecovery(frame(d)), c)]), 'unknown device entry');
+    await refused(`${name} publishes a session`, async () => call(PUBLISH, [...sessionArgs(S.s), await authOf(d, evmK256Messages.publishRecoverySession(frame(d), S.s), c)]), 'unknown device entry');
+    await refused(`${name} cancels`, async () => call(CANCEL, [await authOf(d, evmK256Messages.cancelRecovery(frame(d)), c)]), 'unknown device entry');
   }
   await refused('J (the old jubjub device) adds a device', async () => {
     const e = W.entryAt(address, L().device_epoch, 1n);
@@ -442,9 +442,9 @@ await section('finalisation clears every old device, the planted evm_eip712 entr
   }, 'unknown device entry');
 });
 
-let fDevice: EvmEip712Device | undefined;
+let fDevice: EvmK256Device | undefined;
 await section('after recovery: the JubJub successor enrols a fresh evm device, which publishes a fresh session', async () => {
-  const F = await EvmEip712Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
+  const F = await EvmK256Device.enrol(SoftwareEvmWallet.generate(), 'undeployed', 0);
   fDevice = F;
   const fEntry = F.entryAt(address, L().device_epoch, 0n);
   await call('add_device_with_jubjub', [fEntry, ...authArgs(Q.sign(jubjubChallenges.addDevice(jctx(), Q.pk, fEntry), jCounter(Q)))]);
@@ -461,17 +461,17 @@ await section('after recovery: the JubJub successor enrols a fresh evm device, w
 await section('remove_device in both forms (descriptor; literal entry) by the evm device F', async () => {
   const F = fDevice!;
   const K = new K256Device(0x5eed7n);
-  const kIn = evmEip712DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
-  await call('add_device_with_evm_eip712', [kIn, ...solArgs(kIn), await authOf(F, evmEip712Messages.addDevice(frame(F), kIn))]);
+  const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
+  await call('add_device_with_evm_k256', [kIn, ...solArgs(kIn), await authOf(F, evmK256Messages.addDevice(frame(F), kIn))]);
   const kEntry = K.entryAt(address, L().device_epoch, 0n);
   ok(L().devices.member(kEntry), 'F enrols a k256 device K by descriptor');
-  await call('remove_device_with_evm_eip712', [EVM_EIP712_UNUSED_DESCRIPTOR, ...solArgs(EVM_EIP712_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry },
-    await authOf(F, evmEip712Messages.removeUnknownDevice(frame(F), kEntry))]);
+  await call('remove_device_with_evm_k256', [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry },
+    await authOf(F, evmK256Messages.removeUnknownDevice(frame(F), kEntry))]);
   ok(!L().devices.member(kEntry), 'F removes K by the literal form ("Removes a device this wallet cannot identify")');
-  await call('add_device_with_evm_eip712', [kIn, ...solArgs(kIn), await authOf(F, evmEip712Messages.addDevice(frame(F), kIn))]);
+  await call('add_device_with_evm_k256', [kIn, ...solArgs(kIn), await authOf(F, evmK256Messages.addDevice(frame(F), kIn))]);
   const ep = L().device_epoch as bigint;
-  await call('remove_device_with_evm_eip712', [kIn, ...solArgs(kIn), ep, 0n, { is_some: false, value: new Uint8Array(32) },
-    await authOf(F, evmEip712Messages.removeDevice(frame(F), kIn, ep, 0n))]);
+  await call('remove_device_with_evm_k256', [kIn, ...solArgs(kIn), ep, 0n, { is_some: false, value: new Uint8Array(32) },
+    await authOf(F, evmK256Messages.removeDevice(frame(F), kIn, ep, 0n))]);
   ok(!L().devices.member(K.entryAt(address, ep, 0n)), 'F removes K by descriptor (epoch, counter 0)');
 });
 
@@ -490,9 +490,9 @@ await section('after recovery: the grant of the old epoch is refused; a grant th
 console.log('');
 for (const s of sections) console.log(`  ${String(s.pass).padStart(3)} passed, ${s.fail} failed  ${s.label}`);
 const verdict = fail === 0 && pass > 0 ? 'PASS' : 'FAIL';
-console.log(`\n◆ evm-eip712-recovery-sim: ${verdict} (${pass} passed, ${fail} failed)`);
+console.log(`\n◆ evm-k256-recovery-sim: ${verdict} (${pass} passed, ${fail} failed)`);
 if (process.env.EVIDENCE_DIR) {
   const fs = await import('node:fs');
-  fs.writeFileSync(`${process.env.EVIDENCE_DIR}/evm-eip712-recovery-sim.json`, JSON.stringify({ suite: 'evm-eip712-recovery-sim', ranAt: new Date().toISOString(), layer: 'runtime (generated JavaScript, compact-runtime simulator) unless the label says client', sections, pass, fail, failures, refusals, verdict }, null, 2) + '\n');
+  fs.writeFileSync(`${process.env.EVIDENCE_DIR}/evm-k256-recovery-sim.json`, JSON.stringify({ suite: 'evm-k256-recovery-sim', ranAt: new Date().toISOString(), layer: 'runtime (generated JavaScript, compact-runtime simulator) unless the label says client', sections, pass, fail, failures, refusals, verdict }, null, 2) + '\n');
 }
 process.exit(verdict === 'PASS' ? 0 : 1);

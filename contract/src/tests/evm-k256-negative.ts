@@ -1,4 +1,4 @@
-// Test-only helpers for the `evm_eip712` constraint-level negatives, on top of
+// Test-only helpers for the `evm_k256` constraint-level negatives, on top of
 // constraint-negative.ts:
 //
 //   - loadPatched: constraint-negative.ts's loadBypassedContract over the
@@ -23,7 +23,7 @@
 //     the real caller at admission), and a ledger-cell copy that builds a
 //     state no shared chip produces (a grant record of an older generation).
 
-import { withExecutedHints, forgeHints, storeCoin, type HintContext } from './evm-eip712-hint-fill.js';
+import { withExecutedHints, forgeHints, storeCoin, type HintContext } from './evm-k256-hint-fill.js';
 import * as path from 'node:path';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -223,7 +223,7 @@ export function withLedgerCell(a: LocalAccount, from: LocalAccount, path2: [numb
 }
 
 /** The pure circuits each executing module computes its hints with
- *  (evm-eip712-hint-fill.ts): the original's own, and for a patched copy a
+ *  (evm-k256-hint-fill.ts): the original's own, and for a patched copy a
  *  twin copy with the same bypasses and overrides, so that computing the
  *  hints never counts as one of the copy's bypassed asserts. */
 const HINT_PURE = new WeakMap<object, { pure: any; forgesAddresses: boolean }>([[Original.Contract, { pure: Original.pureCircuits, forgesAddresses: false }]]);
@@ -283,16 +283,16 @@ export async function relaxedContractsModule(): Promise<any> {
   if (relaxed) return relaxed;
   const url = import.meta.resolve('@midnight-ntwrk/midnight-js-contracts');
   const src = await readFile(new URL(url), 'utf8');
-  if (src.split(MJS_CHECK).length !== 2) throw new Error('evm-eip712-negative: midnight-js claim pre-check not found where expected');
+  if (src.split(MJS_CHECK).length !== 2) throw new Error('evm-k256-negative: midnight-js claim pre-check not found where expected');
   let body = src.replace(MJS_CHECK, '    /* passport-negative: claim pre-check removed for a grafted direct transfer */\n');
   body = body.replace(/from '(@[^']+)'/g, (_m, spec) => `from ${JSON.stringify(import.meta.resolve(spec))}`)
              .replace(/from 'effect'/g, `from ${JSON.stringify(import.meta.resolve('effect'))}`)
              .replace(/^\/\/# sourceMappingURL=.*$/m, '');
   for (const name of ['createUnprovenLedgerCallTx', 'createEncryptionPublicKeyResolver']) {
-    if (!new RegExp(`^const ${name} = `, 'm').test(body)) throw new Error(`evm-eip712-negative: midnight-js internal ${name} not found`);
+    if (!new RegExp(`^const ${name} = `, 'm').test(body)) throw new Error(`evm-k256-negative: midnight-js internal ${name} not found`);
   }
   body += '\nexport { createUnprovenLedgerCallTx as passportNegativeCreateUnprovenLedgerCallTx, createEncryptionPublicKeyResolver as passportNegativeCreateEncryptionPublicKeyResolver };\n';
-  const dir = await mkdtemp(path.join(tmpdir(), 'evm-eip712-mjs-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'evm-k256-mjs-'));
   const file = path.join(dir, 'index.mjs');
   await writeFile(file, body);
   relaxed = await import(pathToFileURL(file).href);

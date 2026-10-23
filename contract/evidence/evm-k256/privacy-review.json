@@ -4,72 +4,72 @@
   "contracts": "197f92a",
   "sites": [
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 254,
-    "circuit": "require_authorised_with_evm_eip712",
-    "expr": "disclose(derive_device_entry_with_evm_eip712( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
+    "circuit": "require_authorised_with_evm_k256",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
     "public": "the consumed device entry: SHA-256(device tag | account | address | blind | epoch | counter), the value the membership check tests"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 264,
-    "circuit": "require_authorised_with_evm_eip712",
-    "expr": "disclose(derive_device_entry_with_evm_eip712( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
+    "circuit": "require_authorised_with_evm_k256",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
     "public": "the successor entry: the same preimage at counter + 1, inserted in place of the consumed one"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 280,
-    "circuit": "require_authorised_with_evm_eip712_either",
-    "expr": "disclose(derive_device_entry_with_evm_eip712( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
+    "circuit": "require_authorised_with_evm_k256_either",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
     "public": "the consumed device entry: SHA-256(device tag | account | address | blind | epoch | counter), the value the membership check tests"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 290,
-    "circuit": "require_authorised_with_evm_eip712_either",
-    "expr": "disclose(derive_device_entry_with_evm_eip712( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
+    "circuit": "require_authorised_with_evm_k256_either",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
     "public": "the successor entry: the same preimage at counter + 1, inserted in place of the consumed one"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 304,
-    "circuit": "require_authorised_with_evm_eip712_bare",
-    "expr": "disclose(derive_device_entry_with_evm_eip712( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
+    "circuit": "require_authorised_with_evm_k256_bare",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, auth.use_counter ))",
     "public": "the consumed device entry: SHA-256(device tag | account | address | blind | epoch | counter), the value the membership check tests"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 314,
-    "circuit": "require_authorised_with_evm_eip712_bare",
-    "expr": "disclose(derive_device_entry_with_evm_eip712( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
+    "circuit": "require_authorised_with_evm_k256_bare",
+    "expr": "disclose(derive_device_entry_with_evm_k256( kernel.self(), address, auth.blind, device_epoch, (auth.use_counter + 1) as Uint<64> ))",
     "public": "the successor entry: the same preimage at counter + 1, inserted in place of the consumed one"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 689,
-    "circuit": "require_grant_with_evm_eip712",
-    "expr": "disclose(derive_grant_id_with_evm_eip712(kernel.self(), address, auth.blind, derive_grant_origin_hash_label(label), slot))",
+    "circuit": "require_grant_with_evm_k256",
+    "expr": "disclose(derive_grant_id_with_evm_k256(kernel.self(), address, auth.blind, derive_grant_origin_hash_label(label), slot))",
     "public": "the grant id: SHA-256(grant-id tag | account | address | grantee blind | origin hash of the site label | slot), the record the grant seam looks up"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 714,
-    "circuit": "require_grant_with_evm_eip712",
+    "circuit": "require_grant_with_evm_k256",
     "expr": "disclose(derive_grant_spent_commit(scope_salt, new_spent))",
     "public": "the spent commitment: a commitment to the grant's cumulative spend under the scope salt"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 787,
-    "circuit": "withdraw_shielded_with_grant_evm_eip712",
+    "circuit": "withdraw_shielded_with_grant_evm_k256",
     "expr": "disclose(result.is_some)",
     "public": "the change bit of the grantee's shielded withdrawal"
    },
    {
-    "file": "contracts/account-evm-eip712.compact",
+    "file": "contracts/account-evm-k256.compact",
     "line": 823,
-    "circuit": "withdraw_shielded_to_contract_with_grant_evm_eip712",
+    "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
     "expr": "disclose(change.is_some)",
     "public": "the change bit of the grantee's withdrawal to a contract"
    }
@@ -112,7 +112,7 @@
   "otherIdentities": 40,
   "needles": 2272,
   "randomNeedles": 64,
-  "what": "every transaction's raw bytes and every contract state after each action, in every block of the arm's localnet runs, searched for each evm_eip712 identity the arm's tests used: the 20-byte address (and reversed), the point's coordinates (big- and little-endian, and the circuit's limb form), the blind (and reversed), and their text forms (hex, EIP-55), each by windows at both ends; and for the keys of the other schemes the tests used. Positive controls must be found by the same search; random needles must not",
+  "what": "every transaction's raw bytes and every contract state after each action, in every block of the arm's localnet runs, searched for each evm_k256 identity the arm's tests used: the 20-byte address (and reversed), the point's coordinates (big- and little-endian, and the circuit's limb form), the blind (and reversed), and their text forms (hex, EIP-55), each by windows at both ends; and for the keys of the other schemes the tests used. Positive controls must be found by the same search; random needles must not",
   "controls": {
    "deviceEntries": {
     "accounts": 43,
@@ -133,7 +133,7 @@
      "control: sol_ed25519 grantee Solana S: its grant id (slot 0)",
      "control: the account's own contract address (in its transactions)",
      "control: the encryption public key the account disclosed at deploy (in its state)",
-     "control: the recovery session identifier (disclosed by publish_recovery_session_with_evm_eip712)"
+     "control: the recovery session identifier (disclosed by publish_recovery_session_with_evm_k256)"
     ]
    }
   },

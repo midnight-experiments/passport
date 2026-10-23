@@ -108,7 +108,7 @@ export const SHARED_CIRCUITS = ['deposit_unshielded', 'deposit_shielded'];
  *  finalisation, arm-independent (recovery MIP 6). */
 export const RECOVERY_SHARED_CIRCUITS = ['recover_submit', 'recover_finalise'];
 
-export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256', 'evm_eip712', 'sol_ed25519'];
+export const ARMS: readonly Arm[] = ['k256', 'jubjub', 'p256', 'evm_k256', 'sol_ed25519'];
 
 /** All 84 impure circuits: four shared and sixteen per credential arm. */
 export const allCircuits = (): string[] => [

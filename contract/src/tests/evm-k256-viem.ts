@@ -1,10 +1,10 @@
-// The independent check of the `evm_eip712` arm against viem. viem is not a
+// The independent check of the `evm_k256` arm against viem. viem is not a
 // dependency of this package: this script loads it at run time from
 // `VIEM_DIR` (the root of a viem 2.x package) or a resolvable `viem`.
 // Without viem it ends in ERROR, never in PASS.
 //
 //   keys       viem's address and public key of a secret key == the
-//              contract's evm_eip712_address == the client's; EIP-55 forms
+//              contract's evm_address == the client's; EIP-55 forms
 //              agree
 //   blind      viem's hashMessage == the client's EIP-191 digest; viem's
 //              signMessage == the software wallet's personal_sign, byte for
@@ -18,7 +18,7 @@
 //              the software wallet's, byte for byte, and viem recovers the
 //              signer
 //
-// Writes $EVIDENCE_DIR/evm-eip712-viem.json when EVIDENCE_DIR is set.
+// Writes $EVIDENCE_DIR/evm-k256-viem.json when EVIDENCE_DIR is set.
 
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
@@ -26,14 +26,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pureCircuits } from '../wallet/contract.js';
-import { contractStructHash, typedDataOf, VECTOR_FILE, BLIND_TAG_TEXT } from './evm-eip712-vectors.js';
-import { typeString, toHex as hx } from '../wallet/evm-eip712-codec.js';
-import { evmEip712KeyHint } from '../wallet/evm-eip712-hints.js';
+import { contractStructHash, typedDataOf, VECTOR_FILE, BLIND_TAG_TEXT } from './evm-k256-vectors.js';
+import { typeString, toHex as hx } from '../wallet/evm-k256-codec.js';
+import { evmK256KeyHint } from '../wallet/evm-k256-hints.js';
 import { evmChecksumAddress, padTag } from '../wallet/descriptors.js';
 import { blindMessageBytes } from '../wallet/blind.js';
 import {
   SoftwareEvmWallet, enrolEvmBlind, personalMessageDigest, SECP256K1_ORDER,
-} from '../wallet/signer-evm-eip712.js';
+} from '../wallet/signer-evm-k256.js';
 
 let viem: any, accounts: any, typed: any, viemVersion: string;
 try {
@@ -43,11 +43,11 @@ try {
   typed = await import(pathToFileURL(path.join(root, '_esm/utils/signature/hashTypedData.js')).href);
   viemVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 } catch (e: any) {
-  console.error(`◆ evm-eip712-viem: ERROR — viem is not available (${e?.message ?? e}); set VIEM_DIR to a viem 2.x package root`);
+  console.error(`◆ evm-k256-viem: ERROR — viem is not available (${e?.message ?? e}); set VIEM_DIR to a viem 2.x package root`);
   process.exit(2);
 }
 const bytesHex = (b: Uint8Array) => '0x' + Buffer.from(b).toString('hex');
-const SEED = 'evm-eip712-viem/v1';
+const SEED = 'evm-k256-viem/v1';
 let ctr = 0;
 const rnd = (n: number): Uint8Array => {
   const out = new Uint8Array(n);
@@ -69,8 +69,8 @@ const vectors: unknown[] = [];
 for (const k of [1n, 2n, SECP256K1_ORDER - 1n, ...Array.from({ length: 13 }, scalar)]) {
   const w = accounts.privateKeyToAccount(sk32(k));
   const ours = new SoftwareEvmWallet(k);
-  const pt = pc.compute_public_point_with_evm_eip712(k);
-  const contractAddr = pc.evm_eip712_address(pt, evmEip712KeyHint(pt));
+  const pt = pc.compute_public_point_with_evm_k256(k);
+  const contractAddr = pc.evm_address(pt, evmK256KeyHint(pt));
   assert.equal(evmChecksumAddress(contractAddr), w.address, 'contract address == viem');
   assert.equal(evmChecksumAddress(ours.addressBytes), w.address, 'client address == viem');
   assert.equal(viem.getAddress(w.address.toLowerCase()), evmChecksumAddress(ours.addressBytes), 'EIP-55 == viem');
@@ -84,7 +84,7 @@ const blindTag = padTag(BLIND_TAG_TEXT);
 for (const [k, network, index] of [[1n, 'undeployed', 0], [1n, 'undeployed', 1], [1n, 'preview', 0], [scalar(), 'mainnet', 7], [scalar(), 'preprod', 4294967295]] as [bigint, string, number][]) {
   const w = accounts.privateKeyToAccount(sk32(k));
   const ours = new SoftwareEvmWallet(k);
-  const msg = blindMessageBytes({ scheme: 'evm_eip712', network, identity: ours.addressBytes, accountIndex: index });
+  const msg = blindMessageBytes({ scheme: 'evm_k256', network, identity: ours.addressBytes, accountIndex: index });
   const digest = viem.hashMessage({ raw: msg });
   assert.equal(digest, bytesHex(personalMessageDigest(msg)), 'EIP-191 digest == viem.hashMessage');
   const theirs = await w.signMessage({ message: { raw: msg } });
@@ -133,11 +133,11 @@ const FROZEN = JSON.parse(fs.readFileSync(new URL(`./vectors/${VECTOR_FILE}`, im
 }
 console.log(`  ✓ frozen: ${FROZEN.vectors.length} vectors and ${Object.keys(FROZEN.typeStrings).length} type strings == viem; contract and client agree; signTypedData == viem (${checks.frozen} checks)`);
 
-const report = { suite: 'evm-eip712-viem', viemVersion, seed: SEED, vectorFile: VECTOR_FILE, ranAt: new Date().toISOString(), checks, vectors, verdict: 'PASS' };
+const report = { suite: 'evm-k256-viem', viemVersion, seed: SEED, vectorFile: VECTOR_FILE, ranAt: new Date().toISOString(), checks, vectors, verdict: 'PASS' };
 if (process.env.EVIDENCE_DIR) {
-  const file = path.join(process.env.EVIDENCE_DIR, 'evm-eip712-viem.json');
+  const file = path.join(process.env.EVIDENCE_DIR, 'evm-k256-viem.json');
   fs.mkdirSync(process.env.EVIDENCE_DIR, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(report, null, 2) + '\n');
   console.log(`\n■ evidence → ${file}`);
 }
-console.log(`\n◆ evm-eip712-viem: PASS (viem ${viemVersion})`);
+console.log(`\n◆ evm-k256-viem: PASS (viem ${viemVersion})`);
