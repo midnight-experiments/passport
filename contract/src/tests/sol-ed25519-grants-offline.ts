@@ -136,7 +136,7 @@ const caller = (bytes: Uint8Array): PublicAddress => ({ tag: 'contract', address
 const foreignAuth = (s: Sim, o: any, d = s.owner) => authoriseSolDevice(d, { ...s.ctx(), contractAddress: rnd() }, SITE, o, s.counter(d));
 const leInt = (b: Uint8Array) => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
 /** A signature with R = O for which [s]B == R + [k]A holds (s = k a mod L, a
- *  the key's secret scalar from its seed): only the grant seam's R != O
+ *  the key's secret scalar from its seed): only the Ed25519 core's R != O
  *  assert can refuse it. */
 const rIdentityFor = (seed: Uint8Array, key: Uint8Array) => (message: Uint8Array) => {
   const h = sha512(seed).slice(0, 32); h[0] &= 248; h[31] &= 127; h[31] |= 64;
@@ -249,7 +249,7 @@ const G2 = '2 rules';
     const k = solTargetPointArg(g) as any;
     const b = [...k.pk_bytes]; b[0] ^= 1n;
     const gF = { ...g, a: Uint8Array.from(b, Number) };
-    await refused(G2, "a sol grantee's key bytes with one byte flipped (shown, signed and in the descriptor alike)", 'runtime', /the Ed25519 key bytes do not match the point's y/, () =>
+    await refused(G2, "a sol grantee's key bytes with one byte flipped (shown, signed and in the descriptor alike)", 'runtime', /ed25519: the encoding does not match the point's y/, () =>
       issueSigned(gF, gF, baseScope(), { ...k, pk_bytes: b }));
   }
   await bad('the shared chip through the arm: per-call cap above cap', baseScope({ perCallCap: 600n }), /per-call cap above cap/);
@@ -406,7 +406,7 @@ const unsh = async (s: Sim, n: bigint, to: Uint8Array, spent: bigint, a?: SolEd2
     await refused(G4, 'unshielded twin: the grantee signed a message showing a foreign account (its frame nibbles with it): the grant seam\'s frame check', 'runtime', /hex digits do not match/, async () =>
       unsh(twinSim, 250n, pin, 200n, await authoriseSolGrantee(T.device, { ...gctx(twinSim), contractAddress: rnd() }, SITE, o250)));
     const h = await authoriseSolGrantee(T.device, gctx(twinSim), SITE, o250);
-    await refused(G4, 'unshielded twin: R = O with the verification equation holding (s = k a): the grant seam\'s R != O', 'runtime', /R is the identity/, () =>
+    await refused(G4, 'unshielded twin: R = O with the verification equation holding (s = k a): the Ed25519 core\'s R != O', 'runtime', /R is the identity/, () =>
       unsh(twinSim, 250n, pin, 200n, { ...h, sig: rIdentity(h.message) }));
   }
   await unsh(twinSim, 250n, pin, 200n);
@@ -462,7 +462,7 @@ const unsh = async (s: Sim, n: bigint, to: Uint8Array, spent: bigint, a?: SolEd2
     await refused(G4, 'shielded twin: the grantee signed a message showing a foreign account (its frame nibbles with it): the grant seam\'s frame check', 'runtime', /hex digits do not match/, async () =>
       sCall(await authoriseSolGrantee(T.device, { ...gctx(twinSim, T, 1n), contractAddress: rnd() }, SITE, o300)));
     const h = await authoriseSolGrantee(T.device, gctx(twinSim, T, 1n), SITE, o300);
-    await refused(G4, 'shielded twin: R = O with the verification equation holding (s = k a): the grant seam\'s R != O', 'runtime', /R is the identity/, () =>
+    await refused(G4, 'shielded twin: R = O with the verification equation holding (s = k a): the Ed25519 core\'s R != O', 'runtime', /R is the identity/, () =>
       sCall({ ...h, sig: rIdentity(h.message) }));
   }
   const inboxBefore = twinSim.L().inbox_count;
@@ -504,7 +504,7 @@ const unsh = async (s: Sim, n: bigint, to: Uint8Array, spent: bigint, a?: SolEd2
       await refused(G4, 'to-contract twin: the grantee signed a message showing a foreign account (its frame nibbles with it): the grant seam\'s frame check', 'runtime', /hex digits do not match/, async () =>
         cCall(await authoriseSolGrantee(T.device, { ...gctx(twinSim, T, 2n), contractAddress: rnd() }, SITE, oC)));
       const h = await authoriseSolGrantee(T.device, gctx(twinSim, T, 2n), SITE, oC);
-      await refused(G4, 'to-contract twin: R = O with the verification equation holding (s = k a): the grant seam\'s R != O', 'runtime', /R is the identity/, () =>
+      await refused(G4, 'to-contract twin: R = O with the verification equation holding (s = k a): the Ed25519 core\'s R != O', 'runtime', /R is the identity/, () =>
         cCall({ ...h, sig: rIdentity(h.message) }));
     }
     twinSim.ps = withCoin(emptyCoinStore(), coinC);

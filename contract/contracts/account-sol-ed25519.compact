@@ -8,7 +8,8 @@
 // bytes it is given, with no prefix. Verification is the Ed25519 core's
 // `ed25519_verify<#n>` (modules/Ed25519Core: the standard library's
 // `ed25519Verify<#n>` with R's and A's encodings taken from checked inputs
-// instead of byte explosions) plus an explicit `R != O` assert in each seam.
+// instead of byte explosions, and R = O refused, which the standard library
+// accepts).
 //
 // IDENTITY. The device is the wallet's public key A. The circuit takes A as a
 // `Curve25519Point`, whose type admits only points of the prime-order
@@ -195,12 +196,11 @@ struct SolEd25519Auth {
 //
 // Then, in upstream p256's order: membership of the device's current
 // single-use entry (bound to that key and the account's blind),
-// verification — R != O (refused here; the standard library accepts it),
-// then the Ed25519 core's ed25519_verify<n> (cofactorless [s]B == R + [k]A with
-// k = SHA-512(R || A || msg) mod L, A's encoding the key derived above; it
-// refuses A = O; s < L and the prime-order subgroup for A and R hold by
-// type) — the entry rolled to its
-// successor, auth_nonce advanced, round bumped. Any failed assert aborts the
+// verification by the Ed25519 core's ed25519_verify<n> (cofactorless
+// [s]B == R + [k]A with k = SHA-512(R || A || msg) mod L, A's encoding the
+// key derived above; it refuses A = O and R = O; s < L and the prime-order
+// subgroup for A and R hold by type), the entry rolled to its successor,
+// auth_nonce advanced, round bumped. Any failed assert aborts the
 // whole call. Returns the caller's post-roll entry (remove_device's S13
 // guard).
 circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
@@ -215,7 +215,6 @@ circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
   const msg = sol_device_message<t, b, n>(kernel.self(), auth.pk_bytes, auth_nonce, title, body, show, frame);
   const entry = disclose(current);
   assert(devices.member(entry), "unknown device entry");
-  assert((curve25519PointX(auth.sig.r) as Bytes<32>) != pad(32, ""), "R is the identity");
   assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
   devices.remove(entry);
   const next = disclose(successor);
@@ -579,8 +578,9 @@ export circuit recover_cancel_with_sol_ed25519(
 // shielded, 3 shielded to a contract), and the values the scope checks. The
 // MIP's steps in order: identity (the record by id), liveness (active,
 // epoch, generation, expiry), the spend scope (upstream's check_spend_scope),
-// then R != O and the signature, the record written back with its nonce
-// advanced and the new spent commitment, and round bumped.
+// then the signature (the Ed25519 core's ed25519_verify, which also refuses
+// R = O), the record written back with its nonce advanced and the new spent
+// commitment, and round bumped.
 struct SolEd25519GrantAuth {
   pk:       Curve25519Point;
   pk_bytes: Vector<32, Uint<8>>;
@@ -626,7 +626,6 @@ circuit require_grant_with_sol_ed25519<#t, #b, #n>(
   const new_spent = check_spend_scope(gr, admitted, scope_salt, obj_color, recipient_kind, pinned_recipient,
     max_coin_value, amount, spent_prev, op, recipient_bytes);
   const msg = sol_grantee_message<t, b, n>(self_addr, auth.pk_bytes, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
-  assert((curve25519PointX(auth.sig.r) as Bytes<32>) != pad(32, ""), "R is the identity");
   assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
   grants.insert(id, GrantRecord {
     epoch:        gr.epoch,

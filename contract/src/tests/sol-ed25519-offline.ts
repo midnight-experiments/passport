@@ -148,7 +148,7 @@ const SEEDS: Uint8Array[] = [new Uint8Array(32), new Uint8Array(32).fill(0xff), 
   const otherMsg = msg.slice(); otherMsg[0] ^= 1;
   await refused(G, 'other bytes refused', 'client', /does not verify/, () => verifySolSignature(otherMsg, sig, signer.publicKey));
   const rId = new Uint8Array([1, ...new Uint8Array(31), ...sig.subarray(32)]);
-  await refused(G, "R = identity refused (the arm's R != O rule)", 'client', /R is the identity/, () => verifySolSignature(msg, rId, signer.publicKey));
+  await refused(G, "R = identity refused (the Ed25519 core's R != O rule)", 'client', /R is the identity/, () => verifySolSignature(msg, rId, signer.publicKey));
   const rSmall = new Uint8Array([...unhex('c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a'), ...sig.subarray(32)]);
   await refused(G, 'R of small order refused', 'client', /small order/, () => verifySolSignature(msg, rSmall, signer.publicKey));
   const T8 = ed25519.Point.fromBytes(unhex('c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a'), false);
