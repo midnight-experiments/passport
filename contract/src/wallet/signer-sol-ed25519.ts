@@ -90,7 +90,8 @@ export function solKeyHints(pk: Curve25519Point): { pk_bytes: bigint[]; pk_x: bi
 export interface SolSignatureArg { r: Curve25519Point; s: bigint }
 
 /** Decodes a 64-byte RFC 8032 signature strictly: R a canonical encoding of a
- *  prime-order point other than the identity (the arm's `R != O` rule), S
+ *  prime-order point other than the identity (the Ed25519 core's `R != O`
+ *  rule), S
  *  below L (an S + L twin is refused, never reduced). */
 export function decodeSolSignature(signature: Uint8Array): SolSignatureArg {
   if (signature.length !== 64) throw new Error('sol_ed25519: a signature is 64 bytes');
