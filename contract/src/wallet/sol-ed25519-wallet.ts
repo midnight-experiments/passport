@@ -15,11 +15,20 @@
 //     the off-chain format always goes through the feature.
 //   - Ledger and Trezor sign the off-chain message v1 only: their Solana apps
 //     refuse raw bytes.
-//   - Any other wallet-standard wallet: raw when it offers
-//     `solana:signMessage`, off-chain when it advertises the feature with
-//     message version 1.
-// solWalletFormats gives the formats a wallet can sign, preferred first:
-// enrolment signs in the first, a restore tries each. The adapters refuse,
+//   - Any other wallet-standard wallet may advertise a format it does not
+//     honour (a `signMessage` backed by a hardware account that refuses raw
+//     bytes), so the client tests it before enrolment: one signature of a
+//     probe text in the raw format when it offers `solana:signMessage`, then,
+//     if that is refused or does not verify, in the off-chain format when it
+//     advertises the feature with message version 1 (probeSolWalletFormats,
+//     solEnrolmentSigner). The probe text is fresh, authorises nothing, and
+//     its signature is checked and dropped. A restore without a record tries
+//     what the wallet advertises, raw then off-chain, and moves past a
+//     format the wallet refuses: the blind request's own signatures are the
+//     test there.
+// solWalletFormats gives the formats a wallet advertises it can sign,
+// preferred first: enrolment signs in the first (for another wallet, the
+// first that passed the probe), a restore tries each. The adapters refuse,
 // without asking the wallet, bytes of a format it cannot sign.
 //
 // A wallet may answer with another key than the one it reports (with two
@@ -36,8 +45,8 @@
 // stay off for a wallet that holds a Passport device.
 
 import { base58Encode, parseSolanaPublicKey } from './descriptors.js';
-import { SOL_HEAD_LENGTH, SOL_OFFCHAIN_VERSION, solFormatOfSigned, solMessageHead, type SolFormat } from './sol-ed25519-message.js';
-import type { SolSigner } from './signer-sol-ed25519.js';
+import { SOL_HEAD_LENGTH, SOL_OFFCHAIN_VERSION, SOL_RAW_HEAD, solFormatOfSigned, solMessageHead, type SolFormat } from './sol-ed25519-message.js';
+import { checkSolSignature, type SolSigner } from './signer-sol-ed25519.js';
 
 /** The wallet-standard feature of raw message signing. */
 export const SOL_SIGN_MESSAGE_FEATURE = 'solana:signMessage';
@@ -102,18 +111,19 @@ export function solOffchainV1Feature(features?: Readonly<Record<string, unknown>
 
 /** The formats a wallet can sign, preferred first. Phantom: raw, never
  *  off-chain, whatever it advertises; Ledger and Trezor: off-chain, never
- *  raw; Backpack, Solflare and any other wallet-standard wallet: off-chain
- *  when it advertises the off-chain feature with version 1, raw when it
- *  offers `signMessage`. A wallet that signs neither gets an empty list and
- *  is asked for nothing. */
+ *  raw; Backpack and Solflare: off-chain when they advertise the off-chain
+ *  feature with version 1, then raw when they offer `signMessage`; any other
+ *  wallet-standard wallet: what it advertises, raw first (its enrolment
+ *  format comes from probeSolWalletFormats). A wallet that signs neither
+ *  gets an empty list and is asked for nothing. */
 export function solWalletFormats(p: SolWalletProfile): SolFormat[] {
+  const raw = solSignMessageFeature(p.features) ? ['raw' as const] : [];
+  const offchain = solOffchainV1Feature(p.features) ? ['offchain' as const] : [];
   switch (p.family) {
     case 'ledger': case 'trezor': return ['offchain'];
-    case 'phantom': return solSignMessageFeature(p.features) ? ['raw'] : [];
-    case 'backpack': case 'solflare': case 'other': return [
-      ...(solOffchainV1Feature(p.features) ? ['offchain' as const] : []),
-      ...(solSignMessageFeature(p.features) ? ['raw' as const] : []),
-    ];
+    case 'phantom': return raw;
+    case 'backpack': case 'solflare': return [...offchain, ...raw];
+    case 'other': return [...raw, ...offchain];
     default: throw new Error(`sol_ed25519: unknown wallet family ${String((p as any)?.family)}`);
   }
 }
@@ -164,6 +174,7 @@ export function solStandardSigner(wallet: SolStandardWallet, account: SolStandar
     publicKey,
     formats,
     ...(opts.others ? { others: opts.others } : {}),
+    ...(solWalletFamily(wallet?.name) === 'other' ? { searchesPastRefusals: true } : {}),
     sign: async (message: Uint8Array) => {
       const bytes = new Uint8Array(message);
       if (formatOf(bytes, formats, name) === 'raw') {
@@ -181,6 +192,121 @@ export function solStandardSigner(wallet: SolStandardWallet, account: SolStandar
       return walletBytes(answer?.signature, 'signature', 64);
     },
   };
+}
+
+// ── The format probe (wallets outside the named families) ─────────────────
+
+/** The first line of a format probe text: unlike the first line of every
+ *  approval (`Midnight Passport approval (sol v1)`) and of both blind
+ *  requests (`Midnight Passport account privacy key (v1)`, `Midnight
+ *  Passport grantee privacy key (v1)`), so no check of the arm accepts a
+ *  probe text as either. */
+export const SOL_FORMAT_PROBE_FIRST_LINE = 'Midnight Passport signing format check (sol v1)';
+
+const PROBE_NONCE_BYTES = 32;
+const hexOf = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+
+/** A format probe text for `key` with a fresh `nonce` (32 bytes): printable
+ *  ASCII, LF line breaks. The nonce makes every probe's bytes new, so a
+ *  probe signature collected once is not one a later probe accepts. */
+export function solFormatProbeText(key: Uint8Array, nonce: Uint8Array): Uint8Array {
+  const k = parseSolanaPublicKey(key);
+  if (!(nonce instanceof Uint8Array) || nonce.length !== PROBE_NONCE_BYTES) throw new Error(`sol_ed25519: a probe nonce is ${PROBE_NONCE_BYTES} bytes`);
+  return new TextEncoder().encode([
+    SOL_FORMAT_PROBE_FIRST_LINE,
+    `Wallet: Solana public key ${base58Encode(k)}`,
+    `Nonce: ${hexOf(nonce)}`,
+    'It authorises nothing: it only tests which signing format this wallet signs.',
+  ].join('\n'));
+}
+
+/** What the wallet signs for a probe text in a format: the raw head, then
+ *  the text; or the off-chain v1 head naming the key, then the text. */
+export function solFormatProbeBytes(format: SolFormat, key: Uint8Array, text: Uint8Array): Uint8Array {
+  const head = format === 'raw' ? new TextEncoder().encode(SOL_RAW_HEAD) : format === 'offchain' ? solMessageHead('offchain', parseSolanaPublicKey(key)) : undefined;
+  if (head === undefined) throw new Error(`sol_ed25519: unknown format ${String(format)}`);
+  const b = new Uint8Array(head.length + text.length);
+  b.set(head); b.set(text, head.length);
+  return b;
+}
+
+/** One probe request and how it ended. Holds no signature: a probe
+ *  signature is checked and dropped. */
+export interface SolFormatProbeAttempt { format: SolFormat; outcome: 'verified' | 'refused' | 'wrong-signature'; reason?: string }
+
+export interface SolFormatProbe {
+  family: SolWalletFamily;
+  /** The formats the wallet advertises (solWalletFormats). */
+  advertised: SolFormat[];
+  /** False for a named family, whose rule is fixed and which is never asked. */
+  probed: boolean;
+  /** The enrolment format: the first format whose probe signature verified
+   *  (a named family: its rule's first format); absent when none did. */
+  format?: SolFormat;
+  attempts: SolFormatProbeAttempt[];
+  /** Why the wallet cannot enrol, when no format verified. */
+  message?: string;
+}
+
+/**
+ * Tests a wallet-standard wallet outside the named families before
+ * enrolment: one signature of a fresh probe text in the raw format when it
+ * offers `solana:signMessage`, checked by the arm's signer check over the
+ * exact bytes under the account's key; if the wallet refuses, throws or
+ * returns a signature that does not verify, the same text in the off-chain
+ * format through `solana:signOffchainMessage` (version 1), checked the same
+ * way. The first format that verifies is the enrolment format. Each request
+ * prompts the user; a named family is never asked (its rule is the spec's).
+ * The signatures are never stored, returned or used as a blind.
+ */
+export async function probeSolWalletFormats(wallet: SolStandardWallet, account: SolStandardAccount,
+  opts: { others?: () => readonly Uint8Array[]; nonce?: () => Uint8Array } = {}): Promise<SolFormatProbe> {
+  const family = solWalletFamily(wallet?.name);
+  const advertised = solWalletFormats({ family, features: wallet?.features });
+  if (family !== 'other') return { family, advertised, probed: false, ...(advertised.length > 0 ? { format: advertised[0] } : {}), attempts: [] };
+  const signer = solStandardSigner(wallet, account, opts);
+  const nonce = opts.nonce ? opts.nonce() : globalThis.crypto.getRandomValues(new Uint8Array(PROBE_NONCE_BYTES));
+  const text = solFormatProbeText(signer.publicKey, nonce);
+  const attempts: SolFormatProbeAttempt[] = [];
+  for (const format of advertised) {
+    const bytes = solFormatProbeBytes(format, signer.publicKey, text);
+    let signature: Uint8Array;
+    try { signature = await signer.sign(bytes); } catch (e: any) {
+      attempts.push({ format, outcome: 'refused', reason: String(e?.message ?? e) });
+      continue;
+    }
+    try { checkSolSignature(bytes, signature, signer.publicKey, opts.others?.() ?? []); } catch (e: any) {
+      attempts.push({ format, outcome: 'wrong-signature', reason: String(e?.message ?? e) });
+      continue;
+    }
+    attempts.push({ format, outcome: 'verified' });
+    return { family, advertised, probed: true, format, attempts };
+  }
+  const name = typeof wallet?.name === 'string' ? wallet.name : 'the wallet';
+  return {
+    family, advertised, probed: true, attempts,
+    message: advertised.length === 0
+      ? `sol_ed25519: ${name} offers neither raw message signing nor the off-chain message v1; it cannot enrol a Passport device`
+      : `sol_ed25519: ${name} signed no probe correctly (${attempts.map((a) => `${a.format}: ${a.outcome}`).join('; ')}); it cannot enrol a Passport device`,
+  };
+}
+
+/**
+ * The signer enrolment uses for a wallet-standard account: for a named
+ * family, solStandardSigner as it is (never probed); for any other wallet,
+ * solStandardSigner after probeSolWalletFormats, listing the format that
+ * passed first and dropping raw when raw failed, or a refusal with the
+ * probe's message (nothing is derived). The signer it returns asks the
+ * wallet afresh for every request.
+ */
+export async function solEnrolmentSigner(wallet: SolStandardWallet, account: SolStandardAccount,
+  opts: { others?: () => readonly Uint8Array[]; nonce?: () => Uint8Array } = {}): Promise<SolSigner> {
+  const signer = solStandardSigner(wallet, account, opts);
+  if (solWalletFamily(wallet?.name) !== 'other') return signer;
+  const probe = await probeSolWalletFormats(wallet, account, opts);
+  if (probe.format === undefined) throw new Error(probe.message);
+  const formats = [probe.format, ...signer.formats.filter((f) => f !== probe.format && !(f === 'raw' && probe.format !== 'raw'))];
+  return { ...signer, formats };
 }
 
 /** A hardware wallet's off-chain signing: `envelope` is the whole off-chain
