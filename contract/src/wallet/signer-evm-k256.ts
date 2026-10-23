@@ -8,18 +8,37 @@
 //
 //   1. The client builds the request for (network, wallet address, account
 //      index) with blind.ts `blindMessage` (the wallet shows it as text).
-//   2. The wallet signs it TWICE with `personal_sign` (EIP-191). Both
-//      signatures must have the same canonical form (low-S r || s): RFC 6979
-//      makes an honest wallet deterministic, and a hedged or MPC wallet,
-//      whose blind could never be re-derived, is refused here.
+//   2. The wallet signs it TWICE with `personal_sign` (EIP-191). Each
+//      signature must come from the wallet's address (the signer check,
+//      below), and both must have the same canonical form (low-S r || s):
+//      RFC 6979 makes an honest wallet deterministic, and a hedged or MPC
+//      wallet, whose blind could never be re-derived, is refused here.
 //   3. blind = SHA-256(pad32("midnight:account:blind:evm:v1") || r || s).
 //   4. The device's public point is RECOVERED from that same signature (a
-//      wallet never exposes it), and its address must be the wallet's own.
+//      wallet never exposes it).
 //
-// The roster record (`EvmK256RosterRecord`) persists the address, point,
-// blind, network and account index per device. A restored client re-derives
-// blind_0, blind_1, ... from the wallet and finds its accounts by testing
-// entries (`entryAt`) against each account's device set.
+// The arm has one format, `eip712-v1` (descriptors.ts READABLE_ARMS): every
+// approval is EIP-712 V1 typed data signed with `eth_signTypedData_v4`, and
+// every blind request is signed with `personal_sign`. A wallet is asked for
+// nothing else, and typed data under any other domain is refused before a
+// wallet sees it.
+//
+// THE SIGNER CHECK. A wallet may answer with another account than the one
+// asked for (two installed extensions, a switched account), and the address
+// a wallet reports is not evidence of who signed. Every signature a wallet
+// returns, approvals and blind requests alike, is therefore checked before
+// it is used: the address recovered from the exact digest the wallet was
+// asked to sign must be the one the signature must come from (blind.ts
+// checkSigner). A refusal names another address only when the signature
+// recovers to it (the addresses other connected wallets report are the
+// candidates); otherwise the signer is unknown. Nothing is proved.
+//
+// The roster record (`EvmK256RosterRecord`) persists the format, address,
+// point, network and account index per device and caches the blind. A
+// client that lost the cache derives the blind again in the record's format;
+// a client without a record derives blind_0, blind_1, ... and finds its
+// accounts by testing entries (`entryAt`) against each account's device set
+// (blind.ts restoreBlind, through restoreEvmK256Device).
 //
 // As a GRANTEE the wallet derives its blind from a different request (blind.ts
 // `granteeBlindMessage`): it names the role, the network, the wallet and
@@ -36,6 +55,8 @@
 // where the read seed is SHA-256(pad32("midnight:account:read:evm:v1")
 // || r || s) over the same canonical signature as the grantee blind. The
 // issuer learns the blind, never the signature, so it cannot derive the key.
+// The grantee record (`EvmK256GranteeRecord`), one per issuing account,
+// caches the grantee blind and the read seed in the same way.
 //
 // Every derivation goes through the contract's own exported pure circuits
 // (`derive_*_with_evm_k256`), so the client and the circuit can never
@@ -52,7 +73,10 @@ import {
   blindMessageBytes,
   granteeBlindMessageBytes,
   canonicalEvmSignature,
+  checkBlindFormat,
+  checkSigner,
   deriveBlind,
+  restoreBlind,
   sameCanonicalSignature,
 } from './blind.js';
 import {
@@ -60,7 +84,7 @@ import {
   type Descriptor, type Ed25519Descriptor, type JubjubDescriptor, type K256Descriptor, type P256Descriptor, type W52Descriptor,
 } from './descriptors.js';
 import {
-  typedDataDigest, evmK256Messages, evmK256KindOf, EVM_K256_KINDS,
+  checkEip712V1TypedData, typedDataDigest, evmK256Messages, evmK256KindOf, EVM_K256_KINDS,
   type Eip712TypedData, type EvmK256DescriptorInput, type EvmK256GranteeInput, type EvmK256Payload, type IssueScope, type SiteAmount, type SpentCoin,
 } from './evm-k256-codec.js';
 import type { GrantOpening } from './signer.js';
@@ -144,6 +168,54 @@ export function evmAddressOfPoint(pk: { x: bigint; y: bigint }): Uint8Array {
   return evmAddressOf(pk);
 }
 
+// ── The format and the signer check ─────────────────────────────────────────
+
+/** The arm's one format (descriptors.ts READABLE_ARMS.evm_k256.formats):
+ *  approvals are EIP-712 V1 typed data, signed with `eth_signTypedData_v4`;
+ *  blind requests are signed with `personal_sign`. */
+export const EVM_K256_FORMAT = 'eip712-v1';
+
+/** The formats an Ethereum wallet can sign: the arm's one format, for every
+ *  wallet, so nothing is detected. A wallet whose settings refuse EIP-712 V1
+ *  typed data (the Ledger Ethereum app does by default) refuses the request
+ *  itself; its provider does not report that beforehand. */
+export function evmK256WalletFormats(): string[] {
+  return [checkBlindFormat('evm_k256', EVM_K256_FORMAT)];
+}
+
+/** The arm's verification of a wallet signature under an Ethereum address:
+ *  the address recovered (ecrecover, with the signature's own recovery byte)
+ *  from the exact digest the wallet was asked to sign. A signature from
+ *  which no point can be recovered verifies under no address. */
+function recoversTo(digest: Uint8Array, sig: ParsedEvmSignature): (address: Uint8Array) => boolean {
+  let recovered: Uint8Array | undefined;
+  return (address) => eq(recovered ??= evmAddressOfPoint(recoverEvmPoint(digest, sig)), address);
+}
+
+/** The addresses the other connected wallets report: the candidates a
+ *  refusal may name, each only when the signature recovers to it. None when
+ *  the wallet has no such list or the list fails. */
+async function otherAddresses(wallet: EvmWallet | undefined): Promise<Uint8Array[]> {
+  if (!wallet?.otherAddresses) return [];
+  try {
+    return [...(await wallet.otherAddresses())];
+  } catch {
+    return [];
+  }
+}
+
+/** The signer check: refuses (blind.ts SignerMismatchError), before any
+ *  proof, a wallet signature over `digest` that does not recover to
+ *  `expected`, naming the first of `others` it recovers to, if any, and
+ *  otherwise saying the signer is unknown. Returns the parsed signature. */
+export function checkEvmK256Signer(
+  expected: Uint8Array, digest: Uint8Array, signature: Uint8Array, others: readonly Uint8Array[] = [],
+): ParsedEvmSignature {
+  const sig = parseEvmSignature(signature);
+  checkSigner('evm_k256', expected, recoversTo(digest, sig), others);
+  return sig;
+}
+
 // ── Wallets ──────────────────────────────────────────────────────────────────
 
 /** What the arm needs from an Ethereum wallet. A browser adapter maps these to
@@ -155,6 +227,10 @@ export interface EvmWallet {
   personalSign(message: Uint8Array): Promise<Uint8Array>;
   /** EIP-712 `eth_signTypedData_v4` over typed data: 65 bytes r || s || v. */
   signTypedData(typedData: Eip712TypedData): Promise<Uint8Array>;
+  /** The addresses other connected wallets report (for example the other
+   *  EIP-6963 providers' accounts), if the adapter knows them: only the
+   *  candidates a refused signature's signer may be named from. */
+  otherAddresses?(): Promise<readonly Uint8Array[]>;
 }
 
 /**
@@ -207,18 +283,71 @@ export class SoftwareEvmWallet implements EvmWallet {
 
 // ── The device ───────────────────────────────────────────────────────────────
 
-/** The roster record a client persists per device. Test keys never
- *  appear here: a device is its wallet. */
+/** The roster record a client persists per device, in its local storage.
+ *  Test keys never appear here: a device is its wallet. */
 export interface EvmK256RosterRecord {
   scheme: 'evm_k256';
+  /** The format the device was enrolled in (READABLE_ARMS formats: the
+   *  arm's one format, `eip712-v1`). A device is usable only with the blind
+   *  of its enrolment format. */
+  format: string;
   network: string;
   accountIndex: string;
   /** EIP-55 checksummed address. */
   address: string;
   /** The recovered public point, big-endian hex coordinates. */
   pk: { x: string; y: string };
-  /** The blind, hex. A secret: it links this wallet to the account. */
-  blind: string;
+  /** The cached blind, hex. A secret (it links this wallet to the account):
+   *  it stays in the client's local storage, protected as the wallet's
+   *  session data is, and is never sent. Absent once the cache is lost:
+   *  restoreEvmK256Device derives it again from the wallet. */
+  blind?: string;
+}
+
+const HEX64 = /^[0-9a-f]{64}$/;
+const DECIMAL = /^(0|[1-9][0-9]{0,9})$/;
+
+/** A record's point: two 64-digit lower-case hex coordinates, on the curve
+ *  and not the point at infinity. */
+function recordPoint(pk: unknown): Secp256k1Point {
+  const p = pk as { x?: unknown; y?: unknown } | null;
+  if (!p || typeof p.x !== 'string' || typeof p.y !== 'string' || !HEX64.test(p.x) || !HEX64.test(p.y)) {
+    throw new Error('evm_k256: a record point is two 64-digit lower-case hex coordinates');
+  }
+  const point = { x: BigInt('0x' + p.x), y: BigInt('0x' + p.y), identity: false } as Secp256k1Point;
+  if (point.x === 0n && point.y === 0n) throw new Error('evm_k256: the point at infinity is not a device key');
+  secp256k1.Point.fromAffine({ x: point.x, y: point.y }).assertValidity();
+  return point;
+}
+
+/** A record's cached 32-byte secret (the blind, a read seed), or undefined
+ *  when the cache is absent. */
+function recordSecret(v: unknown, what: string): Uint8Array | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v !== 'string') throw new Error(`evm_k256: a record's ${what} is hex`);
+  const b = unhex(v);
+  if (b.length !== 32) throw new Error(`evm_k256: a record's ${what} is 32 bytes`);
+  return b;
+}
+
+/** The checked parts every record of the arm shares: the format, the
+ *  network name, the point and its address. */
+function recordCommon(rec: { scheme?: unknown; format?: unknown; network?: unknown; address?: unknown; pk?: unknown }) {
+  if (!rec || rec.scheme !== 'evm_k256') throw new Error('evm_k256: not an evm_k256 record');
+  const format = checkBlindFormat('evm_k256', rec.format);
+  if (typeof rec.network !== 'string') throw new Error('evm_k256: a record names its network');
+  const pk = recordPoint(rec.pk);
+  if (typeof rec.address !== 'string' || !eq(evmAddressOfPoint(pk), parseEvmAddress(rec.address))) {
+    throw new Error('evm_k256: the roster address is not the point\'s address');
+  }
+  return { format, network: rec.network, pk, address: evmAddressOfPoint(pk) };
+}
+
+/** A device record, checked: its parts and, when cached, its blind. */
+function parseRosterRecord(rec: EvmK256RosterRecord) {
+  const common = recordCommon(rec);
+  if (typeof rec.accountIndex !== 'string' || !DECIMAL.test(rec.accountIndex)) throw new Error('evm_k256: a record account index is a decimal number');
+  return { ...common, accountIndex: BigInt(rec.accountIndex), blind: recordSecret(rec.blind, 'blind') };
 }
 
 /** The authorising material an `evm_k256` device-gated circuit consumes
@@ -292,18 +421,26 @@ export async function enrolEvmGranteeBlind(
   return enrolWithRequest(wallet, address, granteeBlindMessageBytes({ scheme: 'evm_k256', network, identity: address, issuingAccount }));
 }
 
-async function enrolWithRequest(wallet: EvmWallet, address: Uint8Array, message: Uint8Array): Promise<EvmBlindEnrolment> {
+/** Signs `message` (a blind request naming `address`) twice; each signature
+ *  must recover to `address` (the signer check; `extra` are further
+ *  candidates a refusal may name, such as the address the wallet reports
+ *  when it is not the one asked for), and both must have the same canonical
+ *  form. */
+async function enrolWithRequest(
+  wallet: EvmWallet, address: Uint8Array, message: Uint8Array, extra: readonly Uint8Array[] = [],
+): Promise<EvmBlindEnrolment> {
+  const digest = personalMessageDigest(message);
+  const others = [...extra, ...(await otherAddresses(wallet))];
   const first = await wallet.personalSign(message);
+  const sig = checkEvmK256Signer(address, digest, first, others);
   const second = await wallet.personalSign(message);
+  checkEvmK256Signer(address, digest, second, others);
   if (!sameCanonicalSignature('evm_k256', first, second)) {
     throw new Error('blind: the wallet signed the privacy-key request twice with different signatures (not deterministic); this wallet cannot be a Passport device');
   }
   const canonical = canonicalEvmSignature(first);
-  const pk = recoverEvmPoint(personalMessageDigest(message), parseEvmSignature(first));
-  if (!eq(evmAddressOfPoint(pk), address)) {
-    throw new Error('blind: the privacy-key signature does not recover to the wallet address');
-  }
-  return { message, signatures: [first, second], canonical, blind: deriveBlind('evm_k256', canonical), pk, address };
+  const pk = recoverEvmPoint(digest, sig);
+  return { message, signatures: [first, second], canonical, blind: deriveBlind('evm_k256', canonical), pk, address: new Uint8Array(address) };
 }
 
 /**
@@ -312,6 +449,8 @@ async function enrolWithRequest(wallet: EvmWallet, address: Uint8Array, message:
  */
 export class EvmK256Device {
   readonly arm = 'evm_k256' as const;
+  /** The format the device signs in and its blind is bound to. */
+  readonly format = EVM_K256_FORMAT;
   readonly address: Uint8Array;
 
   constructor(
@@ -353,23 +492,29 @@ export class EvmK256Device {
 
   /**
    * Signs `typedData` with the device's wallet (`eth_signTypedData_v4`) and
-   * returns the circuit's authorising material. Refuses a signature that does
-   * not recover to this device's point (a wallet that signed with another
-   * account). The signature is passed on as the wallet produced it; the
-   * contract accepts both S forms.
+   * returns the circuit's authorising material. Typed data under another
+   * domain than the fixed V1 domain is refused before the wallet is asked,
+   * and a signature that does not recover to this device's address (a wallet
+   * that signed with another account) is refused before any proof. The
+   * signature is passed on as the wallet produced it; the contract accepts
+   * both S forms.
    */
   async authorise(typedData: Eip712TypedData, useCounter: bigint): Promise<EvmK256Authorisation> {
     if (!this.wallet) throw new Error('evm_k256: this device has no wallet');
-    return this.authorisationFrom(typedData, await this.wallet.signTypedData(typedData), useCounter);
+    checkEip712V1TypedData(typedData);
+    const others = await otherAddresses(this.wallet);
+    return this.authorisationFrom(typedData, await this.wallet.signTypedData(typedData), useCounter, others);
   }
 
-  /** The authorising material of an existing wallet signature over `typedData`. */
-  authorisationFrom(typedData: Eip712TypedData, signature: Uint8Array, useCounter: bigint): EvmK256Authorisation {
-    const sig = parseEvmSignature(signature);
-    const pk = recoverEvmPoint(typedDataDigest(typedData), sig);
-    if (pk.x !== this.pk.x || pk.y !== this.pk.y) throw new Error('evm_k256: the signature does not recover to this device');
+  /** The authorising material of an existing wallet signature over
+   *  `typedData`, with the same checks; `others` are the candidates a
+   *  refusal may name. */
+  authorisationFrom(typedData: Eip712TypedData, signature: Uint8Array, useCounter: bigint, others: readonly Uint8Array[] = []): EvmK256Authorisation {
+    checkEip712V1TypedData(typedData);
+    const digest = typedDataDigest(typedData);
+    const sig = checkEvmK256Signer(this.address, digest, signature, others);
     const m = typedData.message as { authNonce: string };
-    const hint = evmK256SeamHint(this.pk, typedDataDigest(typedData), BigInt(m.authNonce));
+    const hint = evmK256SeamHint(this.pk, digest, BigInt(m.authNonce));
     return { arm: 'evm_k256', pk: this.pk, use_counter: useCounter, blind: this.blind, sig: { r: sig.r, s: sig.s }, hint };
   }
 
@@ -378,24 +523,24 @@ export class EvmK256Device {
     return [this.pk, salt, this.blind, evmK256KeyHint(this.pk)];
   }
 
-  /** The roster record to persist. */
+  /** The roster record to persist, with the blind cached. */
   toRecord(): EvmK256RosterRecord {
     return {
-      scheme: 'evm_k256', network: this.network, accountIndex: this.accountIndex.toString(),
+      scheme: 'evm_k256', format: this.format, network: this.network, accountIndex: this.accountIndex.toString(),
       address: this.checksumAddress,
       pk: { x: this.pk.x.toString(16).padStart(64, '0'), y: this.pk.y.toString(16).padStart(64, '0') },
       blind: hex(this.blind),
     };
   }
 
-  /** A device from its roster record; refuses a record whose address is not
-   *  its point's. */
+  /** A device from its roster record and its cached blind. Refuses a record
+   *  of another arm or format, a record whose address is not its point's,
+   *  and a record without the cached blind (restoreEvmK256Device derives it
+   *  again from the wallet). */
   static fromRecord(rec: EvmK256RosterRecord, wallet?: EvmWallet): EvmK256Device {
-    if (rec.scheme !== 'evm_k256') throw new Error('evm_k256: not an evm_k256 roster record');
-    const pk = { x: BigInt('0x' + rec.pk.x), y: BigInt('0x' + rec.pk.y), identity: false } as Secp256k1Point;
-    const d = new EvmK256Device(pk, unhex(rec.blind), rec.network, BigInt(rec.accountIndex), wallet);
-    if (!eq(d.address, parseEvmAddress(rec.address))) throw new Error('evm_k256: the roster address is not the point\'s address');
-    return d;
+    const r = parseRosterRecord(rec);
+    if (r.blind === undefined) throw new Error('evm_k256: the record holds no cached blind; restore the device from its wallet (restoreEvmK256Device)');
+    return new EvmK256Device(r.pk, r.blind, r.network, r.accountIndex, wallet);
   }
 }
 
@@ -403,12 +548,71 @@ export class EvmK256Device {
  *  counter resolver and restore use the same bound. */
 export const EVM_K256_COUNTER_SCAN = 4096n;
 
+/** The result of a restore: the device (or grantee), or why it cannot be
+ *  restored with this wallet and what remains, in blind.ts restoreBlind's
+ *  words. `source`: `cache`, the stored blind (no signature asked);
+ *  `stored-format`, derived again in the record's format; `search`, derived
+ *  in every format the wallet signs and found by the caller's test. */
+export type EvmK256Restore<T> =
+  | { ok: true; source: 'cache' | 'stored-format' | 'search'; value: T }
+  | { ok: false; reason: 'format-unavailable' | 'not-found' | 'no-format'; message: string };
+
+/** What a device restore starts from: the stored record (its network,
+ *  account index, address, format and, while cached, its blind), or, without
+ *  one, the network and account index to try and `finds`, the caller's test
+ *  of a candidate device against the accounts (their entries, for example
+ *  with `entryAt` at the counters below EVM_K256_COUNTER_SCAN). */
+export type EvmK256DeviceRestoreRequest =
+  | { wallet: EvmWallet; record: EvmK256RosterRecord }
+  | { wallet: EvmWallet; network: string; accountIndex: bigint | number; finds: (device: EvmK256Device) => boolean | Promise<boolean> };
+
 /**
- * Restore: the account indexes 0..maxIndex of `wallet` on `network`,
- * each with its blind re-derived from the wallet, tested against candidate
- * accounts' device sets at counters below maxCounter (default: the resolver's
- * bound). Returns every match. The wallet is asked for 2 x (maxIndex + 1)
- * `personal_sign` approvals (two per index: the sign-twice check).
+ * Restores one device of `wallet` through blind.ts restoreBlind: a cached
+ * blind is used as it is; a record without it has the blind derived again
+ * in the record's format, from a signature that must come from the
+ * record's address (whatever address the wallet reports); without a record
+ * the blind is derived in every format the wallet signs (the arm's one) and
+ * kept when `finds` accepts the device. A blind is never derived in another
+ * format than the stored one, and the wallet is asked for nothing it cannot
+ * sign. Without a match, the result carries restoreBlind's message: no
+ * account was found, and what remains (add this wallet as a new device from
+ * another device of the account, or through the account's recovery).
+ */
+export async function restoreEvmK256Device(req: EvmK256DeviceRestoreRequest): Promise<EvmK256Restore<EvmK256Device>> {
+  const { wallet } = req;
+  const rec = 'record' in req && req.record !== undefined ? parseRosterRecord(req.record) : undefined;
+  if (rec === undefined && (!('finds' in req) || typeof req.finds !== 'function')) {
+    throw new Error('evm_k256: a restore without a stored record needs the network, the account index and finds');
+  }
+  const reported = await wallet.address();
+  const network = rec ? rec.network : (req as { network: string }).network;
+  const accountIndex = rec ? rec.accountIndex : BigInt((req as { accountIndex: bigint | number }).accountIndex);
+  const address = rec ? rec.address : reported;
+  if (address.length !== 20) throw new Error('blind: the wallet address is 20 bytes');
+  let pk: Secp256k1Point | undefined;
+  const r = await restoreBlind({
+    scheme: 'evm_k256', role: 'device',
+    stored: rec ? { format: rec.format, blind: rec.blind } : undefined,
+    walletFormats: evmK256WalletFormats(),
+    derive: async (format) => {
+      if (format !== EVM_K256_FORMAT) throw new Error(`evm_k256: no blind request in the format ${format}`);
+      const e = await enrolWithRequest(wallet, address, blindMessageBytes({ scheme: 'evm_k256', network, identity: address, accountIndex }), [reported]);
+      pk = e.pk;
+      return e.blind;
+    },
+    finds: async (blind) => (await (req as { finds: (d: EvmK256Device) => boolean | Promise<boolean> }).finds(new EvmK256Device(pk!, blind, network, accountIndex, wallet))) === true,
+  });
+  if (r.ok === false) return { ok: false, reason: r.reason, message: r.message };
+  return { ok: true, source: r.source, value: new EvmK256Device(rec ? rec.pk : pk!, r.matches[0].blind, network, accountIndex, wallet) };
+}
+
+/**
+ * Restore without records: the account indexes 0..maxIndex of `wallet` on
+ * `network`, each through restoreEvmK256Device, its blind derived from the
+ * wallet and tested against candidate accounts' device sets at counters
+ * below maxCounter (default: the resolver's bound). Returns every match. The
+ * wallet is asked for 2 x (maxIndex + 1) `personal_sign` approvals (two per
+ * index: the sign-twice check).
  */
 export async function restoreEvmDevices(
   wallet: EvmWallet,
@@ -420,15 +624,22 @@ export async function restoreEvmDevices(
   const maxIndex = opts.maxIndex ?? 4;
   const maxCounter = opts.maxCounter ?? EVM_K256_COUNTER_SCAN;
   for (let i = 0; i <= maxIndex; i++) {
-    const device = await EvmK256Device.enrol(wallet, network, i);
-    for (const a of accounts) {
-      for (let k = 0n; k < maxCounter; k++) {
-        if (a.isMember(device.entryAt(a.address, a.epoch, k))) {
-          found.push({ accountIndex: BigInt(i), account: a.address, counter: k, device });
-          break;
+    const hits: { account: Uint8Array; counter: bigint }[] = [];
+    const r = await restoreEvmK256Device({
+      wallet, network, accountIndex: i,
+      finds: (device) => {
+        for (const a of accounts) {
+          for (let k = 0n; k < maxCounter; k++) {
+            if (a.isMember(device.entryAt(a.address, a.epoch, k))) {
+              hits.push({ account: a.address, counter: k });
+              break;
+            }
+          }
         }
-      }
-    }
+        return hits.length > 0;
+      },
+    });
+    if (r.ok === true) found.push(...hits.map((h) => ({ accountIndex: BigInt(i), ...h, device: r.value })));
   }
   return found;
 }
@@ -766,6 +977,8 @@ export function evmK256GrantReadKey(readSeed: Uint8Array, account: Uint8Array, l
  */
 export class EvmK256Grantee {
   readonly arm = 'evm_k256' as const;
+  /** The format the grantee signs in and its blind is bound to. */
+  readonly format = EVM_K256_FORMAT;
   readonly address: Uint8Array;
 
   constructor(
@@ -775,10 +988,14 @@ export class EvmK256Grantee {
     readonly slot: bigint,
     readonly wallet?: EvmWallet,
     private readonly readSeed?: Uint8Array,
+    /** The network and the issuing account of the grantee request the blind
+     *  was derived from (known to a grantee enrolled from its wallet). */
+    readonly issuer?: { network: string; issuingAccount: Uint8Array },
   ) {
     if (blind.length !== 32) throw new Error('evm_k256: a blind is 32 bytes');
     if (label.length !== 32) throw new Error('evm_k256: a site label is 32 bytes');
     if (readSeed && readSeed.length !== 32) throw new Error('evm_k256: a read seed is 32 bytes');
+    if (issuer && (!(issuer.issuingAccount instanceof Uint8Array) || issuer.issuingAccount.length !== 32)) throw new Error('evm_k256: the issuing account address is 32 bytes');
     if (pk.x === 0n && pk.y === 0n) throw new Error('evm_k256: the point at infinity is not a grantee key');
     secp256k1.Point.fromAffine({ x: pk.x, y: pk.y }).assertValidity();
     this.address = evmAddressOfPoint(pk);
@@ -789,7 +1006,30 @@ export class EvmK256Grantee {
    *  and `slot`. */
   static async enrol(wallet: EvmWallet, network: string, issuingAccount: Uint8Array, label: Uint8Array, slot: bigint): Promise<EvmK256Grantee> {
     const e = await enrolEvmGranteeBlind(wallet, network, issuingAccount);
-    return new EvmK256Grantee(e.pk, e.blind, label, slot, wallet, evmK256GrantReadSeed(e.canonical));
+    return new EvmK256Grantee(e.pk, e.blind, label, slot, wallet, evmK256GrantReadSeed(e.canonical), { network, issuingAccount: new Uint8Array(issuingAccount) });
+  }
+
+  /** The grantee record to persist (one per issuing account), with the
+   *  blind and the read seed cached; only a grantee enrolled from its wallet
+   *  has one. */
+  toRecord(): EvmK256GranteeRecord {
+    if (!this.issuer || !this.readSeed) throw new Error('evm_k256: only a grantee enrolled from its wallet has a record');
+    return {
+      scheme: 'evm_k256', role: 'grantee', format: this.format, network: this.issuer.network, issuingAccount: hex(this.issuer.issuingAccount),
+      address: evmChecksumAddress(this.address),
+      pk: { x: this.pk.x.toString(16).padStart(64, '0'), y: this.pk.y.toString(16).padStart(64, '0') },
+      blind: hex(this.blind), readSeed: hex(this.readSeed),
+    };
+  }
+
+  /** The grantee of one grant (`label`, `slot`) from its record and its
+   *  cache. Refuses a record of another arm, role or format, one whose
+   *  address is not its point's, and one without the cache
+   *  (restoreEvmK256Grantee derives it again from the wallet). */
+  static fromRecord(rec: EvmK256GranteeRecord, label: Uint8Array, slot: bigint, wallet?: EvmWallet): EvmK256Grantee {
+    const r = parseGranteeRecord(rec);
+    if (r.blind === undefined || r.readSeed === undefined) throw new Error('evm_k256: the record holds no cached blind; restore the grantee from its wallet (restoreEvmK256Grantee)');
+    return new EvmK256Grantee(r.pk, r.blind, label, slot, wallet, r.readSeed, { network: r.network, issuingAccount: r.issuingAccount });
   }
 
   /** This grant's read key on `account` (its `read_pk` goes into the grant
@@ -802,7 +1042,7 @@ export class EvmK256Grantee {
   /** The same grantee under another site label or slot (another grant of the
    *  same issuing account), keeping its wallet and read seed. */
   withGrant(label: Uint8Array, slot: bigint): EvmK256Grantee {
-    return new EvmK256Grantee(this.pk, this.blind, label, slot, this.wallet, this.readSeed);
+    return new EvmK256Grantee(this.pk, this.blind, label, slot, this.wallet, this.readSeed, this.issuer);
   }
 
   /** origin_hash of the site label (what the grant id binds). */
@@ -817,17 +1057,99 @@ export class EvmK256Grantee {
     return evmK256GranteeInput({ scheme: 'evm_k256', address: this.address, blind: this.blind }, { label: this.label }, this.slot);
   }
 
-  /** Signs `typedData` with the grantee's wallet; refuses a signature that
-   *  does not recover to this grantee's point. */
+  /** Signs `typedData` with the grantee's wallet, with the device's checks:
+   *  typed data under another domain than V1 is refused before the wallet
+   *  is asked, and a signature that does not recover to this grantee's
+   *  address before any proof. */
   async authorise(typedData: Eip712TypedData): Promise<EvmK256GrantAuthorisation> {
     if (!this.wallet) throw new Error('evm_k256: this grantee has no wallet');
-    const sig = parseEvmSignature(await this.wallet.signTypedData(typedData));
-    const pk = recoverEvmPoint(typedDataDigest(typedData), sig);
-    if (pk.x !== this.pk.x || pk.y !== this.pk.y) throw new Error('evm_k256: the signature does not recover to this grantee');
+    checkEip712V1TypedData(typedData);
+    const others = await otherAddresses(this.wallet);
+    const digest = typedDataDigest(typedData);
+    const sig = checkEvmK256Signer(this.address, digest, await this.wallet.signTypedData(typedData), others);
     const m = typedData.message as { issuedAt: string; grantNonce: string };
-    const hint = evmK256GrantSeamHint(this.pk, typedDataDigest(typedData), this.label, BigInt(m.issuedAt), BigInt(m.grantNonce));
+    const hint = evmK256GrantSeamHint(this.pk, digest, this.label, BigInt(m.issuedAt), BigInt(m.grantNonce));
     return { arm: 'evm_k256', pk: this.pk, blind: this.blind, label: this.label, sig: { r: sig.r, s: sig.s }, hint };
   }
+}
+
+/** The grantee record a client persists per issuing account, in its local
+ *  storage: the grantee blind is one per wallet, network and issuing
+ *  account, whatever the grant's site label and slot. */
+export interface EvmK256GranteeRecord {
+  scheme: 'evm_k256';
+  role: 'grantee';
+  /** The format the grantee blind was derived in (the arm's one format). */
+  format: string;
+  network: string;
+  /** The issuing account's 32-byte contract address, hex. */
+  issuingAccount: string;
+  /** EIP-55 checksummed address. */
+  address: string;
+  /** The recovered public point, big-endian hex coordinates. */
+  pk: { x: string; y: string };
+  /** The cached grantee blind and read seed, hex, both from the grantee
+   *  request's canonical signature. Secrets (the blind links this wallet to
+   *  its grants from the account; the read seed derives their read keys):
+   *  they stay in the client's local storage and are never sent. Both are
+   *  absent once the cache is lost: restoreEvmK256Grantee derives them
+   *  again from the wallet. */
+  blind?: string;
+  readSeed?: string;
+}
+
+/** A grantee record, checked: its parts and, when cached, its blind and read
+ *  seed (both or neither). */
+function parseGranteeRecord(rec: EvmK256GranteeRecord) {
+  const common = recordCommon(rec);
+  if (rec.role !== 'grantee') throw new Error('evm_k256: not a grantee record');
+  if (typeof rec.issuingAccount !== 'string' || !HEX64.test(rec.issuingAccount)) throw new Error('evm_k256: a record\'s issuing account is 32 bytes of lower-case hex');
+  const blind = recordSecret(rec.blind, 'blind'), readSeed = recordSecret(rec.readSeed, 'read seed');
+  if ((blind === undefined) !== (readSeed === undefined)) throw new Error('evm_k256: a grantee record caches its blind and read seed together');
+  return { ...common, issuingAccount: unhex(rec.issuingAccount), blind, readSeed };
+}
+
+/** What a grantee restore starts from, for the grant `label`, `slot`: the
+ *  stored record, or, without one, the network, the issuing account and
+ *  `finds`, the caller's test of a candidate grantee (for example that the
+ *  issuing account holds a grant record under its grant id). */
+export type EvmK256GranteeRestoreRequest = { wallet: EvmWallet; label: Uint8Array; slot: bigint } & (
+  | { record: EvmK256GranteeRecord }
+  | { network: string; issuingAccount: Uint8Array; finds: (grantee: EvmK256Grantee) => boolean | Promise<boolean> });
+
+/** Restores a grantee through blind.ts restoreBlind, as restoreEvmK256Device
+ *  restores a device, from the grantee request of its issuing account;
+ *  without a match, the message says no grant was found and that the
+ *  issuing account's owner can issue a new grant to this wallet. */
+export async function restoreEvmK256Grantee(req: EvmK256GranteeRestoreRequest): Promise<EvmK256Restore<EvmK256Grantee>> {
+  const { wallet, label, slot } = req;
+  const rec = 'record' in req && req.record !== undefined ? parseGranteeRecord(req.record) : undefined;
+  if (rec === undefined && (!('finds' in req) || typeof req.finds !== 'function')) {
+    throw new Error('evm_k256: a restore without a stored record needs the network, the issuing account and finds');
+  }
+  const reported = await wallet.address();
+  const network = rec ? rec.network : (req as { network: string }).network;
+  const issuingAccount = rec ? rec.issuingAccount : new Uint8Array((req as { issuingAccount: Uint8Array }).issuingAccount);
+  const address = rec ? rec.address : reported;
+  if (address.length !== 20) throw new Error('blind: the wallet address is 20 bytes');
+  const issuer = { network, issuingAccount };
+  let pk: Secp256k1Point | undefined;
+  let readSeed: Uint8Array | undefined = rec?.readSeed;
+  const r = await restoreBlind({
+    scheme: 'evm_k256', role: 'grantee',
+    stored: rec ? { format: rec.format, blind: rec.blind } : undefined,
+    walletFormats: evmK256WalletFormats(),
+    derive: async (format) => {
+      if (format !== EVM_K256_FORMAT) throw new Error(`evm_k256: no blind request in the format ${format}`);
+      const e = await enrolWithRequest(wallet, address, granteeBlindMessageBytes({ scheme: 'evm_k256', network, identity: address, issuingAccount }), [reported]);
+      pk = e.pk;
+      readSeed = evmK256GrantReadSeed(e.canonical);
+      return e.blind;
+    },
+    finds: async (blind) => (await (req as { finds: (g: EvmK256Grantee) => boolean | Promise<boolean> }).finds(new EvmK256Grantee(pk!, blind, label, slot, wallet, readSeed, issuer))) === true,
+  });
+  if (r.ok === false) return { ok: false, reason: r.reason, message: r.message };
+  return { ok: true, source: r.source, value: new EvmK256Grantee(rec ? rec.pk : pk!, r.matches[0].blind, label, slot, wallet, readSeed, issuer) };
 }
 
 /** The surface the grant calls use (CustodyAccount). */
