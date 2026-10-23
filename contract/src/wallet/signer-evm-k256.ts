@@ -55,16 +55,22 @@ import {
   deriveBlind,
   sameCanonicalSignature,
 } from './blind.js';
-import { DESCRIPTOR_TAGS, checkDescriptor, evmAddressOf, evmChecksumAddress, grantOriginHash, padTag, parseEvmAddress, type Descriptor } from './descriptors.js';
-import { typedDataDigest, evmK256Messages, type Eip712TypedData, type EvmK256DescriptorInput, type EvmK256GranteeInput, type IssueScope, type SiteAmount, type SpentCoin } from './evm-k256-codec.js';
+import {
+  DESCRIPTOR_TAGS, checkDescriptor, evmAddressOf, evmChecksumAddress, grantOriginHash, padTag, parseEvmAddress,
+  type Descriptor, type Ed25519Descriptor, type JubjubDescriptor, type K256Descriptor, type P256Descriptor, type W52Descriptor,
+} from './descriptors.js';
+import {
+  typedDataDigest, evmK256Messages, evmK256KindOf, EVM_K256_KINDS,
+  type Eip712TypedData, type EvmK256DescriptorInput, type EvmK256GranteeInput, type EvmK256Payload, type IssueScope, type SiteAmount, type SpentCoin,
+} from './evm-k256-codec.js';
 import type { GrantOpening } from './signer.js';
 import {
   evmK256KeyHint, evmK256SeamHint, evmK256GrantSeamHint, evmK256AmountHint, evmK256CoinHint,
   evmK256DescriptorHint, evmK256RemoveHint, evmK256GranteeHint, evmK256IssueHint,
-  solArgs, EVM_K256_SOL_FILLER_ARGS,
+  ed25519Args, EVM_K256_ED25519_FILLER_ARGS,
   type EvmAddressHint, type EvmK256SeamHint, type EvmK256GrantSeamHint,
 } from './evm-k256-hints.js';
-export { solArgs, solKeyOf, EVM_K256_SOL_FILLER_ARGS, type EvmK256SolArgs } from './evm-k256-hints.js';
+export { ed25519Args, ed25519KeyOf, EVM_K256_ED25519_FILLER_ARGS, type EvmK256Ed25519Args } from './evm-k256-hints.js';
 
 // ── Signatures ───────────────────────────────────────────────────────────────
 
@@ -546,38 +552,95 @@ export async function authoriseWithdrawShieldedToContract(
 // entry-typed helpers cannot reach them; these call the circuits directly.
 
 const le32 = (v: bigint): Uint8Array => { const o = new Uint8Array(32); let x = v; for (let i = 0; i < 32; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
+const leInt = (b: Uint8Array): bigint => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
 const ZERO32 = new Uint8Array(32);
 const ZERO21 = new Uint8Array(21);
 
-/** The circuit's `EvmK256Descriptor` for a readable descriptor: the target
- *  scheme's device tag and its fields (an EVM target's address and privacy
- *  salt; a Solana target's 32-byte key and privacy salt; JubJub, k256 and
- *  P-256 coordinates little-endian, as the recipes bind them; a k256
+/** A grantee's site in the form its kind shows it (GranteeSite), as bytes
+ *  of the expected length; refuses any other form or length. */
+type SiteField = (k: 'label' | 'origin' | 'originHash', n: number) => Uint8Array;
+
+/** Each payload form's circuit fields, from a checked descriptor of a kind
+ *  of that form (and, for a grantee, its site), and the descriptor a grantee
+ *  input of that form encodes. The kind of a descriptor is its scheme's
+ *  entry in EVM_K256_KINDS (evm-k256-codec.ts). */
+const PAYLOAD_INPUTS: Readonly<Record<EvmK256Payload, {
+  device: (d: Descriptor) => Partial<EvmK256DescriptorInput>;
+  grantee: (d: Descriptor, site: SiteField) => Partial<EvmK256GranteeInput>;
+  descriptorOf: (scheme: string, g: EvmK256GranteeInput) => Descriptor;
+  /** A check of the grantee's site beyond the key's own (checkDescriptor). */
+  checkSite?: (d: Descriptor, g: EvmK256GranteeInput) => void;
+}>> = {
+  address: {
+    device: (d) => { const w = d as W52Descriptor; return { address: new Uint8Array(w.address), key2: new Uint8Array(w.blind) }; },
+    grantee: (d, site) => { const w = d as W52Descriptor; return { address: new Uint8Array(w.address), key2: new Uint8Array(w.blind), label: site('label', 32) }; },
+    descriptorOf: (scheme, g) => ({ scheme, address: g.address, blind: g.key2 }) as Descriptor,
+  },
+  ed25519_base58: {
+    device: (d) => { const e = d as Ed25519Descriptor; return { key: new Uint8Array(e.key), key2: new Uint8Array(e.blind) }; },
+    grantee: (d, site) => { const e = d as Ed25519Descriptor; return { key: new Uint8Array(e.key), key2: new Uint8Array(e.blind), label: site('label', 32) }; },
+    descriptorOf: (scheme, g) => ({ scheme, key: g.key, blind: g.key2 }) as Descriptor,
+  },
+  jubjub: {
+    device: (d) => { const j = d as JubjubDescriptor; return { key: le32(j.x), key2: le32(j.y) }; },
+    grantee: (d, site) => { const j = d as JubjubDescriptor; return { key: le32(j.x), key2: le32(j.y), origin_hash: site('originHash', 32) }; },
+    descriptorOf: (scheme, g) => ({ scheme, x: leInt(g.key), y: leInt(g.key2) }) as Descriptor,
+  },
+  k256: {
+    device: (d) => { const k = d as K256Descriptor; return { key: le32(k.x), key2: le32(k.y), envelope: BigInt(k.envelope) }; },
+    grantee: (d, site) => { const k = d as K256Descriptor; return { key: le32(k.x), key2: le32(k.y), envelope: BigInt(k.envelope), origin_hash: site('originHash', 32) }; },
+    descriptorOf: (scheme, g) => ({ scheme, x: leInt(g.key), y: leInt(g.key2), envelope: Number(g.envelope) }) as Descriptor,
+  },
+  passkey: {
+    device: (d) => {
+      const p = d as P256Descriptor;
+      if (!p.policy) throw new Error('descriptor: a passkey device needs its policy (RP hash and origin)');
+      return { key: le32(p.x), key2: le32(p.y), rp_id_hash: new Uint8Array(p.policy.rpIdHash), origin: new Uint8Array(p.policy.origin) };
+    },
+    grantee: (d, site) => { const p = d as P256Descriptor; return { key: le32(p.x), key2: le32(p.y), origin: checkPasskeySiteOrigin(p, site('origin', 21)) }; },
+    descriptorOf: (scheme, g) => ({ scheme, x: leInt(g.key), y: leInt(g.key2) }) as Descriptor,
+    checkSite: (d, g) => { checkPasskeySiteOrigin(d as P256Descriptor, g.origin); },
+  },
+};
+
+/** The circuit's `EvmK256Descriptor` for a readable descriptor: its kind's
+ *  device tag and the fields of the kind's payload form (an address and
+ *  privacy salt; an Ed25519 key's 32 bytes and privacy salt; JubJub, k256
+ *  and P-256 coordinates little-endian, as the recipes bind them; a k256
  *  envelope; a passkey's RP hash and exact origin). The other fields are
  *  zero: no recipe hashes them and no approval shows them. The descriptor is
  *  checked by the strict client decoders first. */
 export function evmK256DescriptorInput(descriptor: Descriptor): EvmK256DescriptorInput {
-  if (!descriptor || !Object.hasOwn(DESCRIPTOR_TAGS.device, (descriptor as { scheme?: string }).scheme ?? '')) {
+  if (!descriptor || !Object.hasOwn(EVM_K256_KINDS, (descriptor as { scheme?: string }).scheme ?? '')) {
     throw new Error('descriptor: not a registered device scheme');
   }
   const d = checkDescriptor(descriptor);
   const base = { tag: padTag(DESCRIPTOR_TAGS.device[d.scheme]), key: ZERO32, key2: ZERO32, address: new Uint8Array(20), envelope: 0n, rp_id_hash: ZERO32, origin: ZERO21 };
-  switch (d.scheme) {
-    case 'evm_k256': return { ...base, address: new Uint8Array(d.address), key2: new Uint8Array(d.blind) };
-    case 'sol_ed25519': return { ...base, key: new Uint8Array(d.key), key2: new Uint8Array(d.blind) };
-    case 'jubjub': return { ...base, key: le32(d.x), key2: le32(d.y) };
-    case 'k256': return { ...base, key: le32(d.x), key2: le32(d.y), envelope: BigInt(d.envelope) };
-    case 'p256': {
-      if (!d.policy) throw new Error('descriptor: a passkey device needs its policy (RP hash and origin)');
-      return { ...base, key: le32(d.x), key2: le32(d.y), rp_id_hash: new Uint8Array(d.policy.rpIdHash), origin: new Uint8Array(d.policy.origin) };
-    }
-  }
+  return { ...base, ...PAYLOAD_INPUTS[EVM_K256_KINDS[d.scheme].payload].device(d) };
 }
 
 /** The descriptor the literal-entry form passes: unused by the circuit. */
 export const EVM_K256_UNUSED_DESCRIPTOR: EvmK256DescriptorInput = {
   tag: padTag(DESCRIPTOR_TAGS.device.evm_k256), key: ZERO32, key2: ZERO32, address: new Uint8Array(20), envelope: 0n, rp_id_hash: ZERO32, origin: ZERO21,
 };
+
+/** The trailing circuit arguments of a device-gated circuit: the auth
+ *  struct (its seam hints included), then the operation's own hints when
+ *  the circuit takes them. */
+export function evmK256AuthArgs(a: EvmK256Authorisation): unknown[] {
+  const { arm, op, ...auth } = a;
+  return op === undefined ? [auth] : [auth, op];
+}
+
+/** The trailing circuit arguments of a grantee twin: the site label and
+ *  slot, the grant openings (scope salt, recipient kind and pin, max coin
+ *  value, spent so far), the auth struct, then the operation's own hints
+ *  when the circuit takes them. */
+export function evmK256GrantAuthArgs(o: GrantOpening, a: EvmK256GrantAuthorisation): unknown[] {
+  const { arm, label, op, ...auth } = a;
+  const openings = [o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev];
+  return op === undefined ? [label, o.slot, ...openings, auth] : [label, o.slot, ...openings, auth, op];
+}
 
 /** The surface the device-lifecycle calls use: CustodyAccount's raw call-tx
  *  interface. */
@@ -600,7 +663,7 @@ export async function addDeviceWithEvmK256(account: EvmK256LifecycleSurface, dev
   const input = evmK256DescriptorInput(target);
   const typedData = evmK256Messages.addDevice(frame, input);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.add_device_with_evm_k256(input, ...solArgs(input), authArg(auth), evmK256DescriptorHint(input));
+  const r = await account.callTx.add_device_with_evm_k256(input, ...ed25519Args(input), authArg(auth), evmK256DescriptorHint(input));
   return { typedData, auth, input, txId: txIdOf(r) };
 }
 
@@ -614,7 +677,7 @@ export async function removeDeviceWithEvmK256(
   const input = evmK256DescriptorInput(target);
   const typedData = evmK256Messages.removeDevice(frame, input, targetEpoch, targetCounter);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.remove_device_with_evm_k256(input, ...solArgs(input), targetEpoch, targetCounter, { is_some: false, value: ZERO32 }, authArg(auth),
+  const r = await account.callTx.remove_device_with_evm_k256(input, ...ed25519Args(input), targetEpoch, targetCounter, { is_some: false, value: ZERO32 }, authArg(auth),
     evmK256RemoveHint(input, targetEpoch, targetCounter));
   return { typedData, auth, input, txId: txIdOf(r) };
 }
@@ -626,7 +689,7 @@ export async function removeUnknownDeviceWithEvmK256(account: EvmK256LifecycleSu
   const { frame, counter } = await deviceFrame(account, device);
   const typedData = evmK256Messages.removeUnknownDevice(frame, entry);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.remove_device_with_evm_k256(EVM_K256_UNUSED_DESCRIPTOR, ...EVM_K256_SOL_FILLER_ARGS, 0n, 0n, { is_some: true, value: new Uint8Array(entry) }, authArg(auth),
+  const r = await account.callTx.remove_device_with_evm_k256(EVM_K256_UNUSED_DESCRIPTOR, ...EVM_K256_ED25519_FILLER_ARGS, 0n, 0n, { is_some: true, value: new Uint8Array(entry) }, authArg(auth),
     evmK256RemoveHint(EVM_K256_UNUSED_DESCRIPTOR, 0n, 0n));
   return { typedData, auth, txId: txIdOf(r) };
 }
@@ -636,35 +699,30 @@ export const evmDeviceDescriptor = (d: EvmK256Device): Descriptor => ({ scheme: 
 
 // ── Scoped grants ──────────────────────────────────────────────────────
 
-/** How a readable owner shows a grantee's site: an `evm_k256` or
- *  `sol_ed25519` grantee by its 32-byte site label (shown as text), a
- *  passkey by its exact 21-byte origin (shown as text), a k256 or JubJub
- *  grantee by its origin hash (shown under the fixed member
- *  `siteLabelHash`; the client shows the client id beside it). */
+/** How a readable owner shows a grantee's site, by its kind's payload form
+ *  (evm-k256-codec.ts EVM_K256_KINDS): an address or ed25519_base58 grantee
+ *  by its 32-byte site label (shown as text), a passkey by its exact 21-byte
+ *  origin (shown as text), a k256 or JubJub grantee by its origin hash
+ *  (shown under the fixed member `siteLabelHash`; the client shows the
+ *  client id beside it). */
 export type GranteeSite = { label: Uint8Array } | { origin: Uint8Array } | { originHash: Uint8Array; clientId?: string };
 
-/** The circuit's `EvmK256GranteeDescriptor` for a grantee of any scheme
- *  (its key as a readable descriptor, its site, its slot). */
+/** The circuit's `EvmK256GranteeDescriptor` for a grantee of any kind
+ *  (its key as a readable descriptor, its site in its kind's form, its slot). */
 export function evmK256GranteeInput(descriptor: Descriptor, site: GranteeSite, slot: bigint): EvmK256GranteeInput {
-  if (!descriptor || !Object.hasOwn(DESCRIPTOR_TAGS['grant-id'], (descriptor as { scheme?: string }).scheme ?? '')) {
+  if (!descriptor || !Object.hasOwn(EVM_K256_KINDS, (descriptor as { scheme?: string }).scheme ?? '')) {
     throw new Error('descriptor: not a registered grantee scheme');
   }
   if (slot < 0n || slot > 255n) throw new Error('descriptor: a grant slot is a Uint<8>');
   const d = checkDescriptor(descriptor);
   const base = { tag: padTag(DESCRIPTOR_TAGS['grant-id'][d.scheme]), key: ZERO32, key2: ZERO32, address: new Uint8Array(20), envelope: 0n,
     origin: ZERO21, label: ZERO32, origin_hash: ZERO32, slot };
-  const need = (k: 'label' | 'origin' | 'originHash', n: number): Uint8Array => {
+  const need: SiteField = (k, n) => {
     const v = (site as any)[k];
     if (!(v instanceof Uint8Array) || v.length !== n) throw new Error(`descriptor: a ${d.scheme} grantee is shown by its ${k} (${n} bytes)`);
     return new Uint8Array(v);
   };
-  switch (d.scheme) {
-    case 'evm_k256': return { ...base, address: new Uint8Array(d.address), key2: new Uint8Array(d.blind), label: need('label', 32) };
-    case 'sol_ed25519': return { ...base, key: new Uint8Array(d.key), key2: new Uint8Array(d.blind), label: need('label', 32) };
-    case 'jubjub': return { ...base, key: le32(d.x), key2: le32(d.y), origin_hash: need('originHash', 32) };
-    case 'k256': return { ...base, key: le32(d.x), key2: le32(d.y), envelope: BigInt(d.envelope), origin_hash: need('originHash', 32) };
-    case 'p256': return { ...base, key: le32(d.x), key2: le32(d.y), origin: checkPasskeySiteOrigin(d, need('origin', 21)) };
-  }
+  return { ...base, ...PAYLOAD_INPUTS[EVM_K256_KINDS[d.scheme].payload].grantee(d, need) };
 }
 
 /** A passkey grantee's site origin (its own field, apart from
@@ -782,7 +840,6 @@ export interface EvmK256GrantSurface extends EvmK256LifecycleSurface {
   withdrawShieldedToContractWithGrantAuth(recipient: Uint8Array, color: Uint8Array, amount: bigint, changeEntry: Uint8Array, encPk: Uint8Array, opening: GrantOpening, a: EvmK256GrantAuthorisation): Promise<{ txId: string; sent: unknown; change: unknown }>;
 }
 
-const leInt = (b: Uint8Array): bigint => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
 
 /** A grantee input built elsewhere (not by
  *  `evmK256GranteeInput`) is re-checked before any wallet signs: its tag
@@ -791,16 +848,12 @@ const leInt = (b: Uint8Array): bigint => { let v = 0n; for (let i = b.length - 1
  *  in their subgroups, a valid Ed25519 encoding, address and blind lengths).
  *  Returns the input unchanged. */
 export function checkEvmK256GranteeInput(g: EvmK256GranteeInput): EvmK256GranteeInput {
-  const scheme = (Object.keys(DESCRIPTOR_TAGS['grant-id']) as (keyof typeof DESCRIPTOR_TAGS['grant-id'])[])
-    .find((k) => { const t = padTag(DESCRIPTOR_TAGS['grant-id'][k]); return t.length === g.tag.length && t.every((b, i) => b === g.tag[i]); });
-  if (!scheme) throw new Error('descriptor: not a registered grant-id tag');
-  const d = scheme === 'evm_k256' ? { scheme, address: g.address, blind: g.key2 }
-    : scheme === 'sol_ed25519' ? { scheme, key: g.key, blind: g.key2 }
-    : scheme === 'jubjub' ? { scheme, x: leInt(g.key), y: leInt(g.key2) }
-    : scheme === 'k256' ? { scheme, x: leInt(g.key), y: leInt(g.key2), envelope: Number(g.envelope) }
-    : { scheme, x: leInt(g.key), y: leInt(g.key2) };
-  checkDescriptor(d as Descriptor);
-  if (scheme === 'p256') checkPasskeySiteOrigin(d as { x: bigint; y: bigint }, g.origin);
+  const k = g.tag instanceof Uint8Array ? evmK256KindOf('grant-id', g.tag) : undefined;
+  if (!k) throw new Error('descriptor: not a registered grant-id tag');
+  const form = PAYLOAD_INPUTS[k.payload];
+  const d = form.descriptorOf(k.scheme, g);
+  checkDescriptor(d);
+  form.checkSite?.(d, g);
   return g;
 }
 
@@ -839,7 +892,7 @@ export async function issueGrantWithEvmK256(
   const typedData = evmK256Messages.issueGrant(frame, grantee, scope);
   const auth = await device.authorise(typedData, counter);
   const scopeSalt = evmK256GrantScopeSalt(device.blind, frame.account, frame.authNonce);
-  const r = await account.callTx.issue_grant_with_evm_k256(grantee, ...solArgs(grantee), ...evmK256IssueArgs(scope), authArg(auth),
+  const r = await account.callTx.issue_grant_with_evm_k256(grantee, ...ed25519Args(grantee), ...evmK256IssueArgs(scope), authArg(auth),
     evmK256IssueHint(grantee, scope));
   return { typedData, auth, scopeSalt, txId: txIdOf(r) };
 }
@@ -851,7 +904,7 @@ export async function revokeGrantWithEvmK256(account: EvmK256LifecycleSurface, d
   const { frame, counter } = await deviceFrame(account, device);
   const typedData = evmK256Messages.revokeGrant(frame, grantee);
   const auth = await device.authorise(typedData, counter);
-  const r = await account.callTx.revoke_grant_with_evm_k256(grantee, ...solArgs(grantee), authArg(auth), evmK256GranteeHint(grantee));
+  const r = await account.callTx.revoke_grant_with_evm_k256(grantee, ...ed25519Args(grantee), authArg(auth), evmK256GranteeHint(grantee));
   return { typedData, auth, txId: txIdOf(r) };
 }
 

@@ -25,6 +25,15 @@
 //                text; the separator from its four words); the digest oracle
 //                equals keccak256(0x19 0x01 || separator || h); the frozen
 //                type hashes equal keccak256 of the frozen type strings
+//   kinds        the enrolment kinds: the contract's evm_k256_kinds() equals
+//                the client registry (EVM_K256_KINDS) entry for entry and in
+//                order, with the registered tags, distinct; every type hash
+//                of an entry equals keccak256 of its type string, the
+//                codec's, and the frozen file's; every scheme hash is
+//                keccak256 of the tag's text; the kind lookups find every
+//                registered tag and refuse every other candidate with the
+//                circuit's message, and the client's lookup agrees; the
+//                account's readable registry is the shared module's
 //   codec        the frozen vectors src/tests/vectors/evm-k256-v1.json,
 //                whose hashes viem computed: for every vector the client
 //                codec rebuilds the same typed data, and its digest, the
@@ -51,19 +60,19 @@ import { pureCircuits } from '../wallet/contract.js';
 import { pureCircuits as baseProbe } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
 import { RECIPIENT_KIND_LABELS, K256_ENVELOPE_LABELS, recipientKindLabel, k256EnvelopeLabel } from '../wallet/labels.js';
 import { NEVER_TEXT, NOT_APPLICABLE_TEXT, NO_WINDOW_TEXT, utcDateTimeInputs, base58Inputs, siteAmountLabelBytes } from '../wallet/rendering.js';
-import { padTag, evmAddressOf, evmChecksumAddress } from '../wallet/descriptors.js';
+import { padTag, evmAddressOf, evmChecksumAddress, DESCRIPTOR_TAGS, DESCRIPTOR_SCHEMES, BLIND_TAGS, SALT_TAGS, GRANT_ORIGIN_TAG } from '../wallet/descriptors.js';
 import { blindMessageBytes } from '../wallet/blind.js';
 import { evmK256KeyHint, bytesHint } from '../wallet/evm-k256-hints.js';
 import {
   EIP712_V1_DOMAIN_NAME, EIP712_V1_DOMAIN_VERSION, EIP712_V1_VERIFYING_CONTRACT, EIP712_V1_VERIFYING_CONTRACT_TEXT, eip712V1Domain, domainSeparator,
   typeHash, typesFor, encodeType,
   EVM_K256_PRIMARY_TYPES, EVM_K256_DESCRIPTOR_TYPES, typedDataDigest, typeString, siteLabelText, toHex,
-  expiryText, passkeyRpWord, windowWord, amountLabelText, solanaKeyText, EVM_K256_PASSKEY_RP_POINTER, EVM_K256_WINDOW_POINTER,
-  EVM_K256_AMOUNT_LABEL_PREFIX,
+  expiryText, passkeyRpWord, windowWord, amountLabelText, ed25519Base58Text, EVM_K256_PASSKEY_RP_POINTER, EVM_K256_WINDOW_POINTER,
+  EVM_K256_AMOUNT_LABEL_PREFIX, EVM_K256_KINDS, EVM_K256_KIND_SCHEMES, EVM_K256_PAYLOADS, evmK256KindOf,
 } from '../wallet/evm-k256-codec.js';
 import { typedDataOf, contractStructHash, NEGATIVES, descriptorInput, granteeInput, VECTOR_FILE, type VectorInput } from './evm-k256-vectors.js';
 import {
-  EvmK256Device, EvmK256Grantee, SoftwareEvmWallet, enrolEvmBlind, enrolEvmGranteeBlind, solArgs, highSTwin, parseEvmSignature, personalMessageDigest,
+  EvmK256Device, EvmK256Grantee, SoftwareEvmWallet, enrolEvmBlind, enrolEvmGranteeBlind, ed25519Args, highSTwin, parseEvmSignature, personalMessageDigest,
   checkEvmK256GranteeInput, evmK256GranteeInput, issueGrantWithEvmK256, revokeGrantWithEvmK256,
   recoverEvmPoint, restoreEvmDevices, serialiseEvmSignature, SECP256K1_ORDER,
   type EvmWallet,
@@ -346,6 +355,82 @@ const FROZEN = JSON.parse(fs.readFileSync(new URL(`./vectors/${VECTOR_FILE}`, im
 }
 console.log(`  ✓ domain: the fixed V1 domain's type hash ${FROZEN.domain.typeHash.slice(0, 10)}…, separator ${FROZEN.domain.separator.slice(0, 10)}… and P ${FROZEN.domain.verifyingContract} equal the specified values in the contract, the codec and the frozen file, and their definitions; the digest oracle; ${Object.keys(FROZEN.typeHashes).length} struct type hashes (${tally.domain.pass} checks)`);
 
+// ── Kinds: the enrolment kinds ──────────────────────────────────────────
+
+{
+  const utf8 = (t: string) => new TextEncoder().encode(t);
+  const kinds = pc.evm_k256_kinds() as any[];
+  assert.equal(kinds.length, EVM_K256_KIND_SCHEMES.length, 'one contract entry per client kind');
+  assert.deepEqual([...EVM_K256_KIND_SCHEMES].sort(), [...DESCRIPTOR_SCHEMES].sort(), 'a kind for every registered descriptor scheme');
+  ok('kinds', 2);
+  const nestedOf = (frozen: string, type: string) => frozen.slice(frozen.indexOf(`${type}(`));
+  for (const [i, scheme] of EVM_K256_KIND_SCHEMES.entries()) {
+    const c = kinds[i], k = EVM_K256_KINDS[scheme];
+    const dt = DESCRIPTOR_TAGS.device[scheme], gt = DESCRIPTOR_TAGS['grant-id'][scheme];
+    assert.ok(eq(c.device, padTag(dt)), `${scheme}: the entry's device tag`);
+    assert.ok(eq(c.grant_id, padTag(gt)), `${scheme}: the entry's grant-id tag`);
+    assert.equal(Number(c.payload), EVM_K256_PAYLOADS.indexOf(k.payload), `${scheme}: the entry's payload form`);
+    assert.equal(toHex(c.device_scheme), toHex(keccak_256(utf8(dt))), `${scheme}: device_scheme is keccak256 of the device tag's text`);
+    assert.equal(toHex(c.grantee_scheme), toHex(keccak_256(utf8(gt))), `${scheme}: grantee_scheme is keccak256 of the grant-id tag's text`);
+    ok('kinds', 5);
+    // the parent types: the frozen hash, keccak256 of the frozen string, and the codec's
+    for (const [field, primary, nested] of [['add_device_type', 'AddDevice', k.deviceType], ['remove_device_type', 'RemoveDevice', k.deviceType],
+      ['issue_grant_type', 'IssueGrant', k.granteeType], ['revoke_grant_type', 'RevokeGrant', k.granteeType]] as const) {
+      const key = `${primary}/${nested}`;
+      assert.ok(FROZEN.typeStrings[key], `${scheme}: a frozen type string ${key}`);
+      assert.equal(toHex(c[field]), FROZEN.typeHashes[key], `${scheme}: ${field} == the frozen ${key}`);
+      assert.equal(toHex(c[field]), toHex(keccak_256(utf8(FROZEN.typeStrings[key]))), `${scheme}: ${field} == keccak256 of its type string`);
+      assert.equal(toHex(c[field]), toHex(typeHash(primary, typesFor(primary, nested))), `${scheme}: ${field} == the codec's`);
+      ok('kinds', 3);
+    }
+    // the nested types: keccak256 of the nested part of the frozen strings, and the codec's
+    for (const [field, nested, primary] of [['device_type', k.deviceType, 'AddDevice'], ['grantee_type', k.granteeType, 'RevokeGrant']] as const) {
+      const str = nestedOf(FROZEN.typeStrings[`${primary}/${nested}`], nested);
+      assert.equal(toHex(c[field]), toHex(keccak_256(utf8(str))), `${scheme}: ${field} == keccak256(${str})`);
+      assert.equal(toHex(c[field]), toHex(typeHash(nested, { [nested]: EVM_K256_DESCRIPTOR_TYPES[nested] })), `${scheme}: ${field} == the codec's`);
+      ok('kinds', 2);
+    }
+    // the lookups find the entry by its own tag; the client's lookup agrees
+    for (const [circuit, recipe, tag] of [['evm_k256_device_kind', 'device', dt], ['evm_k256_grantee_kind', 'grant-id', gt]] as const) {
+      const got = pc[circuit](padTag(tag));
+      for (const f of Object.keys(c)) assert.equal(String(got[f] instanceof Uint8Array ? toHex(got[f]) : got[f]), String(c[f] instanceof Uint8Array ? toHex(c[f]) : c[f]), `${scheme}: ${circuit} finds the entry (${f})`);
+      const cl = evmK256KindOf(recipe, padTag(tag));
+      assert.ok(cl && cl.scheme === scheme && cl.payload === k.payload && cl.text === tag, `${scheme}: the client's lookup of its ${recipe} tag`);
+      ok('kinds', 2);
+    }
+  }
+  const all = EVM_K256_KIND_SCHEMES.flatMap((s) => [DESCRIPTOR_TAGS.device[s], DESCRIPTOR_TAGS['grant-id'][s]]);
+  assert.equal(new Set(all).size, all.length, 'the kinds\' tags are distinct');
+  ok('kinds');
+  // every other candidate is refused, by the contract with its message and by the client
+  const spacePadded = (t: string) => { const b = new Uint8Array(32).fill(0x20); b.set(utf8(t)); return b; };
+  const others = (recipe: 'device' | 'grant-id'): [string, Uint8Array][] => [
+    ...EVM_K256_KIND_SCHEMES.map((s) => [`the ${recipe === 'device' ? 'grant-id' : 'device'} tag of ${s}`, padTag(DESCRIPTOR_TAGS[recipe === 'device' ? 'grant-id' : 'device'][s])] as [string, Uint8Array]),
+    ...Object.entries(DESCRIPTOR_TAGS.boot).map(([s, t]) => [`the boot tag of ${s}`, padTag(t)] as [string, Uint8Array]),
+    ...Object.entries(BLIND_TAGS).map(([s, t]) => [`the blind tag of ${s}`, padTag(t)] as [string, Uint8Array]),
+    ...Object.entries(SALT_TAGS).map(([s, t]) => [`the salt tag of ${s}`, padTag(t)] as [string, Uint8Array]),
+    ['the grant origin tag', padTag(GRANT_ORIGIN_TAG)],
+    [`a reserved code (nea)`, padTag(`midnight:account:${recipe === 'device' ? 'device' : 'grant:id'}:nea:v1`)],
+    [`a reserved code (cdo)`, padTag(`midnight:account:${recipe === 'device' ? 'device' : 'grant:id'}:cdo:v1`)],
+    [`another version`, padTag(`midnight:account:${recipe === 'device' ? 'device' : 'grant:id'}:evm:v2`)],
+    ['a registered text (shorter than 32 bytes), space-padded', spacePadded(DESCRIPTOR_TAGS[recipe].jubjub)],
+    ['the zero tag', new Uint8Array(32)],
+    ['a random tag', rnd(32)],
+  ];
+  for (const [recipe, circuit, msg] of [['device', 'evm_k256_device_kind', 'evm_k256: not a registered device tag'],
+    ['grant-id', 'evm_k256_grantee_kind', 'evm_k256: not a registered grant-id tag']] as const) {
+    for (const [what, tag] of others(recipe)) {
+      refused('kinds', () => pc[circuit](tag), new RegExp(`: failed assert: ${msg}$`), `${what} as a ${recipe} tag`);
+      assert.equal(evmK256KindOf(recipe, tag), undefined, `the client's lookup refuses ${what} as a ${recipe} tag`);
+    }
+  }
+  // the account's readable registry is the shared module's
+  assert.deepEqual(JSON.stringify(pc.readable_arms(), (_k, v) => (v instanceof Uint8Array ? toHex(v) : typeof v === 'bigint' ? v.toString() : v)),
+    JSON.stringify(baseProbe.readable_arms(), (_k, v) => (v instanceof Uint8Array ? toHex(v) : typeof v === 'bigint' ? v.toString() : v)), "the account's readable_arms() == the descriptor module's");
+  ok('kinds');
+}
+console.log(`  ✓ kinds: ${EVM_K256_KIND_SCHEMES.length} enrolment kinds (${EVM_K256_KIND_SCHEMES.join(', ')}): the contract's evm_k256_kinds() == the client registry, tags registered and distinct, every type hash == the frozen file's, keccak256 of its string and the codec's, every scheme hash == keccak256 of its tag; the lookups find every tag and refuse every other candidate, the client agreeing (${tally.kinds.pass} checks, ${tally.kinds.refused} refusals)`);
+
 // ── Codec: the frozen vectors ──────────────────────────────────────────
 
 {
@@ -415,9 +500,9 @@ for (const name of ['passkey device with a zero RP hash', 'passkey removal targe
     const d = descriptorInput(v.args.descriptor);
     const A = { bytes: rnd(32) };
     const s = v.args.descriptor.scheme;
-    const pt = solArgs(d);
+    const pt = ed25519Args(d);
     for (const [e, c] of [[0n, 0n], [3n, 9n]] as [bigint, bigint][]) {
-      const [sk, se] = pc.evm_k256_sol_device_target(A, d, ...pt, e, c);
+      const [sk, se] = pc.evm_k256_ed25519_device_target(A, d, ...pt, e, c);
       const want = s === 'evm_k256' ? pc.derive_descriptor_entry_w52(d.tag, A, d.address, d.key2, e, c)
         : s === 'k256' ? pc.derive_descriptor_entry_w65(d.tag, A, d.key, d.key2, d.envelope, e, c)
         : s === 'p256' ? pc.derive_descriptor_entry_w117(d.tag, A, d.key, d.key2, d.rp_id_hash, d.origin, e, c)
@@ -438,8 +523,8 @@ for (const name of ['passkey device with a zero RP hash', 'passkey removal targe
     if (s === 'evm_k256' || s === 'sol_ed25519') assert.ok(eq(oh, pc.derive_grant_origin_hash_label(g.label)));
     else if (s === 'p256') assert.ok(eq(oh, pc.derive_grant_origin_hash_origin(g.origin)));
     else assert.ok(eq(oh, g.origin_hash));
-    const gpt = solArgs(g);
-    const [gsk, gsi] = pc.evm_k256_sol_grantee_target(A, g, oh, ...gpt);
+    const gpt = ed25519Args(g);
+    const [gsk, gsi] = pc.evm_k256_ed25519_grantee_target(A, g, oh, ...gpt);
     const want = s === 'evm_k256' ? pc.derive_descriptor_grant_id_w52(g.tag, A, g.address, g.key2, oh, g.slot)
       : s === 'k256' ? pc.derive_descriptor_grant_id_w65(g.tag, A, g.key, g.key2, g.envelope, oh, g.slot)
       : s === 'sol_ed25519' ? pc.derive_descriptor_grant_id_ed25519(g.tag, A, ...gpt, g.key2, oh, g.slot)[1]
@@ -573,8 +658,8 @@ console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (c
     ...Array.from({ length: 16 }, (_, i) => new Uint8Array(createHash('sha256').update(`b58/${i}`).digest()))]) {
     const b = base58Inputs(key);
     const t = baseText(baseProbe.base58_text_32([...key].map(BigInt), b.digits, b.carry, b.low, b.top) as bigint[]);
-    assert.equal(solanaKeyText(key).trimEnd(), t, 'the codec\'s base58 == the base circuit\'s');
-    assert.equal(solanaKeyText(key).length, 44);
+    assert.equal(ed25519Base58Text(key).trimEnd(), t, 'the codec\'s base58 == the base circuit\'s');
+    assert.equal(ed25519Base58Text(key).length, 44);
     ok('labels');
   }
   for (const v of FROZEN.vectors.filter((x: any) => x.typedData.primaryType === 'IssueGrant')) {
@@ -614,7 +699,7 @@ console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (c
     const solTarget = (a.descriptor ?? a.grantee)?.scheme === 'sol_ed25519' ? (a.descriptor ?? a.grantee) : undefined;
     if (solTarget) {
       const shownKey = v.typedData.message.newDevice ?? v.typedData.message.target ?? v.typedData.message.grantee;
-      assert.equal(shownKey.publicKey, solanaKeyText(Buffer.from(solTarget.key, 'hex')), `${v.name}: the Solana key in base58`);
+      assert.equal(shownKey.publicKey, ed25519Base58Text(Buffer.from(solTarget.key, 'hex')), `${v.name}: the Solana key in base58`);
       ok('labels');
     }
   }

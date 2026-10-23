@@ -19,7 +19,7 @@
 import {
   evmK256KeyHint, bytesHint, leHint, evmK256CoinHint, evmK256Base58Hint,
 } from '../wallet/evm-k256-hints.js';
-import { solanaKeyInputs } from '../wallet/descriptors.js';
+import { ed25519KeyInputs } from '../wallet/descriptors.js';
 import { siteAmountLabelBytes, utcDateTimeInputs } from '../wallet/rendering.js';
 import type { SiteAmount } from '../wallet/evm-k256-codec.js';
 
@@ -84,8 +84,8 @@ const GRANTEE: Record<string, [number, number]> = {
 };
 
 const kept = (x: unknown) => !!x && typeof x === 'object' && (x as any)[KEEP_HINTS] === true;
-// the circuits whose arguments 1..3 are a Solana key's point and its two byte inputs
-const SOL_ARGS = new Set(['add_device_with_evm_k256', 'remove_device_with_evm_k256', 'issue_grant_with_evm_k256', 'revoke_grant_with_evm_k256']);
+// the circuits whose arguments 1..3 are an Ed25519 key's point and its two byte inputs
+const ED25519_ARGS = new Set(['add_device_with_evm_k256', 'remove_device_with_evm_k256', 'issue_grant_with_evm_k256', 'revoke_grant_with_evm_k256']);
 
 /** `args` with every hint of an `evm_k256` circuit recomputed from the
  *  executed values (other circuits: unchanged). */
@@ -105,10 +105,10 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
   // the site choices of the label the call carries (its operation hint), else the test site
   const passed: any = args.length > arity ? args[arity] : undefined;
   const site = siteOf(passed?.label);
-  if (SOL_ARGS.has(circuit)) {
+  if (ED25519_ARGS.has(circuit)) {
     // the byte inputs of the point the call executes (a point the client
     // check refuses keeps the inputs it was passed)
-    const k = attempt(() => solanaKeyInputs(args[1] as { x: bigint; y: bigint }));
+    const k = attempt(() => ed25519KeyInputs(args[1] as { x: bigint; y: bigint }));
     if (k) { out[2] = k.pkBytes; out[3] = k.pkX; }
   }
   const keyHint = keyHintOf(ctx, auth.pk);
@@ -205,12 +205,12 @@ export function withExecutedHints(pc: any, ctx: HintContext, circuit: string, ar
 }
 
 // A descriptor's hints with the base58 inputs of the key bytes the call
-// executes (its `sol_bytes` argument, whatever key the descriptor names).
-const b58Of = (solBytes: unknown) => attempt(() => evmK256Base58Hint(u8s(solBytes))) ?? evmK256Base58Hint(new Uint8Array(32));
-const descriptorHintFor = (d: any, solBytes: unknown) =>
-  ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: b58Of(solBytes) });
-const granteeHintFor = (g: any, solBytes: unknown) =>
-  ({ key: bytesHint(g.key), key2: bytesHint(g.key2), origin: bytesHint(g.origin), label: bytesHint(g.label), b58: b58Of(solBytes) });
+// executes (its `ed_bytes` argument, whatever key the descriptor names).
+const b58Of = (edBytes: unknown) => attempt(() => evmK256Base58Hint(u8s(edBytes))) ?? evmK256Base58Hint(new Uint8Array(32));
+const descriptorHintFor = (d: any, edBytes: unknown) =>
+  ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: b58Of(edBytes) });
+const granteeHintFor = (g: any, edBytes: unknown) =>
+  ({ key: bytesHint(g.key), key2: bytesHint(g.key2), origin: bytesHint(g.origin), label: bytesHint(g.label), b58: b58Of(edBytes) });
 
 function keyHintOf(ctx: HintContext, pk: { x: bigint; y: bigint }) {
   const h = evmK256KeyHint(pk);
@@ -235,7 +235,7 @@ const clone = (v: any): any => (v instanceof Uint8Array ? new Uint8Array(v) : Ar
  *  the low bit of byte `at`;
  *  'carry' adds 256 to one byte and subtracts 1 from the next (the same
  *  number, a byte above 8 bits).
- *  A flipped Solana key encoding (argument 2 of the descriptor circuits) also
+ *  A flipped Ed25519 key encoding (argument 2 of the descriptor circuits) also
  *  carries the base58 inputs of the flipped bytes, as a forger would supply
  *  them: the base58 text then reads back to the bytes the call executes, and
  *  only the encoder's comparison with the point refuses them. */
@@ -247,7 +247,7 @@ export function forgeHints(pc: any, ctx: HintContext, circuit: string, args: unk
   const h: bigint[] = path.length ? root[path.at(-1)!] : root;
   if (mode === 'flip') {
     h[Math.min(at, h.length - 1)] ^= 1n;
-    if (where === 2 && SOL_ARGS.has(circuit) && path.length === 0) {
+    if (where === 2 && ED25519_ARGS.has(circuit) && path.length === 0) {
       const op: any = exact[exact.length - 1];
       const d: any = op.b58 ? op : op.target ?? op.grantee;
       d.b58 = b58Of(h);
