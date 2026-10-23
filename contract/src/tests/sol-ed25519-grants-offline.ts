@@ -189,7 +189,7 @@ for (const [scheme, g, idOf] of grantees) {
   const sc = baseScope({ read: true, readPk, rpIdHash: scheme === 'p256' ? pass.policy.rp_id_hash : Z32 });
   const nonce = sim.L().auth_nonce;
   const a = await sim.auth({ op: 'issue_grant', grantee: g, ...sc });
-  ok(G1, `${scheme}: the message (1690 bytes) shows the consequence and the grantee scheme`, a.message.length === 1690
+  ok(G1, `${scheme}: the message (1690 bytes) shows the consequence and the grantee scheme`, a.text.length === 1690 && a.message.length === 50 + 1690
     && a.text.includes('Consequence: lets the grantee key below spend from this account within these limits.\n') && a.text.includes(`Grantee scheme: ${DESCRIPTOR_TAGS['grant-id'][scheme as 'k256']}`));
   await sim.call('issue_grant_with_sol_ed25519', ...issueArgs(g, sc, a));
   const id = idOf();
@@ -215,7 +215,7 @@ const G2 = '2 rules';
     const sh = m.showArgs as any[];
     const hexOf = sim.shown({ op: 'issue_grant', grantee: exec, ...sc }).at(-1);
     const a = await sim.auth({ op: 'issue_grant', grantee: exec, ...sc });
-    return sim.call('issue_grant_with_sol_ed25519', ...issueArgs(exec, sc, { ...a, sig: (await sim.owner.signBytes(m.bytes)).sig, showArgs: [...sh.slice(0, -1), hexOf] }, key));
+    return sim.call('issue_grant_with_sol_ed25519', ...issueArgs(exec, sc, { ...a, sig: (await sim.owner.signApproval(m.bytes)).sig, showArgs: [...sh.slice(0, -1), hexOf] }, key));
   };
   {
     const other = (await newDevice()).dev.key;
@@ -261,7 +261,7 @@ const G2 = '2 rules';
   // client, under a valid signature over the contract's own bytes
   const circuitAuth = async (o: any) => {
     const { bytes, showArgs } = solDeviceMessageCircuit(sim.owner.key, sim.ctx(), SITE, o);
-    return { ...(await sim.auth({ op: 'revoke_all_grants' })), sig: (await sim.owner.signBytes(bytes)).sig, showArgs, message: bytes };
+    return { ...(await sim.auth({ op: 'revoke_all_grants' })), ...(await sim.owner.signApproval(bytes)), showArgs };
   };
   // The circuit's first two issue rules (the read key) are the
   // renderer's first too, with the circuit's messages; past the client, the
@@ -385,7 +385,7 @@ const unsh = async (s: Sim, n: bigint, to: Uint8Array, spent: bigint, a?: SolEd2
 {
   const before = twinSim.L();
   const a1 = await authoriseSolGrantee(T.device, gctx(twinSim), SITE, { op: 'withdraw_unshielded_with_grant', amount: amt(200n), recipient: pin });
-  ok(G4, 'the grantee message (726 bytes) shows the grant label, slot, issued-at nonce and use nonce', a1.message.length === 726
+  ok(G4, 'the grantee message (726 bytes) shows the grant label, slot, issued-at nonce and use nonce', a1.text.length === 726 && a1.message.length === 50 + 726
     && a1.text.includes('Role: grantee of a scoped grant\n') && a1.text.includes('Grant label: Example dApp') && a1.text.includes('Grant use nonce: 0'));
   await unsh(twinSim, 200n, pin, 0n, a1);
   const after = twinSim.L();
@@ -718,7 +718,7 @@ await refused(G1, 'a sol_ed25519 grantee whose key is not an Ed25519 point: the 
 const G9 = '9 module asserts';
 {
   const signedOver = async (bytes: Uint8Array, showArgs: unknown[]) =>
-    ({ ...(await sim.auth({ op: 'revoke_all_grants' })), sig: (await sim.owner.signBytes(bytes)).sig, showArgs, message: bytes });
+    ({ ...(await sim.auth({ op: 'revoke_all_grants' })), ...(await sim.owner.signApproval(bytes)), showArgs });
   const msgOf = (o: any) => solDeviceMessageCircuit(sim.owner.key, sim.ctx(), SITE, o);
   const before = sim.snapshot();
   const sc = baseScope();
@@ -749,7 +749,7 @@ const G9 = '9 module asserts';
   const a0 = await sim.auth({ op: 'issue_grant', grantee: g0, ...sc });
   const blank = solMessageBytes(a0.text.replace('\nGrantee slot: 0  \n', '\nGrantee slot:    \n'));
   const sh0 = msgOf({ op: 'issue_grant', grantee: g0, ...sc }).showArgs as any[];
-  ok(G9, 'setup: the blank-slot text differs from the honest one only in the slot line', blank.length === a0.message.length && !eq(blank, a0.message));
+  ok(G9, 'setup: the blank-slot text differs from the honest one only in the slot line', blank.length === a0.text.length && !eq(blank, a0.message.subarray(50)));
   await refused(G9, "grantee slot 0 shown as three spaces: the module's empty-decimal check", 'runtime', /empty decimal/,
     async () => sim.call('issue_grant_with_sol_ed25519', ...issueArgs(g0, sc, await signedOver(blank, [{ ...sh0[0], slot: [32n, 32n, 32n] }, ...sh0.slice(1)]))));
   ok(G9, 'every refusal left the state unchanged', sim.L().auth_nonce === ledger(before.state).auth_nonce);

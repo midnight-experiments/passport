@@ -3,13 +3,21 @@
 // account.compact. All custody, grant-scope and recovery mutations use the
 // existing shared chips.
 //
-// SCHEME. RFC 8032 PureEdDSA over edwards25519 (Ed25519), the scheme of a
-// Solana wallet's `signMessage` (Phantom and others): the wallet signs the raw
-// bytes it is given, with no prefix. Verification is the Ed25519 core's
-// `ed25519_verify<#n>` (modules/Ed25519Core: the standard library's
-// `ed25519Verify<#n>` with R's and A's encodings taken from checked inputs
-// instead of byte explosions, and R = O refused, which the standard library
-// accepts).
+// SCHEME. RFC 8032 PureEdDSA over edwards25519 (Ed25519), the scheme of
+// every Solana wallet. A wallet signs the approval text in one of two
+// formats (modules/SolanaFormats), each a fixed 50-byte head followed by the
+// same text: raw, what `signMessage` signs (Phantom and other software
+// wallets), the head being a line that names the format; or off-chain
+// message v1, what hardware wallets (Ledger, Trezor) and
+// `signOffchainMessage` sign, the head being the Solana off-chain envelope
+// that names the signing key. The authorisation's flag `offchain` selects
+// the format. It is a private input and never disclosed, so one circuit
+// serves both formats and the chain does not learn which kind of wallet
+// signed; a device is its key, whatever the format it signs in (IDENTITY
+// below). Verification is the Ed25519 core's `ed25519_verify<T>`
+// (modules/Ed25519Core: the standard library's `ed25519Verify<#n>` with R's
+// and A's encodings taken from checked inputs instead of byte explosions,
+// and R = O refused, which the standard library accepts), over head || text.
 //
 // IDENTITY. The device is the wallet's public key A. The circuit takes A as a
 // `Curve25519Point`, whose type admits only points of the prime-order
@@ -51,6 +59,7 @@
 // ---------------------------------------------------------------------------
 
 import "modules/Ed25519Core";
+import "modules/SolanaFormats";
 import "modules/WalletArmDescriptors";
 import "modules/WalletArmRendering";
 
@@ -174,13 +183,16 @@ export circuit activate_initial_device_with_sol_ed25519(
 // x-coordinate little-endian; `r_bytes` and `r_x` the same for R (for an
 // accepted signature, `r_bytes` is its first 32 bytes). Each pair is checked
 // against its point by the Ed25519 core's checked encoding, so no byte is
-// taken out of a point in-circuit.
+// taken out of a point in-circuit. `offchain` names the format the signature
+// is in (false: raw `signMessage`; true: off-chain message v1); it selects
+// the signed head and is never disclosed.
 struct SolEd25519Auth {
   pk:          Curve25519Point;
   pk_bytes:    Vector<32, Uint<8>>;
   pk_x:        Vector<32, Uint<8>>;
   blind:       Bytes<32>;
   use_counter: Uint<64>;
+  offchain:    Boolean;
   sig:         Ed25519Signature;
   r_bytes:     Vector<32, Uint<8>>;
   r_x:         Vector<32, Uint<8>>;
@@ -196,10 +208,12 @@ struct SolEd25519Auth {
 //
 // Then, in upstream p256's order: membership of the device's current
 // single-use entry (bound to that key and the account's blind),
-// verification by the Ed25519 core's ed25519_verify<n> (cofactorless
-// [s]B == R + [k]A with k = SHA-512(R || A || msg) mod L, A's encoding the
-// key derived above; it refuses A = O and R = O; s < L and the prime-order
-// subgroup for A and R hold by type), the entry rolled to its successor,
+// verification by the Ed25519 core's ed25519_verify over the text in the
+// format `auth.offchain` selects (modules/SolanaFormats: cofactorless
+// [s]B == R + [k]A with k = SHA-512(R || A || head || text) mod L, A's
+// encoding the key derived above, which is also the off-chain envelope's
+// signer; it refuses A = O and R = O; s < L and the prime-order subgroup for
+// A and R hold by type), the entry rolled to its successor,
 // auth_nonce advanced, round bumped. Any failed assert aborts the
 // whole call. Returns the caller's post-roll entry (remove_device's S13
 // guard).
@@ -212,10 +226,11 @@ circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
 ): Bytes<32> {
   const [key, current, successor] = derive_signer_entries_ed25519(kernel.self(), auth.pk, auth.pk_bytes, auth.pk_x, auth.blind,
     device_epoch, auth.use_counter);
-  const msg = sol_device_message<t, b, n>(kernel.self(), auth.pk_bytes, auth_nonce, title, body, show, frame);
+  const text = sol_device_message<t, b, n>(kernel.self(), auth.pk_bytes, auth_nonce, title, body, show, frame);
   const entry = disclose(current);
   assert(devices.member(entry), "unknown device entry");
-  assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
+  const message = solana_signed_message<n>(auth.offchain, key, text);
+  assert(ed25519_verify<[Bytes<18>, Bytes<32>, Bytes<n>]>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
   devices.remove(entry);
   const next = disclose(successor);
   devices.insert(next);
@@ -578,18 +593,21 @@ export circuit recover_cancel_with_sol_ed25519(
 // shielded, 3 shielded to a contract), and the values the scope checks. The
 // MIP's steps in order: identity (the record by id), liveness (active,
 // epoch, generation, expiry), the spend scope (upstream's check_spend_scope),
-// then the signature (the Ed25519 core's ed25519_verify, which also refuses
-// R = O), the record written back with its nonce advanced and the new spent
-// commitment, and round bumped.
+// then the signature over the text in the format `auth.offchain` selects
+// (modules/SolanaFormats; the Ed25519 core's ed25519_verify, which also
+// refuses R = O), the record written back with its nonce advanced and the new
+// spent commitment, and round bumped. As for a device, `offchain` is private
+// and never disclosed.
 struct SolEd25519GrantAuth {
   pk:       Curve25519Point;
   pk_bytes: Vector<32, Uint<8>>;
   pk_x:     Vector<32, Uint<8>>;
   blind:    Bytes<32>;
-  label:   Bytes<32>;
-  sig:     Ed25519Signature;
-  r_bytes: Vector<32, Uint<8>>;
-  r_x:     Vector<32, Uint<8>>;
+  label:    Bytes<32>;
+  offchain: Boolean;
+  sig:      Ed25519Signature;
+  r_bytes:  Vector<32, Uint<8>>;
+  r_x:      Vector<32, Uint<8>>;
 }
 
 circuit require_grant_with_sol_ed25519<#t, #b, #n>(
@@ -625,8 +643,9 @@ circuit require_grant_with_sol_ed25519<#t, #b, #n>(
                  : gr.scope.op_withdraw_shielded_to_contract;
   const new_spent = check_spend_scope(gr, admitted, scope_salt, obj_color, recipient_kind, pinned_recipient,
     max_coin_value, amount, spent_prev, op, recipient_bytes);
-  const msg = sol_grantee_message<t, b, n>(self_addr, auth.pk_bytes, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
-  assert(ed25519_verify<n>(msg, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
+  const text = sol_grantee_message<t, b, n>(self_addr, auth.pk_bytes, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
+  const message = solana_signed_message<n>(auth.offchain, key, text);
+  assert(ed25519_verify<[Bytes<18>, Bytes<32>, Bytes<n>]>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
   grants.insert(id, GrantRecord {
     epoch:        gr.epoch,
     gen:          gr.gen,
@@ -745,10 +764,12 @@ export circuit withdraw_shielded_to_contract_with_grant_sol_ed25519(
 
 // ── Signed messages, format sol v1 ──────────────────────────────────────────
 //
-// A Solana wallet's `signMessage` signs the raw bytes it is given, so the
-// message IS the approval screen. Every gated circuit renders its message
-// from the values it executes on, and verifies the wallet's signature over
-// exactly those bytes. The grammar:
+// Every gated circuit renders its approval text from the values it executes
+// on, and verifies the wallet's signature over exactly that text after the
+// head of the authorisation's format (modules/SolanaFormats), so the text is
+// what the wallet shows: a raw `signMessage` wallet shows the head's line,
+// then the text; an off-chain wallet shows the text of its envelope. The
+// text's grammar:
 //
 //   Midnight Passport approval (sol v1)       circuit-fixed first line
 //   Operation: <title>                        fixed per circuit
@@ -790,14 +811,19 @@ export circuit withdraw_shielded_to_contract_with_grant_sol_ed25519(
 // bytes; base58 digits and dates by the base rendering module), so for each
 // value exactly one input is valid and none adds freedom.
 //
-// No message can be read as a Solana transaction or off-chain message:
-// every message starts with "Midn" (77 105 100 110): as a legacy
-// message header that claims 110 account keys, i.e. at least
-// 3 + 1 + 110*32 + 32 + 1 = 3,557 bytes, and every message here is shorter
-// (and such a header never sanitizes: 105 read-only signers of 77); the
-// first byte is below 0x80 (no versioned message) and is not 0xff (no
-// off-chain envelope); as a signed transaction it would carry 77 signatures.
-// The length table is in SOL-ED25519.md.
+// No raw message (the raw head, then the text) can be read as a Solana
+// transaction or off-chain message: it starts with "Midn" (77 105 100 110),
+// as a legacy message header that claims 110 account keys, i.e. at least
+// 3 + 1 + 110*32 + 32 + 1 = 3,557 bytes, and every raw message here is
+// shorter, at most 50 + 1,690 = 1,740 bytes (and such a header never
+// sanitizes: 105 read-only signers of 77); the first byte is below 0x80 (no
+// versioned message) and is not 0xff (no off-chain envelope); as a signed
+// transaction it would carry 77 signatures. An off-chain message is the
+// off-chain envelope by design: it starts with the signing domain
+// 0xff "solana offchain", which parses as no Solana message or transaction
+// (as a message, a versioned message of version 127, which does not exist;
+// as a transaction, a count of 14,847 signatures, far more bytes than any
+// message here). The length table is in SOL-ED25519.md.
 
 // Every message: the site's label (32 characters, zero-padded; visible words
 // separated by single spaces) and the decimal digits of the freshness nonce

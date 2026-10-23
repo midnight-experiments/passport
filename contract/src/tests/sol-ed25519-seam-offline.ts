@@ -10,7 +10,12 @@
 // verification's checked inputs (R's encoding and R's x bytes) forged under a
 // signature made over the forged encoding: each refused by its own check. The
 // positive control lands first and the state transition is checked (the
-// entry rolls, auth_nonce and round advance, last-device rule).
+// entry rolls, auth_nonce and round advance, last-device rule). The two
+// signing formats: the same key and blind authorise in either; from one
+// state the two calls leave equal public transcripts; a signature in one
+// format is refused in the other; the old raw bytes (the text alone), an
+// off-chain envelope naming another signer, an off-chain message v0 and a
+// head with one byte changed are refused in both.
 //
 // The constraint-level half of the same matrix is `npm run test:sol-ed25519`
 // (src/tests/sol-ed25519-prover.ts, section `seam`). No test reads the
@@ -34,7 +39,7 @@ import {
   ED25519_L, SolEd25519Device, authoriseSolDevice, decodeSolSignature, deriveSolBlind, solSoftwareSigner,
   solDeviceMessageCircuit, solEd25519AuthArgs, solSignatureHints, type SolEd25519Authorisation,
 } from '../wallet/signer-sol-ed25519.js';
-import { nibblesOf, solFrameNibbles, solShow } from '../wallet/sol-ed25519-message.js';
+import { SOL_OFFCHAIN_DOMAIN, SOL_RAW_HEAD, assertSolOffchainMessage, nibblesOf, solFrameNibbles, solShow, solSignedMessage } from '../wallet/sol-ed25519-message.js';
 import { solBlindMessage } from '../wallet/signer-sol-ed25519.js';
 
 interface Case { group: string; name: string; verdict: 'PASS' | 'FAIL'; layer?: string; detail?: string }
@@ -92,7 +97,7 @@ const after = ledgerOf(sim.state);
 ok(G1, 'rotate lands: enc_key set, auth_nonce +1, round +1, entry rolled 0 -> 1, one device', hex(after.enc_key) === hex(k1)
   && after.auth_nonce === before.auth_nonce + 1n && after.round > before.round && after.device_count === 1n
   && !after.devices.member(devA.entryAt(sim.bytes, after.device_epoch, 0n)) && after.devices.member(devA.entryAt(sim.bytes, after.device_epoch, 1n)));
-ok(G1, 'the signed message is the contract\'s own bytes (491, format sol v1)', a1.message.length === 491 && a1.text.startsWith('Midnight Passport approval (sol v1)\nOperation: Rotate the encryption key\n'));
+ok(G1, 'the signed message is the raw head, then the contract\'s own text (50 + 491, format sol v1)', a1.message.length === 50 + 491 && Buffer.from(a1.message.subarray(0, 50)).toString('latin1') === SOL_RAW_HEAD && Buffer.from(a1.message.subarray(50)).toString('latin1') === a1.text && a1.text.startsWith('Midnight Passport approval (sol v1)\nOperation: Rotate the encryption key\n'));
 
 // An attacker who changes executed values supplies display inputs that are
 // CONSISTENT with them (otherwise the display check refuses first); the
@@ -168,7 +173,7 @@ const G3b = '3b cross-arm replay';
     const { sig } = await devA.signBytes(bytes);
     await refused(G3b, name, 'runtime', /invalid signature/, () => exec(sim, k2, withSig(a2, sig)));
   }
-  ok(G3b, 'positive control: the same key\'s sol v1 approval for that call is a different message', !Buffer.from(a2.message).equals(Buffer.from(kCh)) && a2.message.length === 491);
+  ok(G3b, 'positive control: the same key\'s sol v1 approval for that call is a different message', !Buffer.from(a2.message).equals(Buffer.from(kCh)) && a2.message.length === 50 + 491);
 }
 
 // ── 4. Degenerate signatures ────────────────────────────────────────────────
@@ -282,6 +287,67 @@ const G5 = '5 verification inputs';
     try { await call(simC, 'rotate_enc_key_with_sol_ed25519', kC, ...argsWith(signedOver(n, n.e), n.e, n.x)); } catch (e: any) { why = String(e?.message ?? e).slice(0, 200); }
     ok(G5, "a signature from the test's own nonce over the honest encoding lands after every refusal", !why && ledgerOf(simC.state).auth_nonce === 1n && hex(ledgerOf(simC.state).enc_key) === hex(kC), why || undefined);
   }
+}
+
+
+// ── 6. The two signing formats ──────────────────────────────────────────────
+// The same key and blind (one enrolled device) sign the same approval text
+// raw (the raw head, then the text) or as an off-chain message v1 (the
+// envelope naming the key, then the text); the authorisation's private flag
+// `offchain` names the format.
+const G6 = '6 signing formats';
+{
+  const devOff = new SolEd25519Device({ publicKey: devA.key, blind: devA.blind, sign: signerA.sign, format: 'offchain' });
+  const simF = await deploy(devA);
+  const kF = rnd(32);
+  const aRaw = await authoriseSolDevice(devA, ctxOf(simF), SITE, { op: 'rotate_enc_key', newKey: kF }, 0n);
+  const aOff = await authoriseSolDevice(devOff, ctxOf(simF), SITE, { op: 'rotate_enc_key', newKey: kF }, 0n);
+  ok(G6, 'the two authorisations carry the same text and differ only in the flag and the signature', aRaw.text === aOff.text && !aRaw.offchain && aOff.offchain
+    && JSON.stringify(aRaw.showArgs, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) === JSON.stringify(aOff.showArgs, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))
+    && Buffer.from(aOff.message.subarray(0, 18)).toString('hex') === 'ff736f6c616e61206f6666636861696e0101' && Buffer.from(aOff.message.subarray(18, 50)).equals(Buffer.from(devA.key)));
+  // one call from the state, never written back
+  const once = async (a: SolEd25519Authorisation) => {
+    const ctx = createCircuitContext({ circuitId: 'rotate_enc_key_with_sol_ed25519', contractAddress: simF.address, coinPublicKeyOrZswapState: { bytes: new Uint8Array(32) },
+      contractState: simF.state, privateState: simF.ps, time: 1_800_000_000 } as any);
+    return simF.contract.impureCircuits.rotate_enc_key_with_sol_ed25519(ctx, kF, ...authArgs(a));
+  };
+  const J = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? x.toString() : x instanceof Uint8Array ? hex(x) : x));
+  let rRaw: any, rOff: any;
+  try { rRaw = await once(aRaw); ok(G6, 'raw: the call lands', true); } catch (e: any) { ok(G6, 'raw: the call lands', false, String(e?.message ?? e).slice(0, 200)); }
+  try { rOff = await once(aOff); ok(G6, 'off-chain message v1: the call lands (same key, same blind, same entry)', true); } catch (e: any) { ok(G6, 'off-chain message v1: the call lands (same key, same blind, same entry)', false, String(e?.message ?? e).slice(0, 200)); }
+  if (rRaw && rOff) {
+    const pt = (r: any) => J(r.context.callProofDataTrace.at(-1).publicTranscript);
+    const out = (r: any) => J(r.context.callProofDataTrace.at(-1).output);
+    const after = (r: any) => J(ledger(r.context.callContext.currentQueryContext.state));
+    ok(G6, 'from one state, the two formats leave equal public transcripts, outputs, gas and ledger states', pt(rRaw) === pt(rOff) && out(rRaw) === out(rOff)
+      && J(rRaw.gasCost) === J(rOff.gasCost) && after(rRaw) === after(rOff), `ops ${rRaw.context.callProofDataTrace.at(-1).publicTranscript.length}`);
+  }
+  const both = async (name: string, a: SolEd25519Authorisation) => {
+    for (const offchain of [false, true]) await refused(G6, `${name}, presented as ${offchain ? 'off-chain' : 'raw'}`, 'runtime', /invalid signature/, () => once({ ...a, offchain }));
+  };
+  await refused(G6, 'the raw signature presented as off-chain (same key, validly enrolled device)', 'runtime', /invalid signature/, () => once({ ...aRaw, offchain: true }));
+  await refused(G6, 'the off-chain signature presented as raw (same key, validly enrolled device)', 'runtime', /invalid signature/, () => once({ ...aOff, offchain: false }));
+  const sigOver = async (bytes: Uint8Array) => decodeSolSignature(await signerA.sign(bytes));
+  const text = new Uint8Array(Buffer.from(aRaw.text, 'latin1'));
+  const otherKey = solSoftwareSigner(rnd(32)).publicKey;
+  const cat = (...p: Uint8Array[]) => { const o = new Uint8Array(p.reduce((t, x) => t + x.length, 0)); let i = 0; for (const x of p) { o.set(x, i); i += x.length; } return o; };
+  await both('the old raw bytes (the text alone) signed by the key', { ...aRaw, sig: await sigOver(text) });
+  const another = cat(SOL_OFFCHAIN_DOMAIN, Uint8Array.of(1, 1), otherKey, text);
+  await refused(G6, 'an off-chain envelope naming another signer: the client refuses to build or accept it', 'client', /names another signer/, () => assertSolOffchainMessage(another, devA.key));
+  await both('an off-chain envelope naming another signer, signed by the key', { ...aRaw, sig: await sigOver(another) });
+  const v0 = cat(SOL_OFFCHAIN_DOMAIN, Uint8Array.of(0), new Uint8Array(32), Uint8Array.of(0, 1), devA.key, Uint8Array.of(text.length & 0xff, text.length >> 8), text);
+  await refused(G6, 'an off-chain message v0: the client refuses it', 'client', /version 0/, () => assertSolOffchainMessage(v0, devA.key));
+  await both('an off-chain message v0 of the text, signed by the key', { ...aRaw, sig: await sigOver(v0) });
+  const rawFlip = solSignedMessage('raw', devA.key, text); rawFlip[20] ^= 0x01;
+  await both('the raw head with one byte changed, signed by the key', { ...aRaw, sig: await sigOver(rawFlip) });
+  const offVer = solSignedMessage('offchain', devA.key, text); offVer[16] = 0;
+  await both('the off-chain head with version 0, signed by the key', { ...aRaw, sig: await sigOver(offVer) });
+  const offDom = solSignedMessage('offchain', devA.key, text); offDom[3] ^= 0x20;
+  await both('the off-chain head with a signing-domain byte changed, signed by the key', { ...aRaw, sig: await sigOver(offDom) });
+  await refused(G6, 'off-chain: another new key at execution (consistent display inputs)', 'runtime', /invalid signature/, () => exec(simF, rnd(32), aOff));
+  await refused(G6, 'off-chain: a flipped S bit', 'runtime', /invalid signature/, () => once({ ...aOff, sig: { r: aOff.sig.r, s: aOff.sig.s ^ 1n } }));
+  await rotate(simF, kF, aOff);
+  ok(G6, 'the off-chain approval lands after every refusal (state untouched by the refusals)', hex(ledgerOf(simF.state).enc_key) === hex(kF) && ledgerOf(simF.state).auth_nonce === 1n);
 }
 
 
