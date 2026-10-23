@@ -223,7 +223,7 @@ const INVALID = 'invalid signature';
 const GINVALID = 'invalid grant signature';
 const UNKNOWN = 'unknown device entry';
 const BOOT = 'boot commitment mismatch';
-const RID = 'R is the identity';
+const RID = 'ed25519: R is the identity';
 const HEXD = 'display: hex digits do not match the value';
 const DIGITS = 'display: digits do not match the value';
 const CLAIM = 'display: the site amount label does not match the value';
@@ -555,8 +555,8 @@ const counterIn = (a: LocalAccount, d: Dev) => { const l = ledgerOf(a); for (let
 const withShow = (x: any, showArgs: unknown[]) => ({ ...x, showArgs });
 const leInt = (b: Uint8Array) => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
 /** A signature with R = O for which [s]B == R + [k]A holds: s = k a mod L (a
- *  the key's secret scalar, from its seed), so only the seam's R != O assert
- *  can refuse it. */
+ *  the key's secret scalar, from its seed), so only the Ed25519 core's R != O
+ *  assert can refuse it. */
 const rIdentityFor = (seed: Uint8Array, key: Uint8Array) => (message: Uint8Array) => {
   const h = sha512(seed).slice(0, 32); h[0] &= 248; h[31] &= 127; h[31] |= 64;
   const a = leInt(h) % sol.ED25519_L;
@@ -2080,12 +2080,13 @@ async function sectionHints() {
     // y + p for y below 19 stays below 2^255, so it is a second encoding with
     // the sign bit clear. Every curve point with y below 19 other than the
     // identity has a torsion component, so for R it is reachable only as
-    // R = O (y = 1), which the seam's R != O refuses first; with that assert
-    // bypassed the y check refuses it too.
+    // R = O (y = 1). The core's y check refuses it first (R != O reads the
+    // checked x bytes after the encoding check); with that check bypassed,
+    // R != O refuses it too.
     const e = le(1n + P);
     const k = leInt(sha512(new Uint8Array([...e.map((x) => Number(x)), ...device.key, ...a1.message]))) % L;
     await negative('hints', "R = O with R's encoding as y + p (y = 1, below 19), signed over that encoding: R != O and the y check both refuse", A0, ROTATE,
-      call({ r: { x: 0n, y: 1n }, s: (k * secret) % L }, e, le(0n)), RID, [RID, Y], control);
+      call({ r: { x: 0n, y: 1n }, s: (k * secret) % L }, e, le(0n)), Y, [RID, Y], control);
   }
   {
     const n = nonce(); const x = [...n.x]; x[7] ^= 1n;

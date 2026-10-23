@@ -6,8 +6,8 @@
 //
 // POINTS. A key A and a signature's commitment R are Curve25519Points, whose
 // type admits only points of the prime-order subgroup. The identity is the
-// one subgroup point that is not a usable key; in that subgroup it is the
-// only point whose x-coordinate is zero.
+// one subgroup point that is neither a usable key nor an accepted R; in that
+// subgroup it is the only point whose x-coordinate is zero.
 //
 // CHECKED ENCODINGS. A point's 32-byte RFC 8032 encoding is a checked input,
 // never computed from the point. Taking bytes out of a coordinate costs the
@@ -91,16 +91,21 @@ module Ed25519Core {
   //     circuit hashes `key` and multiplies `pk`, and does not compare the
   //     two again;
   //   - R's encoding is `r_bytes`, checked against R with `r_x` by
-  //     encode_public_key_ed25519 (the same check as the key's).
+  //     ed25519_checked_encoding (the same check as the key's), which also
+  //     returns whether R is the identity.
   // S below the group order and both points in the prime-order subgroup hold
-  // by type. R = O is not refused here (nor by the standard library's
-  // ed25519Verify): the caller refuses it.
+  // by type. R = O is refused here: strict verifiers refuse an R of small
+  // order (the identity has order 1), the standard library's ed25519Verify
+  // does not, and the circuit accepts only what a strict verifier accepts.
+  // The test reads R's checked x bytes, which the encoding check has already
+  // tied to R's x-coordinate, so R's x is decomposed into bytes once.
   // compact row optimization | Ed25519 verify from checked encodings | -15% rows
   export circuit ed25519_verify<#n>(msg: Bytes<n>, sig: Ed25519Signature, pk: Curve25519Point, key: Bytes<32>,
                                     r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
     assert((curve25519PointX(pk) as Bytes<32>) != pad(32, ""), "ed25519: the key is the identity");
     // compact row optimization | R encoding from checked signature bytes | -71% rows
-    const r_enc = encode_public_key_ed25519(sig.r, r_bytes, r_x);
+    const [r_enc, r_is_identity] = ed25519_checked_encoding(sig.r, r_bytes, r_x);
+    assert(!r_is_identity, "ed25519: R is the identity");
     // compact row optimization | signing key encoded once, shared with the verify | -48% rows
     const k = sha512<[Bytes<32>, Bytes<32>, Bytes<n>]>([r_enc, key, msg]) as Curve25519Scalar;
     return ecMulGenerator(sig.s) == ecAdd(sig.r, ecMul(pk, k));
