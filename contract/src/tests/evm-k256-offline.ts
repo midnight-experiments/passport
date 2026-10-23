@@ -17,6 +17,14 @@
 //                refused, per-index and per-network separation
 //   roster       record round trip; a record whose address is not its point's
 //                refused; restore finds accounts by testing entries
+//   domain       the fixed V1 domain: the contract's oracles, the client
+//                codec's constants and the frozen file's pinned values equal
+//                the specified type hash, separator and verifyingContract P,
+//                and each equals its own definition recomputed here (keccak256
+//                of the type string, of the name, of the version and of P's
+//                text; the separator from its four words); the digest oracle
+//                equals keccak256(0x19 0x01 || separator || h); the frozen
+//                type hashes equal keccak256 of the frozen type strings
 //   codec        the frozen vectors src/tests/vectors/evm-k256-v1.json,
 //                whose hashes viem computed: for every vector the client
 //                codec rebuilds the same typed data, and its digest, the
@@ -45,8 +53,10 @@ import { RECIPIENT_KIND_LABELS, K256_ENVELOPE_LABELS, recipientKindLabel, k256En
 import { NEVER_TEXT, NOT_APPLICABLE_TEXT, NO_WINDOW_TEXT, utcDateTimeInputs, base58Inputs, siteAmountLabelBytes } from '../wallet/rendering.js';
 import { padTag, evmAddressOf, evmChecksumAddress } from '../wallet/descriptors.js';
 import { blindMessageBytes } from '../wallet/blind.js';
-import { evmK256KeyHint, accountHashHint, bytesHint } from '../wallet/evm-k256-hints.js';
+import { evmK256KeyHint, bytesHint } from '../wallet/evm-k256-hints.js';
 import {
+  EIP712_V1_DOMAIN_NAME, EIP712_V1_DOMAIN_VERSION, EIP712_V1_VERIFYING_CONTRACT, EIP712_V1_VERIFYING_CONTRACT_TEXT, eip712V1Domain, domainSeparator,
+  typeHash, typesFor, encodeType,
   EVM_K256_PRIMARY_TYPES, EVM_K256_DESCRIPTOR_TYPES, typedDataDigest, typeString, siteLabelText, toHex,
   expiryText, passkeyRpWord, windowWord, amountLabelText, solanaKeyText, EVM_K256_PASSKEY_RP_POINTER, EVM_K256_WINDOW_POINTER,
   EVM_K256_AMOUNT_LABEL_PREFIX,
@@ -275,9 +285,69 @@ console.log(`  ✓ blind: deterministic, == derive_blind == SHA-256, recovered p
 }
 console.log(`  ✓ roster: record round trip; restore finds index 0 (counter 3) and index 2 (counter 0) only; ${tally.roster.refused} bad records refused`);
 
-// ── Codec: the frozen vectors ──────────────────────────────────────────
+// ── Domain: the fixed V1 domain ───────────────────────────────────────────
 
 const FROZEN = JSON.parse(fs.readFileSync(new URL(`./vectors/${VECTOR_FILE}`, import.meta.url), 'utf8'));
+{
+  // The specified values: EIP712Domain(string name,string version,address
+  // verifyingContract) with name "Midnight Passport", version "1" and P.
+  const SPEC = {
+    name: 'Midnight Passport', version: '1', verifyingContract: '0x596e089eF2D7308208B9e8f7e1A147942a84104F',
+    verifyingContractText: 'midnight:passport:evm:v1',
+    typeString: 'EIP712Domain(string name,string version,address verifyingContract)',
+    typeHash: '0x91ab3d17e3a50a9d89e63fd30b92be7f5336b03b287bb946787a83a9d62a2766',
+    separator: '0xc199a56c83cc5d0377e7f261c33491d1ee5fa301de75f83dfb8bc32a21e08ad8',
+  };
+  const D = FROZEN.domain;
+  for (const k of Object.keys(SPEC) as (keyof typeof SPEC)[]) assert.equal(D[k], SPEC[k], `the frozen domain's ${k} == the specified value`);
+  ok('domain', Object.keys(SPEC).length);
+  // the contract's oracles
+  assert.equal(toHex(pc.eip712_v1_domain_type_hash()), SPEC.typeHash, 'contract: the domain type hash');
+  assert.equal(toHex(pc.eip712_v1_name_hash()), D.nameHash, 'contract: the name hash');
+  assert.equal(toHex(pc.eip712_v1_version_hash()), D.versionHash, 'contract: the version hash');
+  assert.equal(evmChecksumAddress(pc.eip712_v1_verifying_contract()), SPEC.verifyingContract, 'contract: P');
+  assert.equal(toHex(pc.eip712_v1_domain_separator()), SPEC.separator, 'contract: the separator');
+  ok('domain', 5);
+  // each value from its definition
+  const utf8 = (t: string) => new TextEncoder().encode(t);
+  const P = keccak_256(utf8(SPEC.verifyingContractText)).subarray(12);
+  assert.equal(toHex(keccak_256(utf8(SPEC.typeString))), SPEC.typeHash, 'the type hash is keccak256 of the type string');
+  assert.equal(toHex(keccak_256(utf8(SPEC.name))), D.nameHash, 'the name hash is keccak256 of the name');
+  assert.equal(toHex(keccak_256(utf8(SPEC.version))), D.versionHash, 'the version hash is keccak256 of the version');
+  assert.equal(evmChecksumAddress(P), SPEC.verifyingContract, 'P is the low 20 bytes of keccak256 of its text');
+  const words = new Uint8Array(128);
+  words.set(Buffer.from(SPEC.typeHash.slice(2), 'hex'), 0); words.set(Buffer.from(D.nameHash.slice(2), 'hex'), 32);
+  words.set(Buffer.from(D.versionHash.slice(2), 'hex'), 64); words.set(P, 108);
+  assert.equal(toHex(keccak_256(words)), SPEC.separator, 'the separator is keccak256(type hash || name hash || version hash || 12 zero bytes || P)');
+  ok('domain', 5);
+  // the client codec
+  assert.deepEqual([EIP712_V1_DOMAIN_NAME, EIP712_V1_DOMAIN_VERSION, EIP712_V1_VERIFYING_CONTRACT, EIP712_V1_VERIFYING_CONTRACT_TEXT],
+    [SPEC.name, SPEC.version, SPEC.verifyingContract, SPEC.verifyingContractText], "the codec's domain constants");
+  assert.deepEqual(eip712V1Domain(), { name: SPEC.name, version: SPEC.version, verifyingContract: SPEC.verifyingContract }, "the codec's domain");
+  assert.equal(toHex(domainSeparator(eip712V1Domain())), SPEC.separator, "the codec's separator");
+  const domainTypes = { EIP712Domain: typesFor('RevokeAllGrants').EIP712Domain };
+  assert.equal(encodeType('EIP712Domain', domainTypes), SPEC.typeString, "the codec's domain type string");
+  ok('domain', 4);
+  // the digest oracle
+  for (let i = 0; i < 8; i++) {
+    const h = i === 0 ? new Uint8Array(32) : i === 1 ? new Uint8Array(32).fill(0xff) : rnd(32);
+    const pre = new Uint8Array(66); pre.set([0x19, 0x01], 0); pre.set(Buffer.from(SPEC.separator.slice(2), 'hex'), 2); pre.set(h, 34);
+    assert.equal(toHex(pc.eip712_v1_digest(h)), toHex(keccak_256(pre)), 'contract: digest == keccak256(0x19 0x01 || separator || h)');
+    ok('domain');
+  }
+  // the struct type hashes (one per primary type and nested descriptor type)
+  assert.deepEqual(Object.keys(FROZEN.typeHashes).sort(), Object.keys(FROZEN.typeStrings).sort(), 'a type hash for every type string');
+  for (const [k, str] of Object.entries(FROZEN.typeStrings as Record<string, string>)) {
+    const [p, n] = k.split('/');
+    assert.equal(toHex(keccak_256(utf8(str))), FROZEN.typeHashes[k], `${k}: the type hash is keccak256 of the type string`);
+    assert.equal(toHex(typeHash(p, typesFor(p, n))), FROZEN.typeHashes[k], `${k}: the codec's type hash`);
+    ok('domain');
+  }
+}
+console.log(`  ✓ domain: the fixed V1 domain's type hash ${FROZEN.domain.typeHash.slice(0, 10)}…, separator ${FROZEN.domain.separator.slice(0, 10)}… and P ${FROZEN.domain.verifyingContract} equal the specified values in the contract, the codec and the frozen file, and their definitions; the digest oracle; ${Object.keys(FROZEN.typeHashes).length} struct type hashes (${tally.domain.pass} checks)`);
+
+// ── Codec: the frozen vectors ──────────────────────────────────────────
+
 {
   assert.match(FROZEN.hashesBy, /^viem 2\./, 'the frozen hashes come from viem');
   const strip = (v: any) => { const { typedData, encodeType, domainSeparator, structHash, digest, ...input } = v; return input as VectorInput; };
@@ -289,10 +359,9 @@ const FROZEN = JSON.parse(fs.readFileSync(new URL(`./vectors/${VECTOR_FILE}`, im
     assert.equal(toHex(typedDataDigest(td)), v.digest, `${v.name}: client digest`);
     const sh = contractStructHash(pc, input);
     assert.equal(toHex(sh), v.structHash, `${v.name}: contract struct hash`);
-    const acct = Buffer.from(v.frame.account, 'hex');
-    assert.equal(toHex(pc.eip712_v1_domain_separator(acct, accountHashHint(acct))), v.domainSeparator, `${v.name}: contract domain separator`);
-    assert.equal(toHex(pc.eip712_v1_digest(acct, sh, accountHashHint(acct))), v.digest, `${v.name}: contract digest`);
-    assert.equal(v.typedData.domain.verifyingContract.toLowerCase(), '0x' + hex(pc.eip712_v1_verifying_contract(acct, accountHashHint(acct))), `${v.name}: verifyingContract`);
+    assert.deepEqual(v.typedData.domain, eip712V1Domain(), `${v.name}: the fixed V1 domain`);
+    assert.equal(toHex(pc.eip712_v1_domain_separator()), v.domainSeparator, `${v.name}: contract domain separator`);
+    assert.equal(toHex(pc.eip712_v1_digest(sh)), v.digest, `${v.name}: contract digest`);
     seen.add(v.typedData.primaryType + (Object.keys(v.typedData.types).find((t) => t in EVM_K256_DESCRIPTOR_TYPES) ?? ''));
     ok('codec vectors');
   }
@@ -434,8 +503,7 @@ console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (c
   const shown = (m: any, key: string): string[] => Object.entries(m ?? {}).flatMap(([k, x]) => (k === key ? [String(x)] : x && typeof x === 'object' ? shown(x, key) : []));
   const agree = (name: string, input: any) => {
     const td = typedDataOf(input);
-    const acct = Buffer.from(input.frame.account, 'hex');
-    assert.equal(toHex(typedDataDigest(td)), toHex(pc.eip712_v1_digest(acct, contractStructHash(pc, input), accountHashHint(acct))), `${name}: contract digest == codec digest`);
+    assert.equal(toHex(typedDataDigest(td)), toHex(pc.eip712_v1_digest(contractStructHash(pc, input))), `${name}: contract digest == codec digest`);
     return td;
   };
   for (let k = 0; k < RECIPIENT_KIND_LABELS.length; k++) {
@@ -535,8 +603,7 @@ console.log(`  ✓ codec: ${tally['codec vectors'].pass} frozen-vector checks (c
       const td = JSON.parse(JSON.stringify(base.typedData));
       td.message.windowLength = l.toString(); td.message.windowCap = c.toString(); td.message.window = EVM_K256_WINDOW_POINTER;
       input.args.scope.windowLen = l.toString(); input.args.scope.windowCap = c.toString();
-      const acct = Buffer.from(input.frame.account, 'hex');
-      assert.equal(toHex(typedDataDigest(td)), toHex(pc.eip712_v1_digest(acct, contractStructHash(pc, input), accountHashHint(acct))), `window ${l}/${c}: contract digest == the pointer message`);
+      assert.equal(toHex(typedDataDigest(td)), toHex(pc.eip712_v1_digest(contractStructHash(pc, input))), `window ${l}/${c}: contract digest == the pointer message`);
       ok('labels');
     }
   }

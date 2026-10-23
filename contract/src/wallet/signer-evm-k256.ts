@@ -362,8 +362,8 @@ export class EvmK256Device {
     const sig = parseEvmSignature(signature);
     const pk = recoverEvmPoint(typedDataDigest(typedData), sig);
     if (pk.x !== this.pk.x || pk.y !== this.pk.y) throw new Error('evm_k256: the signature does not recover to this device');
-    const m = typedData.message as { account: string; authNonce: string };
-    const hint = evmK256SeamHint(this.pk, unhex(m.account.replace(/^0x/, '')), typedDataDigest(typedData), BigInt(m.authNonce));
+    const m = typedData.message as { authNonce: string };
+    const hint = evmK256SeamHint(this.pk, typedDataDigest(typedData), BigInt(m.authNonce));
     return { arm: 'evm_k256', pk: this.pk, use_counter: useCounter, blind: this.blind, sig: { r: sig.r, s: sig.s }, hint };
   }
 
@@ -766,8 +766,8 @@ export class EvmK256Grantee {
     const sig = parseEvmSignature(await this.wallet.signTypedData(typedData));
     const pk = recoverEvmPoint(typedDataDigest(typedData), sig);
     if (pk.x !== this.pk.x || pk.y !== this.pk.y) throw new Error('evm_k256: the signature does not recover to this grantee');
-    const m = typedData.message as { account: string; issuedAt: string; grantNonce: string };
-    const hint = evmK256GrantSeamHint(this.pk, unhex(m.account.replace(/^0x/, '')), typedDataDigest(typedData), this.label, BigInt(m.issuedAt), BigInt(m.grantNonce));
+    const m = typedData.message as { issuedAt: string; grantNonce: string };
+    const hint = evmK256GrantSeamHint(this.pk, typedDataDigest(typedData), this.label, BigInt(m.issuedAt), BigInt(m.grantNonce));
     return { arm: 'evm_k256', pk: this.pk, blind: this.blind, label: this.label, sig: { r: sig.r, s: sig.s }, hint };
   }
 }

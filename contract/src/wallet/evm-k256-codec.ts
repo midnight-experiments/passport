@@ -11,7 +11,7 @@
 //
 // The contract computes the same digest word by word from the values it
 // executes (its exported `evm_k256_struct_*` and `eip712_v1_digest` pure
-// circuits). The offline suite checks that both agree on every frozen vector,
+// circuits; the domain is the fixed V1 domain of modules/Eip712V1). The offline suite checks that both agree on every frozen vector,
 // and evm-k256-viem.ts checks the JSON against viem's hashTypedData.
 //
 // Platform-neutral: no node: imports, so a browser page can use it.
@@ -23,8 +23,14 @@ import { NOT_APPLICABLE_TEXT, NO_WINDOW_TEXT, expiryDateTimeText, base58Text32By
 
 // ── The frozen type set (version "1") ────────────────────────────────────────
 
-export const EIP712_V1_DOMAIN_NAME = 'Midnight Passport Account';
+// The fixed V1 domain (the contract's modules/Eip712V1): one domain for every
+// account and network. The account is bound by each message's `account`
+// member; there is no chainId, salt or network value. verifyingContract is
+// the EIP-55 form of the low 20 bytes of keccak256("midnight:passport:evm:v1").
+export const EIP712_V1_DOMAIN_NAME = 'Midnight Passport';
 export const EIP712_V1_DOMAIN_VERSION = '1';
+export const EIP712_V1_VERIFYING_CONTRACT_TEXT = 'midnight:passport:evm:v1';
+export const EIP712_V1_VERIFYING_CONTRACT = '0x596e089eF2D7308208B9e8f7e1A147942a84104F';
 
 export interface TypedField { name: string; type: string }
 export type TypeSet = Record<string, TypedField[]>;
@@ -182,14 +188,10 @@ export function typedDataDigest(t: Eip712TypedData): Uint8Array {
 
 // ── The arm's domain ─────────────────────────────────────────────────────────
 
-/** verifyingContract: the low 20 bytes of keccak256 of the 32-byte account address. */
-export function verifyingContract(account: Uint8Array): string {
-  if (account.length !== 32) throw new Error('eip712: an account address is 32 bytes');
-  return evmChecksumAddress(keccak(account).subarray(12));
-}
-
-export const eip712V1Domain = (account: Uint8Array): Eip712Domain => ({
-  name: EIP712_V1_DOMAIN_NAME, version: EIP712_V1_DOMAIN_VERSION, verifyingContract: verifyingContract(account),
+/** The fixed V1 domain, as a fresh object (callers may edit the typed data
+ *  they hold without touching the constant). */
+export const eip712V1Domain = (): Eip712Domain => ({
+  name: EIP712_V1_DOMAIN_NAME, version: EIP712_V1_DOMAIN_VERSION, verifyingContract: EIP712_V1_VERIFYING_CONTRACT,
 });
 
 /** The type set of one message: the primary type, its nested type if any, and
@@ -389,32 +391,32 @@ const coinFields = (coin: SpentCoin, amount: bigint) => {
   if (u128(coin.value, 'coinValue') && coin.value < amount) throw new Error('eip712: the spent coin is smaller than the amount');
   return { coinNonce: b32(coin.nonce, 'coinNonce'), coinValue: coin.value.toString(), coinMerkleIndex: u64(coin.mtIndex, 'coinMerkleIndex'), change: (coin.value - amount).toString() };
 };
-const typed = (account: Uint8Array, primaryType: string, message: Record<string, unknown>, nested?: string): Eip712TypedData =>
-  ({ domain: eip712V1Domain(account), types: typesFor(primaryType, nested), primaryType, message });
+const typed = (primaryType: string, message: Record<string, unknown>, nested?: string): Eip712TypedData =>
+  ({ domain: eip712V1Domain(), types: typesFor(primaryType, nested), primaryType, message });
 
 export const evmK256Messages = {
   withdrawUnshielded: (c: DeviceFrame, color: Uint8Array, amount: bigint, recipient: Uint8Array, site: SiteAmount) =>
-    typed(c.account, 'WithdrawUnshielded', { ...frame(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient) }),
+    typed('WithdrawUnshielded', { ...frame(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient) }),
   withdrawShielded: (c: DeviceFrame, color: Uint8Array, amount: bigint, recipient: Uint8Array, coin: SpentCoin, site: SiteAmount) =>
-    typed(c.account, 'WithdrawShielded', { ...frame(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient), ...coinFields(coin, amount) }),
+    typed('WithdrawShielded', { ...frame(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient), ...coinFields(coin, amount) }),
   withdrawShieldedToContract: (c: DeviceFrame, color: Uint8Array, amount: bigint, recipientContract: Uint8Array, coin: SpentCoin, site: SiteAmount) =>
-    typed(c.account, 'WithdrawShieldedToContract', { ...frame(c), color: b32(color, 'color'), ...amountFields(amount, site), recipientContract: toHex(recipientContract), ...coinFields(coin, amount) }),
+    typed('WithdrawShieldedToContract', { ...frame(c), color: b32(color, 'color'), ...amountFields(amount, site), recipientContract: toHex(recipientContract), ...coinFields(coin, amount) }),
   appendInbox: (c: DeviceFrame, entry: Uint8Array) => {
     if (entry.length !== 192) throw new Error('eip712: an inbox entry is 192 bytes');
-    return typed(c.account, 'AppendInbox', { ...frame(c), entry: toHex(entry) });
+    return typed('AppendInbox', { ...frame(c), entry: toHex(entry) });
   },
   rotateEncKey: (c: DeviceFrame, newKey: Uint8Array) =>
-    typed(c.account, 'RotateEncKey', { ...frame(c), effect: EVM_K256_EFFECTS.RotateEncKey, newKey: toHex(newKey) }),
+    typed('RotateEncKey', { ...frame(c), effect: EVM_K256_EFFECTS.RotateEncKey, newKey: toHex(newKey) }),
   addDevice: (c: DeviceFrame, d: EvmK256DescriptorInput) => {
     const m = deviceMember(d);
-    return typed(c.account, 'AddDevice', { ...frame(c), effect: EVM_K256_EFFECTS.AddDevice, newDevice: m.value }, m.type);
+    return typed('AddDevice', { ...frame(c), effect: EVM_K256_EFFECTS.AddDevice, newDevice: m.value }, m.type);
   },
   removeDevice: (c: DeviceFrame, d: EvmK256DescriptorInput, targetEpoch: bigint, targetCounter: bigint) => {
     const m = deviceMember(d);
-    return typed(c.account, 'RemoveDevice', { ...frame(c), target: m.value, targetEpoch: u32(targetEpoch, 'targetEpoch'), targetCounter: u64(targetCounter, 'targetCounter') }, m.type);
+    return typed('RemoveDevice', { ...frame(c), target: m.value, targetEpoch: u32(targetEpoch, 'targetEpoch'), targetCounter: u64(targetCounter, 'targetCounter') }, m.type);
   },
   removeUnknownDevice: (c: DeviceFrame, entry: Uint8Array) =>
-    typed(c.account, 'RemoveUnknownDevice', { ...frame(c), effect: EVM_K256_EFFECTS.RemoveUnknownDevice, entry: toHex(entry) }),
+    typed('RemoveUnknownDevice', { ...frame(c), effect: EVM_K256_EFFECTS.RemoveUnknownDevice, entry: toHex(entry) }),
   issueGrant: (c: DeviceFrame, g: EvmK256GranteeInput, s: IssueScope) => {
     // Every issue rule, in the order issue_grant_with_evm_k256 asserts it
     // and with its message, so a wallet is never asked to sign a grant the
@@ -449,7 +451,7 @@ export const evmK256Messages = {
     if (s.windowLen !== 0n || s.windowCap !== 0n) throw new Error('window bounds reserved');
     if (!spend && (!s.color.every((b) => b === 0) || s.recipientKind !== 0n || !s.recipient.every((b) => b === 0)
       || s.maxCoinValue !== 0n || s.perCallCap !== 0n || s.cap !== 0n)) throw new Error('read-only grant carries object fields');
-    return typed(c.account, 'IssueGrant', {
+    return typed('IssueGrant', {
       ...frame(c), effect: EVM_K256_EFFECTS.IssueGrant, grantee: m.value,
       withdrawUnshielded: s.opWithdrawUnshielded, withdrawShielded: s.opWithdrawShielded,
       withdrawShieldedToContract: s.opWithdrawShieldedToContract, read: s.read,
@@ -463,29 +465,29 @@ export const evmK256Messages = {
   },
   revokeGrant: (c: DeviceFrame, g: EvmK256GranteeInput) => {
     const m = granteeMember(g);
-    return typed(c.account, 'RevokeGrant', { ...frame(c), grantee: m.value }, m.type);
+    return typed('RevokeGrant', { ...frame(c), grantee: m.value }, m.type);
   },
-  revokeAllGrants: (c: DeviceFrame) => typed(c.account, 'RevokeAllGrants', frame(c)),
+  revokeAllGrants: (c: DeviceFrame) => typed('RevokeAllGrants', frame(c)),
   publishRecoverySession: (c: DeviceFrame, r: RecoverySession) => {
     if (r.wrap.length !== 64) throw new Error('eip712: the recovery wrap is 64 bytes');
-    return typed(c.account, 'PublishRecoverySession', {
+    return typed('PublishRecoverySession', {
       ...frame(c), effect: EVM_K256_EFFECTS.PublishRecoverySession,
       recoveryKeyX: toHex(fieldLE(r.recoveryPk.x)), recoveryKeyY: toHex(fieldLE(r.recoveryPk.y)), sessionNonce: toHex(r.sessionNonce),
       phi1: toHex(fieldLE(r.phi[0])), phi2: toHex(fieldLE(r.phi[1])), phi3: toHex(fieldLE(r.phi[2])), phi4: toHex(fieldLE(r.phi[3])),
       phiLength: u8(r.phiLen, 'phiLength'), wrap: toHex(r.wrap),
     });
   },
-  cancelRecovery: (c: DeviceFrame) => typed(c.account, 'CancelRecovery', frame(c)),
+  cancelRecovery: (c: DeviceFrame) => typed('CancelRecovery', frame(c)),
   withdrawUnshieldedAsGrantee: (c: GranteeFrame, color: Uint8Array, amount: bigint, recipient: Uint8Array, site: SiteAmount) =>
-    typed(c.account, 'WithdrawUnshieldedAsGrantee', { ...gframe(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient) }),
+    typed('WithdrawUnshieldedAsGrantee', { ...gframe(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient) }),
   withdrawShieldedAsGrantee: (c: GranteeFrame, color: Uint8Array, amount: bigint, recipient: Uint8Array, changeEntry: Uint8Array, encPk: Uint8Array, coin: SpentCoin, site: SiteAmount) => {
     if (changeEntry.length !== 192) throw new Error('eip712: a change entry is 192 bytes');
-    return typed(c.account, 'WithdrawShieldedAsGrantee', { ...gframe(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient),
+    return typed('WithdrawShieldedAsGrantee', { ...gframe(c), color: b32(color, 'color'), ...amountFields(amount, site), recipient: toHex(recipient),
       changeEntry: toHex(changeEntry), encryptionKey: toHex(encPk), ...coinFields(coin, amount) });
   },
   withdrawShieldedToContractAsGrantee: (c: GranteeFrame, color: Uint8Array, amount: bigint, recipientContract: Uint8Array, changeEntry: Uint8Array, encPk: Uint8Array, coin: SpentCoin, site: SiteAmount) => {
     if (changeEntry.length !== 192) throw new Error('eip712: a change entry is 192 bytes');
-    return typed(c.account, 'WithdrawShieldedToContractAsGrantee', { ...gframe(c), color: b32(color, 'color'), ...amountFields(amount, site), recipientContract: toHex(recipientContract),
+    return typed('WithdrawShieldedToContractAsGrantee', { ...gframe(c), color: b32(color, 'color'), ...amountFields(amount, site), recipientContract: toHex(recipientContract),
       changeEntry: toHex(changeEntry), encryptionKey: toHex(encPk), ...coinFields(coin, amount) });
   },
 };

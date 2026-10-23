@@ -47,7 +47,7 @@ import {
   SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmDeviceDescriptor, evmK256RecoverySession, evmK256IssueArgs, evmK256GrantScopeSalt, solArgs, EVM_K256_UNUSED_DESCRIPTOR } from '../wallet/signer-evm-k256.js';
 import { evmK256Messages, typedDataDigest, typeString, fieldLE, type Eip712TypedData, type IssueScope, type RecoverySession } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
-import { leHint, accountHashHint } from '../wallet/evm-k256-hints.js';
+import { leHint } from '../wallet/evm-k256-hints.js';
 import {
   recoveryKey, signRecoverSubmit, recoverSubmitArgs, recoverSubmitChallenge, readArtefactSet, matchesRecoveryPk, eqPoint,
   JUBJUB_IDENTITY, JUBJUB_ORDER_TWO,
@@ -211,8 +211,8 @@ await section('the readable approval: every recovery operand in full, the conseq
     'phi1..phi4: each Field value in full, little-endian (unused slots shown as zero)');
   ok(m.phiLength === '2', 'phiLength shown as a number');
   ok(m.wrap === '0x' + hex(S1.s.wrap) && m.wrap.length === 2 + 128, 'the 64-byte wrap in full hex (no fingerprint, no truncation)');
-  const oracle = pc.eip712_v1_digest(address, pc.evm_k256_struct_publish_recovery_session(address, E.address, L().auth_nonce,
-    leHint(L().auth_nonce, 8), S1.s.recoveryPk, S1.s.sessionNonce, ...S1.s.phi, S1.s.phiLen, S1.s.wrap), accountHashHint(address));
+  const oracle = pc.eip712_v1_digest(pc.evm_k256_struct_publish_recovery_session(address, E.address, L().auth_nonce,
+    leHint(L().auth_nonce, 8), S1.s.recoveryPk, S1.s.sessionNonce, ...S1.s.phi, S1.s.phiLen, S1.s.wrap));
   ok(eq(typedDataDigest(td), oracle), "the digest the wallet signs == the contract's own oracle");
 });
 

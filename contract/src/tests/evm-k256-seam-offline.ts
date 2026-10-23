@@ -4,8 +4,8 @@
 // fails on a contract that loses one of these properties:
 //
 //   - every device-gated export (12) refuses an approval over another
-//     account's frame (signed by the device; one foreign account for the
-//     domain's verifyingContract and the frame's account), another key's
+//     account's frame (signed by the device; the frame's `account` names a
+//     foreign account, under the same fixed domain), another key's
 //     signature with the device's entry opening, and (r, s) = (0, 0), which
 //     reaches K256Core's zero-scalar assert through each body (the one-type,
 //     the two-form remove_device and the bare body);

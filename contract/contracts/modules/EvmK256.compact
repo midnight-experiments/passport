@@ -12,11 +12,11 @@
 // challenge hash, no fingerprint. Every operand and every consumed witness
 // value is a member of the message, shown by the wallet in full.
 //
-// DOMAIN. EIP712Domain(string name,string version,address verifyingContract)
-// with name "Midnight Passport Account", version "1", and verifyingContract
-// the low 20 bytes of keccak256 of the account's 32-byte contract address.
-// There is no chainId and no salt: the contract holds no network value (the
-// cross-network argument is in the arm document).
+// DOMAIN AND DIGEST. The signing format's module (modules/Eip712V1) holds the
+// fixed domain and computes the digest; this module computes
+// hashStruct(message), which the arm's seam passes to it. Every message type
+// carries `bytes32 account`, so an approval is bound to one account although
+// the domain is the same for all.
 //
 // TYPES. One primary type per operation and role (16): the device role's
 // thirteen carry `bytes32 account, address device, uint64 authNonce`; the
@@ -171,26 +171,8 @@ module EvmK256 {
     year_split:     Vector<4, Uint<8>>;
   }
 
-  // ── Frozen constants (keccak256 of the domain fields, the type strings,
-  //    the effect lines and the scheme tags) ─────────────────────────────────
-
-  // keccak256("EIP712Domain(string name,string version,address verifyingContract)")
-  pure circuit eip712_v1_domain_type_hash(): Bytes<32> {
-    return Bytes[0x91, 0xab, 0x3d, 0x17, 0xe3, 0xa5, 0x0a, 0x9d, 0x89, 0xe6, 0x3f, 0xd3, 0x0b, 0x92, 0xbe, 0x7f,
-               0x53, 0x36, 0xb0, 0x3b, 0x28, 0x7b, 0xb9, 0x46, 0x78, 0x7a, 0x83, 0xa9, 0xd6, 0x2a, 0x27, 0x66];
-  }
-
-  // keccak256("Midnight Passport Account")
-  pure circuit eip712_v1_name_hash(): Bytes<32> {
-    return Bytes[0x64, 0xd1, 0xc9, 0x23, 0xe5, 0x9d, 0xa2, 0x0d, 0x02, 0xc9, 0x2d, 0xc0, 0xd6, 0xca, 0xa0, 0x86,
-               0x8c, 0xb5, 0xc8, 0xab, 0x17, 0xee, 0x06, 0x58, 0xaa, 0xfc, 0x5f, 0x0b, 0x72, 0xd5, 0x6c, 0x85];
-  }
-
-  // keccak256("1")
-  pure circuit eip712_v1_version_hash(): Bytes<32> {
-    return Bytes[0xc8, 0x9e, 0xfd, 0xaa, 0x54, 0xc0, 0xf2, 0x0c, 0x7a, 0xdf, 0x61, 0x28, 0x82, 0xdf, 0x09, 0x50,
-               0xf5, 0xa9, 0x51, 0x63, 0x7e, 0x03, 0x07, 0xcd, 0xcb, 0x4c, 0x67, 0x2f, 0x29, 0x8b, 0x8b, 0xc6];
-  }
+  // ── Frozen constants (keccak256 of the type strings, the effect lines and
+  //    the scheme tags) ──────────────────────────────────────────────────────
 
   // keccak256("WithdrawUnshielded(bytes32 account,address device,uint64 authNonce,bytes32 color,uint128 amount,string amountLabel,bytes32 recipient)")
   pure circuit evm_k256_type_withdraw_unshielded(): Bytes<32> {
@@ -763,26 +745,6 @@ module EvmK256 {
   // the key's bytes `key`.
   circuit evm_k256_solana_key_hash(key: Vector<32, Uint<8>>, h: EvmK256Base58Hint): Bytes<32> {
     return keccak256<Bytes<44>>(Bytes[...base58_text_32(key, h.digits, h.carry, h.low, h.top)]);
-  }
-
-  // ── Domain and digest ─────────────────────────────────────────────────────
-
-  // The low 20 bytes of keccak256(account); `account_hash` is a checked hint
-  // of the hash's bytes.
-  export pure circuit eip712_v1_verifying_contract(account: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<20> {
-    return evm_low20(keccak256<Bytes<32>>(account), account_hash);
-  }
-
-  export pure circuit eip712_v1_domain_separator(account: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<32> {
-    return keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>]>([
-      eip712_v1_domain_type_hash(), eip712_v1_name_hash(), eip712_v1_version_hash(),
-      pad(12, ""), eip712_v1_verifying_contract(account, account_hash)]);
-  }
-
-  // The 32 bytes the wallet signs for a message of this account.
-  export pure circuit eip712_v1_digest(account: Bytes<32>, struct_hash: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<32> {
-    return keccak256<[Bytes<2>, Bytes<32>, Bytes<32>]>([
-      Bytes[0x19, 0x01], eip712_v1_domain_separator(account, account_hash), struct_hash]);
   }
 
   // ── Descriptors ───────────────────────────────────────────────────────────
