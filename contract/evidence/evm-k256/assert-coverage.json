@@ -2,6 +2,7 @@
  "suite": "evm-k256-prover (npm run test:evm_k256)",
  "commit": "8d553e1",
  "what": "every assert site of the arm (contracts/account-evm-k256.compact, contracts/modules/EvmK256.compact) and of the base modules, by its enclosing circuit; a site counts when its circuit is reachable by the call graph from one of the arm's exported circuits (its own and the pure circuits it re-exports); each reached site with the cases of the run of record that refuse it at the constraint level as their own expected refusal (the circuit under test reaches no other site with that message, or that site's deletion mutant alone lets the case's forgery through), after the honest call proved through the same patched copy; otherwise why not",
+ "lines": "each site is at its line in the source tree this file is committed with, where its file, circuit and message are unchanged since the run of record (commit above); the sites whose assert has since moved into another module under another text keep the run's location and are listed in sitesChangedSinceTheRun with the assert that now holds the rule; the cases and their refusals are the run's",
  "roots": [
   "activate_initial_device_with_evm_k256",
   "add_device_with_evm_k256",
@@ -104,49 +105,49 @@
   "unreachedSites": [
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 60,
+    "line": 72,
     "helper": "decimal_text",
     "message": "display: not a left-aligned decimal"
    },
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 61,
+    "line": 73,
     "helper": "decimal_text",
     "message": "display: empty decimal"
    },
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 62,
+    "line": 74,
     "helper": "decimal_text",
     "message": "display: leading zero"
    },
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 63,
+    "line": 75,
     "helper": "decimal_text",
     "message": "display: digits do not match the value"
    },
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 434,
+    "line": 446,
     "helper": "label_text",
     "message": "display: not a zero-padded label"
    },
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 447,
+    "line": 459,
     "helper": "visible_text",
     "message": "display: not visible ASCII"
    },
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 480,
+    "line": 492,
     "helper": "recipient_kind_text",
     "message": "display: unknown recipient kind"
    },
    {
     "file": "contracts/modules/WalletArmRendering.compact",
-    "line": 488,
+    "line": 500,
     "helper": "k256_envelope_text",
     "message": "display: unknown signing envelope"
    }
@@ -166,7 +167,7 @@
    ]
   },
   "be4": {
-   "site": "contracts/modules/EvmK256.compact:617",
+   "site": "contracts/modules/EvmK256.compact:362",
    "deletionMutant": "H4",
    "isolatingCases": [
     "isolate: remove_device: targetEpoch 1 shown and signed, 0 executed (the epoch hint of 1)"
@@ -174,7 +175,7 @@
    "refusedTogetherWithOthers": []
   },
   "be8": {
-   "site": "contracts/modules/EvmK256.compact:622",
+   "site": "contracts/modules/EvmK256.compact:367",
    "deletionMutant": "H5",
    "isolatingCases": [
     "isolate: rotate_enc_key: the approval made at authNonce 0, replayed at authNonce 1 with the nonce hint of 0 (its signed nonce)",
@@ -186,7 +187,7 @@
    ]
   },
   "be16": {
-   "site": "contracts/modules/EvmK256.compact:627",
+   "site": "contracts/modules/EvmK256.compact:372",
    "deletionMutant": "H6",
    "isolatingCases": [
     "isolate: withdraw_unshielded: the amount hint of 11, shown and signed, 10 executed (the label is the executed amount's)",
@@ -219,7 +220,7 @@
    "refusedTogetherWithOthers": []
   },
   "visible_21": {
-   "site": "contracts/modules/EvmK256.compact:680",
+   "site": "contracts/modules/EvmK256.compact:404",
    "deletionMutant": "H11",
    "isolatingCases": [
     "hints: add_device: a byte of a passkey target's origin"
@@ -259,7 +260,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 172,
+   "line": 164,
    "helper": "activate_initial_device_with_evm_k256",
    "message": "already activated",
    "group": "arm",
@@ -280,7 +281,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 174,
+   "line": 167,
    "helper": "activate_initial_device_with_evm_k256",
    "message": "boot commitment mismatch",
    "group": "arm",
@@ -365,7 +366,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 262,
+   "line": 228,
    "helper": "require_authorised_with_evm_k256",
    "message": "unknown device entry",
    "group": "arm",
@@ -570,7 +571,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 265,
+   "line": 229,
    "helper": "require_authorised_with_evm_k256",
    "message": "invalid signature",
    "group": "arm",
@@ -1082,7 +1083,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 288,
+   "line": 251,
    "helper": "require_authorised_with_evm_k256_either",
    "message": "unknown device entry",
    "group": "arm",
@@ -1138,7 +1139,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 291,
+   "line": 252,
    "helper": "require_authorised_with_evm_k256_either",
    "message": "invalid signature",
    "group": "arm",
@@ -1187,7 +1188,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 312,
+   "line": 272,
    "helper": "require_authorised_with_evm_k256_bare",
    "message": "unknown device entry",
    "group": "arm",
@@ -1280,7 +1281,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 315,
+   "line": 273,
    "helper": "require_authorised_with_evm_k256_bare",
    "message": "invalid signature",
    "group": "arm",
@@ -1323,7 +1324,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 385,
+   "line": 342,
    "helper": "withdraw_shielded_with_evm_k256",
    "message": "held coin colour does not match the withdrawn colour",
    "group": "arm",
@@ -1344,7 +1345,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 386,
+   "line": 343,
    "helper": "withdraw_shielded_with_evm_k256",
    "message": "amount above the spent coin's value",
    "group": "arm",
@@ -1358,7 +1359,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 409,
+   "line": 366,
    "helper": "withdraw_shielded_to_contract_with_evm_k256",
    "message": "held coin colour does not match the withdrawn colour",
    "group": "arm",
@@ -1379,7 +1380,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 410,
+   "line": 367,
    "helper": "withdraw_shielded_to_contract_with_evm_k256",
    "message": "amount above the spent coin's value",
    "group": "arm",
@@ -1393,7 +1394,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 484,
+   "line": 441,
    "helper": "remove_device_with_evm_k256",
    "message": "noncanonical absent entry",
    "group": "arm",
@@ -1414,7 +1415,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 553,
+   "line": 511,
    "helper": "issue_grant_with_evm_k256",
    "message": "evm_k256: a read key without read",
    "group": "arm",
@@ -1435,7 +1436,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 554,
+   "line": 512,
    "helper": "issue_grant_with_evm_k256",
    "message": "evm_k256: read without a read key",
    "group": "arm",
@@ -1456,7 +1457,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 704,
+   "line": 662,
    "helper": "require_grant_with_evm_k256",
    "message": "unknown grant",
    "group": "arm",
@@ -1500,7 +1501,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 706,
+   "line": 664,
    "helper": "require_grant_with_evm_k256",
    "message": "grant revoked",
    "group": "arm",
@@ -1537,7 +1538,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 707,
+   "line": 665,
    "helper": "require_grant_with_evm_k256",
    "message": "grant epoch stale",
    "group": "arm",
@@ -1574,7 +1575,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 708,
+   "line": 666,
    "helper": "require_grant_with_evm_k256",
    "message": "grant generation stale",
    "group": "arm",
@@ -1611,7 +1612,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 709,
+   "line": 667,
    "helper": "require_grant_with_evm_k256",
    "message": "grant expired",
    "group": "arm",
@@ -1727,7 +1728,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 719,
+   "line": 675,
    "helper": "require_grant_with_evm_k256",
    "message": "invalid grant signature",
    "group": "arm",
@@ -1848,7 +1849,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 790,
+   "line": 745,
    "helper": "withdraw_shielded_with_grant_evm_k256",
    "message": "held coin colour does not match the withdrawn colour",
    "group": "arm",
@@ -1869,7 +1870,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 791,
+   "line": 746,
    "helper": "withdraw_shielded_with_grant_evm_k256",
    "message": "amount above the spent coin's value",
    "group": "arm",
@@ -1883,7 +1884,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 826,
+   "line": 781,
    "helper": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "message": "held coin colour does not match the withdrawn colour",
    "group": "arm",
@@ -1904,7 +1905,7 @@
   },
   {
    "file": "contracts/account-evm-k256.compact",
-   "line": 827,
+   "line": 782,
    "helper": "withdraw_shielded_to_contract_with_grant_evm_k256",
    "message": "amount above the spent coin's value",
    "group": "arm",
@@ -1918,7 +1919,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 617,
+   "line": 362,
    "helper": "evm_k256_be4",
    "message": "evm_k256: word hint does not match its value",
    "group": "arm",
@@ -1940,7 +1941,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 622,
+   "line": 367,
    "helper": "evm_k256_be8",
    "message": "evm_k256: word hint does not match its value",
    "group": "arm",
@@ -1997,7 +1998,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 627,
+   "line": 372,
    "helper": "evm_k256_be16",
    "message": "evm_k256: word hint does not match its value",
    "group": "arm",
@@ -2155,7 +2156,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 680,
+   "line": 404,
    "helper": "visible_21",
    "message": "evm_k256: byte hint does not match its value",
    "group": "arm",
@@ -2180,7 +2181,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 714,
+   "line": 438,
    "helper": "evm_k256_site_label_hash",
    "message": "evm_k256: not a site label",
    "group": "arm",
@@ -2217,7 +2218,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 725,
+   "line": 449,
    "helper": "evm_k256_recipient_kind_label",
    "message": "evm_k256: not a recipient kind",
    "group": "arm",
@@ -2303,7 +2304,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 874,
+   "line": 846,
    "helper": "evm_k256_device_descriptor_hash",
    "message": "evm_k256: the passkey origin is not visible ASCII",
    "group": "arm",
@@ -2332,7 +2333,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 877,
+   "line": 849,
    "helper": "evm_k256_device_descriptor_hash",
    "message": "evm_k256: a passkey's RP hash is zero",
    "group": "arm",
@@ -2361,7 +2362,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 882,
+   "line": 854,
    "helper": "evm_k256_device_descriptor_hash",
    "message": "evm_k256: not a k256 envelope",
    "group": "arm",
@@ -2390,7 +2391,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 953,
+   "line": 941,
    "helper": "evm_k256_grantee_descriptor_hash",
    "message": "evm_k256: not a site label",
    "group": "arm",
@@ -2419,7 +2420,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 955,
+   "line": 943,
    "helper": "evm_k256_grantee_descriptor_hash",
    "message": "evm_k256: the passkey origin is not visible ASCII",
    "group": "arm",
@@ -2448,7 +2449,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 956,
+   "line": 944,
    "helper": "evm_k256_grantee_descriptor_hash",
    "message": "evm_k256: not a k256 envelope",
    "group": "arm",
@@ -2477,7 +2478,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 1119,
+   "line": 1103,
    "helper": "evm_k256_parts_issue_grant",
    "message": "evm_k256: an RP hash belongs to a spending passkey grant",
    "group": "arm",
@@ -2505,7 +2506,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 1120,
+   "line": 1104,
    "helper": "evm_k256_parts_issue_grant",
    "message": "evm_k256: a spending passkey grant's RP hash is zero",
    "group": "arm",
@@ -2526,7 +2527,7 @@
   },
   {
    "file": "contracts/modules/EvmK256.compact",
-   "line": 1123,
+   "line": 1107,
    "helper": "evm_k256_parts_issue_grant",
    "message": "evm_k256: a recipient for any recipient",
    "group": "arm",
@@ -2547,7 +2548,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 60,
+   "line": 72,
    "helper": "decimal_text",
    "message": "display: not a left-aligned decimal",
    "group": "base",
@@ -2558,7 +2559,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 61,
+   "line": 73,
    "helper": "decimal_text",
    "message": "display: empty decimal",
    "group": "base",
@@ -2569,7 +2570,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 62,
+   "line": 74,
    "helper": "decimal_text",
    "message": "display: leading zero",
    "group": "base",
@@ -2580,7 +2581,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 63,
+   "line": 75,
    "helper": "decimal_text",
    "message": "display: digits do not match the value",
    "group": "base",
@@ -2591,7 +2592,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 224,
+   "line": 236,
    "helper": "utc_datetime_text",
    "message": "display: not a UTC date and time",
    "group": "base",
@@ -2612,7 +2613,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 225,
+   "line": 237,
    "helper": "utc_datetime_text",
    "message": "display: month out of range",
    "group": "base",
@@ -2633,7 +2634,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 226,
+   "line": 238,
    "helper": "utc_datetime_text",
    "message": "display: day out of range",
    "group": "base",
@@ -2654,7 +2655,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 227,
+   "line": 239,
    "helper": "utc_datetime_text",
    "message": "display: time of day out of range",
    "group": "base",
@@ -2675,7 +2676,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 228,
+   "line": 240,
    "helper": "utc_datetime_text",
    "message": "display: the year split is not canonical",
    "group": "base",
@@ -2703,7 +2704,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 229,
+   "line": 241,
    "helper": "utc_datetime_text",
    "message": "display: the date and time do not match the value",
    "group": "base",
@@ -2731,7 +2732,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 230,
+   "line": 242,
    "helper": "utc_datetime_text",
    "message": "display: not the words for a time after 9999-12-31 23:59:59 UTC",
    "group": "base",
@@ -2752,7 +2753,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 403,
+   "line": 415,
    "helper": "base58_text_32",
    "message": "display: not a left-aligned base58 text",
    "group": "base",
@@ -2776,7 +2777,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 404,
+   "line": 416,
    "helper": "base58_text_32",
    "message": "display: the leading base58 ones do not match the leading zero bytes",
    "group": "base",
@@ -2800,7 +2801,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 405,
+   "line": 417,
    "helper": "base58_text_32",
    "message": "display: the base58 carry hints do not split the leading digits",
    "group": "base",
@@ -2831,7 +2832,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 407,
+   "line": 419,
    "helper": "base58_text_32",
    "message": "display: the base58 digits do not match the value's low bytes",
    "group": "base",
@@ -2855,7 +2856,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 409,
+   "line": 421,
    "helper": "base58_text_32",
    "message": "display: the base58 digits do not match the value's high bytes",
    "group": "base",
@@ -2879,7 +2880,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 434,
+   "line": 446,
    "helper": "label_text",
    "message": "display: not a zero-padded label",
    "group": "base",
@@ -2890,7 +2891,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 447,
+   "line": 459,
    "helper": "visible_text",
    "message": "display: not visible ASCII",
    "group": "base",
@@ -2901,7 +2902,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 480,
+   "line": 492,
    "helper": "recipient_kind_text",
    "message": "display: unknown recipient kind",
    "group": "base",
@@ -2912,7 +2913,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 488,
+   "line": 500,
    "helper": "k256_envelope_text",
    "message": "display: unknown signing envelope",
    "group": "base",
@@ -2923,7 +2924,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 537,
+   "line": 549,
    "helper": "site_amount_label_text",
    "message": "display: not a site amount label",
    "group": "base",
@@ -2949,7 +2950,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 538,
+   "line": 550,
    "helper": "site_amount_label_text",
    "message": "display: the symbol does not start with a letter",
    "group": "base",
@@ -2975,7 +2976,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 539,
+   "line": 551,
    "helper": "site_amount_label_text",
    "message": "display: more than 18 decimals",
    "group": "base",
@@ -3001,7 +3002,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 540,
+   "line": 552,
    "helper": "site_amount_label_text",
    "message": "display: symbol longer than 8",
    "group": "base",
@@ -3027,7 +3028,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 541,
+   "line": 553,
    "helper": "site_amount_label_text",
    "message": "display: leading zero in the site amount label",
    "group": "base",
@@ -3053,7 +3054,7 @@
   },
   {
    "file": "contracts/modules/WalletArmRendering.compact",
-   "line": 542,
+   "line": 554,
    "helper": "site_amount_label_text",
    "message": "display: the site amount label does not match the value",
    "group": "base",
@@ -3086,7 +3087,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 174,
+   "line": 254,
    "helper": "derive_descriptor_entry_w52",
    "message": "descriptor: not a 52-byte device tag",
    "group": "base",
@@ -3112,7 +3113,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 190,
+   "line": 270,
    "helper": "derive_descriptor_entry_w64",
    "message": "descriptor: not a 64-byte device tag",
    "group": "base",
@@ -3127,7 +3128,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 207,
+   "line": 287,
    "helper": "derive_descriptor_entry_w65",
    "message": "descriptor: not a 65-byte device tag",
    "group": "base",
@@ -3142,7 +3143,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 227,
+   "line": 307,
    "helper": "derive_descriptor_entry_w117",
    "message": "descriptor: not a 117-byte device tag",
    "group": "base",
@@ -3157,7 +3158,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 249,
+   "line": 328,
    "helper": "derive_descriptor_boot_w52",
    "message": "descriptor: not a 52-byte boot tag",
    "group": "base",
@@ -3171,7 +3172,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 270,
+   "line": 349,
    "helper": "derive_descriptor_grant_id_w52",
    "message": "descriptor: not a 52-byte grant-id tag",
    "group": "base",
@@ -3189,7 +3190,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 284,
+   "line": 363,
    "helper": "derive_descriptor_grant_id_w64",
    "message": "descriptor: not a 64-byte grant-id tag",
    "group": "base",
@@ -3204,7 +3205,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 300,
+   "line": 379,
    "helper": "derive_descriptor_grant_id_w65",
    "message": "descriptor: not a 65-byte grant-id tag",
    "group": "base",
@@ -3375,7 +3376,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 389,
+   "line": 414,
    "helper": "ed25519_descriptor_key",
    "message": "descriptor: the Ed25519 key is the identity",
    "group": "base",
@@ -3399,7 +3400,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 404,
+   "line": 429,
    "helper": "derive_descriptor_entry_ed25519",
    "message": "descriptor: not an Ed25519 device tag",
    "group": "base",
@@ -3414,7 +3415,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 419,
+   "line": 444,
    "helper": "derive_descriptor_boot_ed25519",
    "message": "descriptor: not an Ed25519 boot tag",
    "group": "base",
@@ -3426,7 +3427,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 435,
+   "line": 460,
    "helper": "derive_descriptor_grant_id_ed25519",
    "message": "descriptor: not an Ed25519 grant-id tag",
    "group": "base",
@@ -3441,7 +3442,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 482,
+   "line": 509,
    "helper": "derive_blind",
    "message": "descriptor: not a blind tag",
    "group": "base",
@@ -3453,7 +3454,7 @@
   },
   {
    "file": "contracts/modules/WalletArmDescriptors.compact",
-   "line": 499,
+   "line": 525,
    "helper": "derive_grant_scope_salt",
    "message": "descriptor: not a grant salt tag",
    "group": "base",
@@ -3471,8 +3472,8 @@
    "case": "hints: withdraw_unshielded: a byte of the amount",
    "expect": "evm_k256: word hint does not match its value",
    "sites": [
-    "contracts/modules/EvmK256.compact:622",
-    "contracts/modules/EvmK256.compact:627"
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
    ],
    "mutantHits": [],
    "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
@@ -3481,8 +3482,8 @@
    "case": "hints: withdraw_shielded: a byte of the change",
    "expect": "evm_k256: word hint does not match its value",
    "sites": [
-    "contracts/modules/EvmK256.compact:622",
-    "contracts/modules/EvmK256.compact:627"
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
    ],
    "mutantHits": [],
    "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
@@ -3492,7 +3493,7 @@
    "expect": "evm_k256: byte hint does not match its value",
    "sites": [
     "contracts/modules/EvmK256.compact:655",
-    "contracts/modules/EvmK256.compact:680"
+    "contracts/modules/EvmK256.compact:404"
    ],
    "mutantHits": [],
    "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
@@ -3502,7 +3503,7 @@
    "expect": "evm_k256: byte hint does not match its value",
    "sites": [
     "contracts/modules/EvmK256.compact:655",
-    "contracts/modules/EvmK256.compact:680"
+    "contracts/modules/EvmK256.compact:404"
    ],
    "mutantHits": [],
    "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
@@ -3511,8 +3512,8 @@
    "case": "hints: issue_grant: a byte of the scope's cap",
    "expect": "evm_k256: word hint does not match its value",
    "sites": [
-    "contracts/modules/EvmK256.compact:622",
-    "contracts/modules/EvmK256.compact:627"
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
    ],
    "mutantHits": [],
    "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
@@ -3521,8 +3522,8 @@
    "case": "hints: grant seam: a byte of the record's issuedAt",
    "expect": "evm_k256: word hint does not match its value",
    "sites": [
-    "contracts/modules/EvmK256.compact:622",
-    "contracts/modules/EvmK256.compact:627"
+    "contracts/modules/EvmK256.compact:367",
+    "contracts/modules/EvmK256.compact:372"
    ],
    "mutantHits": [],
    "why": "it names 2 asserts, and the others refuse it as well, so no single site's deletion lets it through"
@@ -3536,5 +3537,137 @@
   }
  ],
  "unexplained": [],
- "verdict": "PASS"
+ "verdict": "PASS",
+ "sitesChangedSinceTheRun": [
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 124,
+   "helper": "evm_address",
+   "message": "evm_k256: device key is the point at infinity",
+   "successor": {
+    "file": "contracts/modules/K256Core.compact",
+    "line": 35,
+    "helper": "k256_require_live_key",
+    "message": "k256: the key is the point at infinity"
+   },
+   "why": "the point-at-infinity rule left evm_address for K256Core's key rule, which every verification and the activation call"
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 218,
+   "helper": "k256_ecdsa_verify",
+   "message": "evm_k256: digest hint does not match the digest",
+   "successor": {
+    "file": "contracts/modules/K256Core.compact",
+    "line": 58,
+    "helper": "k256_ecdsa_verify",
+    "message": "k256: digest hint does not match the digest"
+   },
+   "why": "the verification moved into K256Core with its digest hint"
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 263,
+   "helper": "require_authorised_with_evm_k256",
+   "message": "evm_k256: signature scalar is zero",
+   "successor": {
+    "file": "contracts/modules/K256Core.compact",
+    "line": 57,
+    "helper": "k256_ecdsa_verify",
+    "message": "k256: signature scalar is zero"
+   },
+   "why": "the three device seams' and the grant seam's zero-scalar asserts became one assert of K256Core's verification"
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 289,
+   "helper": "require_authorised_with_evm_k256_either",
+   "message": "evm_k256: signature scalar is zero",
+   "successor": {
+    "file": "contracts/modules/K256Core.compact",
+    "line": 57,
+    "helper": "k256_ecdsa_verify",
+    "message": "k256: signature scalar is zero"
+   },
+   "why": "the three device seams' and the grant seam's zero-scalar asserts became one assert of K256Core's verification"
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 313,
+   "helper": "require_authorised_with_evm_k256_bare",
+   "message": "evm_k256: signature scalar is zero",
+   "successor": {
+    "file": "contracts/modules/K256Core.compact",
+    "line": 57,
+    "helper": "k256_ecdsa_verify",
+    "message": "k256: signature scalar is zero"
+   },
+   "why": "the three device seams' and the grant seam's zero-scalar asserts became one assert of K256Core's verification"
+  },
+  {
+   "file": "contracts/account-evm-k256.compact",
+   "line": 715,
+   "helper": "require_grant_with_evm_k256",
+   "message": "evm_k256: signature scalar is zero",
+   "successor": {
+    "file": "contracts/modules/K256Core.compact",
+    "line": 57,
+    "helper": "k256_ecdsa_verify",
+    "message": "k256: signature scalar is zero"
+   },
+   "why": "the three device seams' and the grant seam's zero-scalar asserts became one assert of K256Core's verification"
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 655,
+   "helper": "evm_bytes_of",
+   "message": "evm_k256: byte hint does not match its value",
+   "successor": {
+    "file": "contracts/modules/EvmIdentity.compact",
+    "line": 34,
+    "helper": "evm_bytes_of",
+    "message": "evm_identity: byte hint does not match its value"
+   },
+   "why": "the byte helper moved into the EVM identity module under its prefix"
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 669,
+   "helper": "evm_low20",
+   "message": "evm_k256: hash hint does not match the hash",
+   "successor": {
+    "file": "contracts/modules/EvmIdentity.compact",
+    "line": 48,
+    "helper": "evm_low20",
+    "message": "evm_identity: hash hint does not match the hash"
+   },
+   "why": "the address hash helper moved into the EVM identity module under its prefix"
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 820,
+   "helper": "evm_k256_device_scheme",
+   "message": "evm_k256: not a registered device tag",
+   "successor": {
+    "file": "contracts/modules/EvmK256.compact",
+    "line": 771,
+    "helper": "evm_k256_device_kind",
+    "message": "evm_k256: not a registered device tag"
+   },
+   "why": "the five-way device scheme index became the lookup of the kinds list"
+  },
+  {
+   "file": "contracts/modules/EvmK256.compact",
+   "line": 830,
+   "helper": "evm_k256_grantee_scheme",
+   "message": "evm_k256: not a registered grant-id tag",
+   "successor": {
+    "file": "contracts/modules/EvmK256.compact",
+    "line": 780,
+    "helper": "evm_k256_grantee_kind",
+    "message": "evm_k256: not a registered grant-id tag"
+   },
+   "why": "the five-way grantee scheme index became the lookup of the kinds list"
+  }
+ ]
 }
