@@ -112,12 +112,12 @@ const HASH = 'evm_identity: hash hint does not match the hash';
 const DIGEST = 'k256: digest hint does not match the digest';
 const WORD = 'evm_k256: word hint does not match its value';
 const CARRY = /type error:[\s\S]*expected/;
-const SOL_Y = "descriptor: the Ed25519 key bytes do not match the point's y";
+const SOL_Y = "ed25519: the encoding does not match the point's y";
 const LABEL = 'display: the site amount label does not match the value';
 const B58 = 'display: the base58 carry hints do not split the leading digits';
 const MONTH = 'display: month out of range';
 const SPLIT = 'display: the year split is not canonical';
-const SOL_X = "descriptor: the Ed25519 x bytes do not match the point's x";
+const SOL_X = "ed25519: the x bytes do not match the point's x";
 
 /** The exact args with the hint at `path` changed (evm-k256-hint-fill.ts). */
 const forged = (circuit: string, args: unknown[], authIndex: number, where: 'auth' | 'op' | number, path: string[], mode: 'flip' | 'carry', at = 0) =>
