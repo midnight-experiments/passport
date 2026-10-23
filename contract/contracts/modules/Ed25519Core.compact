@@ -84,7 +84,18 @@ module Ed25519Core {
   // computes it (k = SHA-512(encode(R) || encode(A) || M) mod L; valid iff
   // [s]B == R + [k]A, cofactorless; the identity key refused), with both
   // encodings taken from checked values instead of explosions of the points'
-  // coordinates:
+  // coordinates.
+  //
+  // THE MESSAGE M is `msg`, of a type T chosen by the caller: a Bytes<n>, or
+  // a tuple of byte strings (for example a signing format's head, then the
+  // text), which the hash takes as the concatenation of its elements in
+  // order. A format that puts a fixed head before a text of n bytes passes
+  // [head, text] instead of building one Bytes<n + head length>, which a
+  // Compact type cannot express for a generic n. Any other type would be
+  // hashed by its own binary representation, which is not a byte string a
+  // wallet signs, so T is a Bytes<n> or a tuple of them.
+  //
+  // The two encodings:
   //   - `key` is A's encoding. The caller MUST pass the encoding it derived
   //     from `pk` through the checked encoding above (an arm's seam does so
   //     in the same derivation that binds its entry or grant id): this
@@ -100,8 +111,8 @@ module Ed25519Core {
   // The test reads R's checked x bytes, which the encoding check has already
   // tied to R's x-coordinate, so R's x is decomposed into bytes once.
   // compact row optimization | Ed25519 verify from checked encodings | -15% rows
-  export circuit ed25519_verify<#n>(msg: Bytes<n>, sig: Ed25519Signature, pk: Curve25519Point, key: Bytes<32>,
-                                    r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
+  export circuit ed25519_verify<T>(msg: T, sig: Ed25519Signature, pk: Curve25519Point, key: Bytes<32>,
+                                   r_bytes: Vector<32, Uint<8>>, r_x: Vector<32, Uint<8>>): Boolean {
     // Extra safety check: a caller is expected to refuse the identity key
     // before calling (an arm's seam does, in the checked encoding that derives
     // its entry or grant id). It is repeated here so that this verification
@@ -111,7 +122,7 @@ module Ed25519Core {
     const [r_enc, r_is_identity] = ed25519_checked_encoding(sig.r, r_bytes, r_x);
     assert(!r_is_identity, "ed25519: R is the identity");
     // compact row optimization | signing key encoded once, shared with the verify | -48% rows
-    const k = sha512<[Bytes<32>, Bytes<32>, Bytes<n>]>([r_enc, key, msg]) as Curve25519Scalar;
+    const k = sha512<[Bytes<32>, Bytes<32>, T]>([r_enc, key, msg]) as Curve25519Scalar;
     return ecMulGenerator(sig.s) == ecAdd(sig.r, ecMul(pk, k));
   }
 }
