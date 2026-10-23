@@ -44,10 +44,11 @@ import { hexToBytes } from '../wallet/hex.js';
 import { makeWitnesses, emptyCoinStore, type CoinStorePrivateState } from '../wallet/witnesses.js';
 import { JubjubDevice, K256Device, jubjubChallenges, authArgs, grantAuthArgs, RECIPIENT_USER_ADDRESS, type GrantOpening } from '../wallet/signer.js';
 import {
-  SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmDeviceDescriptor, evmK256RecoverySession, evmK256IssueArgs, evmK256GrantScopeSalt, ed25519Args, EVM_K256_UNUSED_DESCRIPTOR } from '../wallet/signer-evm-k256.js';
+  SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmDeviceDescriptor, evmK256RecoverySession, evmK256IssueArgs, evmK256GrantScopeSalt, ed25519Args, EVM_K256_UNUSED_DESCRIPTOR,
+  parseEvmSignature } from '../wallet/signer-evm-k256.js';
 import { evmK256Messages, typedDataDigest, typeString, fieldLE, type Eip712TypedData, type IssueScope, type RecoverySession } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
-import { leHint } from '../wallet/evm-k256-hints.js';
+import { leHint, evmK256SeamHint } from '../wallet/evm-k256-hints.js';
 import {
   recoveryKey, signRecoverSubmit, recoverSubmitArgs, recoverSubmitChallenge, readArtefactSet, matchesRecoveryPk, eqPoint,
   JUBJUB_IDENTITY, JUBJUB_ORDER_TWO,
@@ -148,7 +149,18 @@ async function publish(d: EvmK256Device, s: RecoverySession, tamper?: (t: any) =
   const td = evmK256Messages.publishRecoverySession(frame(d), s);
   const signed = tamper ? clone(td) : td;
   if (tamper) tamper(signed);
-  return call(PUBLISH, [...sessionArgs(executed), await authOf(d, signed)]);
+  return call(PUBLISH, [...sessionArgs(executed), signed.domain.verifyingContract === td.domain.verifyingContract ? await authOf(d, signed) : uncheckedAuthOf(d, signed)]);
+}
+/** The authorising material of the device's software key's signature over
+ *  `td` as given, built without the client's checks: the client refuses
+ *  typed data under another domain before the wallet is asked, so only a
+ *  client without that check presents such a signature to the circuit. */
+function uncheckedAuthOf(d: EvmK256Device, td: Eip712TypedData) {
+  const digest = typedDataDigest(td);
+  const sig = parseEvmSignature((d.wallet as SoftwareEvmWallet).signDigest(digest));
+  const counter = counterOf(d);
+  return { pk: d.pk, use_counter: counter < 0n ? 0n : counter, blind: d.blind, sig: { r: sig.r, s: sig.s },
+    hint: evmK256SeamHint(d.pk, digest, BigInt((td.message as { authNonce: string }).authNonce)) };
 }
 async function cancel(d: EvmK256Device, td?: Eip712TypedData) {
   return call(CANCEL, [await authOf(d, td ?? evmK256Messages.cancelRecovery(frame(d)))]);

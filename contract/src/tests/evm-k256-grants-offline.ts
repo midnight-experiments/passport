@@ -612,9 +612,20 @@ async function readKeys() {
   ok(distinct, `${tag} another issuing account, slot or site label gives another key (${keys.length} keys, all different)`);
   ok(!eq(k.secretKey, g1.blind) && !eq(k.publicKey, g1.blind) && !eq(k.publicKey, g2.blind), `${tag} the read key is not the grantee blind the issuer learns`);
   // the issuer's view: the grantee rebuilt from what the issuer holds (point,
-  // blind, label, slot) has no read seed
+  // blind, label, slot) has no read seed, and no wallet to derive it from
   const issuerView = new EvmK256Grantee(g1.pk, g1.blind, bank, 0n);
   await expectAbort(`${tag} a grantee rebuilt from its descriptor cannot derive the key`, async () => issuerView.readKey(A1), 'has no read seed');
+  await expectAbort(`${tag} nor from a wallet it does not hold`, () => issuerView.readKeyFromWallet(A1), 'has no wallet');
+  // the grantee's own record holds the blind and never the read seed; read
+  // back from it, the grantee derives the same key from one signature
+  const rec = g1.toRecord();
+  ok(!('readSeed' in rec) && !JSON.stringify(rec).includes(Buffer.from(k.secretKey).toString('hex')), `${tag} the grantee record holds no read seed`);
+  let asked = 0;
+  const counting = { address: () => wallet.address(), personalSign: (m: Uint8Array) => { asked++; return wallet.personalSign(m); }, signTypedData: (t: any) => wallet.signTypedData(t) };
+  const fromRecord = EvmK256Grantee.fromRecord(JSON.parse(JSON.stringify(rec)), bank, 0n, counting);
+  const kr = await fromRecord.readKeyFromWallet(A1);
+  const kr2 = await fromRecord.withGrant(bank, 1n).readKeyFromWallet(A1);
+  ok(eq(kr.secretKey, k.secretKey) && eq(kr2.secretKey, g1.withGrant(bank, 1n).readKey(A1).secretKey) && asked === 1, `${tag} read back from its record, the grantee derives the same keys from one signature`);
   // the issuer's rule holds for the derived key: SHA-256 of it is what a read grant stores
   ok(!eq(sha256(k.publicKey), ZERO32), `${tag} the published read_pk_hash is a hash of the derived key`);
 }
