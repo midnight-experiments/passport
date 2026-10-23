@@ -777,8 +777,8 @@ if (SECTIONS.includes('hints')) {
     BYTE_H, [BYTE_H, DIGEST_H]);
   // the Solana key inputs, checked by the shared encoder: the filler key of a
   // k256 target (its results are discarded), and a Solana target's shown key
-  const SOL_Y = "descriptor: the Ed25519 key bytes do not match the point's y";
-  const SOL_X = "descriptor: the Ed25519 x bytes do not match the point's x";
+  const SOL_Y = "ed25519: the encoding does not match the point's y";
+  const SOL_X = "ed25519: the x bytes do not match the point's x";
   await negative('hints', "add_device: a byte of the filler key's encoding (k256 target)", A0, 'add_device_with_evm_k256',
     F(A0, 'add_device_with_evm_k256', add, 4, 2, [], 5), SOL_Y, [SOL_Y]);
   const solIn = evmK256DescriptorInput({ scheme: 'sol_ed25519', key: ed25519.getPublicKey(fill(32, 0x53)), blind: fill(32, 0x54) });
@@ -2160,8 +2160,8 @@ if (SECTIONS.includes('texts')) {
   // the filler key's encoding with the other sign bit (its base58 inputs those of the changed bytes)
   const signFlipped = [...fBytes]; signFlipped[31] ^= 0x80n;
   await negative('texts', 'add_device (k256 target): the filler key\'s encoding with the other sign bit', A0, ADD_T,
-    fillerCall(base58Inputs(Uint8Array.from(signFlipped.map(Number))), signFlipped), "descriptor: the Ed25519 sign bit is not x's parity",
-    ["descriptor: the Ed25519 sign bit is not x's parity"], '', { control: kCtl });
+    fillerCall(base58Inputs(Uint8Array.from(signFlipped.map(Number))), signFlipped), "ed25519: the sign bit is not x's parity",
+    ["ed25519: the sign bit is not x's parity"], '', { control: kCtl });
   // a Solana target with a 43-character base58 key, shown with one "1" too many
   let solKey: Uint8Array | undefined;
   for (let i = 0; i < 4096 && !solKey; i++) { const k = ed25519.getPublicKey(rnd(32)); if (base58Text32(k).length === 43) solKey = k; }
@@ -2376,9 +2376,9 @@ if (SECTIONS.includes('isolate')) {
 // patched copy first.
 if (SECTIONS.includes('places')) {
   section('places');
-  const SOL_Y = "descriptor: the Ed25519 key bytes do not match the point's y";
-  const SOL_X = "descriptor: the Ed25519 x bytes do not match the point's x";
-  const SOL_SIGN = "descriptor: the Ed25519 sign bit is not x's parity";
+  const SOL_Y = "ed25519: the encoding does not match the point's y";
+  const SOL_X = "ed25519: the x bytes do not match the point's x";
+  const SOL_SIGN = "ed25519: the sign bit is not x's parity";
   const SPLIT = 'display: the year split is not canonical';
   const ADD = 'add_device_with_evm_k256', REMOVE = 'remove_device_with_evm_k256', ISSUE = 'issue_grant_with_evm_k256', REVOKE = 'revoke_grant_with_evm_k256';
   const keep = <T extends object>(h: T): T => Object.assign(h, { [KEEP_HINTS]: true });

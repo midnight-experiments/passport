@@ -537,17 +537,17 @@ console.log('\n── the checked Ed25519 encoding against the exploded encoding
     const [pt, kb, kx] = keyOf(key);
     for (const i of [0, 15, 30]) {
       const b = [...kb]; b[i] ^= 1n;
-      forged.push([`${name}: key byte ${i} flipped`, () => probe.encode_public_key_ed25519(pt, b, kx), /key bytes do not match the point's y/]);
+      forged.push([`${name}: key byte ${i} flipped`, () => probe.encode_public_key_ed25519(pt, b, kx), /ed25519: the encoding does not match the point's y/]);
       const x = [...kx]; x[i] ^= 1n;
-      forged.push([`${name}: x byte ${i} flipped`, () => probe.encode_public_key_ed25519(pt, kb, x), /x bytes do not match the point's x/]);
+      forged.push([`${name}: x byte ${i} flipped`, () => probe.encode_public_key_ed25519(pt, kb, x), /ed25519: the x bytes do not match the point's x/]);
     }
     const s = [...kb]; s[31] ^= 0x80n;
-    forged.push([`${name}: the other sign bit`, () => probe.encode_public_key_ed25519(pt, s, kx), /sign bit is not x's parity/]);
+    forged.push([`${name}: the other sign bit`, () => probe.encode_public_key_ed25519(pt, s, kx), /ed25519: the sign bit is not x's parity/]);
     const t = [...kb]; t[31] ^= 0x01n;
-    forged.push([`${name}: y's top byte changed`, () => probe.encode_public_key_ed25519(pt, t, kx), /key bytes do not match the point's y/]);
+    forged.push([`${name}: y's top byte changed`, () => probe.encode_public_key_ed25519(pt, t, kx), /ed25519: the encoding does not match the point's y/]);
     const yp = u8v(le(pt.y + P_ED, 32)); yp[31] += kb[31] & 0x80n;
-    if (yp[31] <= 255n) forged.push([`${name}: y + p`, () => probe.encode_public_key_ed25519(pt, yp, kx), /key bytes do not match the point's y|sign bit/]);
-    forged.push([`${name}: x + p`, () => probe.encode_public_key_ed25519(pt, kb, u8v(le(pt.x + P_ED, 32))), /x bytes do not match the point's x/]);
+    if (yp[31] <= 255n) forged.push([`${name}: y + p`, () => probe.encode_public_key_ed25519(pt, yp, kx), /ed25519: the encoding does not match the point's y|ed25519: the sign bit is not x's parity/]);
+    forged.push([`${name}: x + p`, () => probe.encode_public_key_ed25519(pt, kb, u8v(le(pt.x + P_ED, 32))), /ed25519: the x bytes do not match the point's x/]);
     const c = [...kb]; c[3] += 256n; c[4] -= 1n;
     if (c[4] >= 0n) forged.push([`${name}: carry (byte 3 + 256, byte 4 - 1)`, () => probe.encode_public_key_ed25519(pt, c, kx), /type error: .*expected value of type Vector<32, Uint<0\.\.256>>/]);
     const cx = [...kx]; cx[3] += 256n; cx[4] -= 1n;
