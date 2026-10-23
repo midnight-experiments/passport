@@ -17,7 +17,7 @@
 // Platform-neutral: no node: imports, so a browser page can use it.
 
 import { keccak_256 } from '@noble/hashes/sha3.js';
-import { evmChecksumAddress } from './descriptors.js';
+import { DESCRIPTOR_TAGS, evmChecksumAddress, type DescriptorScheme } from './descriptors.js';
 import { recipientKindLabel, k256EnvelopeLabel } from './labels.js';
 import { NOT_APPLICABLE_TEXT, NO_WINDOW_TEXT, expiryDateTimeText, base58Text32Bytes, siteAmountLabelBytes } from './rendering.js';
 
@@ -49,19 +49,100 @@ const SCOPE: [string, string][] = [
   ['windowCap', 'uint128'], ['window', 'string'], ['callerPinned', 'bool'], ['caller', 'bytes32'],
 ];
 
-/** The nested descriptor types: one per target scheme. */
-export const EVM_K256_DESCRIPTOR_TYPES: TypeSet = {
-  EvmDevice: f([['scheme', 'string'], ['wallet', 'address'], ['privacySalt', 'bytes32']]),
-  SolanaDevice: f([['scheme', 'string'], ['publicKey', 'string'], ['privacySalt', 'bytes32']]),
-  JubjubDevice: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32']]),
-  K256Device: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'string']]),
-  PasskeyDevice: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['origin', 'string'], ['passkeyRpHash', 'bytes32']]),
-  EvmGrantee: f([['scheme', 'string'], ['wallet', 'address'], ['privacySalt', 'bytes32'], ['siteLabel', 'string'], ['slot', 'uint8']]),
-  SolanaGrantee: f([['scheme', 'string'], ['publicKey', 'string'], ['privacySalt', 'bytes32'], ['siteLabel', 'string'], ['slot', 'uint8']]),
-  JubjubGrantee: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['siteLabelHash', 'bytes32'], ['slot', 'uint8']]),
-  K256Grantee: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'string'], ['siteLabelHash', 'bytes32'], ['slot', 'uint8']]),
-  PasskeyGrantee: f([['scheme', 'string'], ['x', 'bytes32'], ['y', 'bytes32'], ['origin', 'string'], ['slot', 'uint8']]),
+// ── Enrolment kinds ──────────────────────────────────────────────────────────
+//
+// The client copy of the contract's evm_k256_kinds() (modules/EvmK256,
+// "Enrolment kinds"): one entry per kind of key the arm can add, remove or
+// grant to, keyed by its descriptor scheme, in the contract's order. A kind
+// is named by its device and grant-id tags (descriptors.ts DESCRIPTOR_TAGS),
+// shows its key in the members of its payload form, and has its own nested
+// types. A kind whose key fits an existing form is added as one entry here
+// and one in the contract; every table and dispatch below follows from it.
+// The offline suite checks the two lists against each other.
+
+/** How a kind's key is shown and derived (the contract's EvmK256Payload,
+ *  in its order). */
+export type EvmK256Payload = 'address' | 'ed25519_base58' | 'jubjub' | 'k256' | 'passkey';
+export const EVM_K256_PAYLOADS: readonly EvmK256Payload[] = ['address', 'ed25519_base58', 'jubjub', 'k256', 'passkey'];
+
+/** One enrolment kind: its payload form and its nested typed-data types. */
+export interface EvmK256Kind {
+  readonly payload: EvmK256Payload;
+  readonly deviceType: string;
+  readonly granteeType: string;
+}
+
+export const EVM_K256_KINDS = {
+  evm_k256: { payload: 'address', deviceType: 'EvmDevice', granteeType: 'EvmGrantee' },
+  sol_ed25519: { payload: 'ed25519_base58', deviceType: 'SolanaDevice', granteeType: 'SolanaGrantee' },
+  jubjub: { payload: 'jubjub', deviceType: 'JubjubDevice', granteeType: 'JubjubGrantee' },
+  k256: { payload: 'k256', deviceType: 'K256Device', granteeType: 'K256Grantee' },
+  p256: { payload: 'passkey', deviceType: 'PasskeyDevice', granteeType: 'PasskeyGrantee' },
+} as const satisfies Readonly<Record<DescriptorScheme, EvmK256Kind>>;
+
+export type EvmK256KindScheme = keyof typeof EVM_K256_KINDS;
+export const EVM_K256_KIND_SCHEMES: readonly EvmK256KindScheme[] = Object.keys(EVM_K256_KINDS) as EvmK256KindScheme[];
+
+/** Each payload form: the members its nested types carry after `scheme`,
+ *  and their values from a descriptor input, with the circuit's checks in
+ *  its order and with its messages (evm_k256_device_descriptor_hash,
+ *  evm_k256_grantee_descriptor_hash). */
+const PAYLOADS: Readonly<Record<EvmK256Payload, {
+  deviceMembers: [string, string][];
+  granteeMembers: [string, string][];
+  device: (d: EvmK256DescriptorInput) => Record<string, unknown>;
+  grantee: (g: EvmK256GranteeInput, label: () => string, slot: string) => Record<string, unknown>;
+}>> = {
+  address: {
+    deviceMembers: [['wallet', 'address'], ['privacySalt', 'bytes32']],
+    granteeMembers: [['wallet', 'address'], ['privacySalt', 'bytes32'], ['siteLabel', 'string'], ['slot', 'uint8']],
+    device: (d) => ({ wallet: evmChecksumAddress(d.address), privacySalt: toHex(d.key2) }),
+    grantee: (g, label, slot) => ({ wallet: evmChecksumAddress(g.address), privacySalt: toHex(g.key2), siteLabel: label(), slot }),
+  },
+  ed25519_base58: {
+    deviceMembers: [['publicKey', 'string'], ['privacySalt', 'bytes32']],
+    granteeMembers: [['publicKey', 'string'], ['privacySalt', 'bytes32'], ['siteLabel', 'string'], ['slot', 'uint8']],
+    device: (d) => ({ publicKey: ed25519Base58Text(d.key), privacySalt: toHex(d.key2) }),
+    grantee: (g, label, slot) => ({ publicKey: ed25519Base58Text(g.key), privacySalt: toHex(g.key2), siteLabel: label(), slot }),
+  },
+  jubjub: {
+    deviceMembers: [['x', 'bytes32'], ['y', 'bytes32']],
+    granteeMembers: [['x', 'bytes32'], ['y', 'bytes32'], ['siteLabelHash', 'bytes32'], ['slot', 'uint8']],
+    device: (d) => ({ x: toHex(d.key), y: toHex(d.key2) }),
+    grantee: (g, _label, slot) => ({ x: toHex(g.key), y: toHex(g.key2), siteLabelHash: toHex(g.origin_hash), slot }),
+  },
+  k256: {
+    deviceMembers: [['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'string']],
+    granteeMembers: [['x', 'bytes32'], ['y', 'bytes32'], ['envelope', 'string'], ['siteLabelHash', 'bytes32'], ['slot', 'uint8']],
+    device: (d) => ({ x: toHex(rev(d.key)), y: toHex(rev(d.key2)), envelope: labelOf('envelope', d.envelope) }),
+    grantee: (g, _label, slot) => {
+      if (typeof g.envelope !== 'bigint' || g.envelope > 1n) throw new Error('evm_k256: not a k256 envelope');
+      return { x: toHex(rev(g.key)), y: toHex(rev(g.key2)), envelope: labelOf('envelope', g.envelope), siteLabelHash: toHex(g.origin_hash), slot };
+    },
+  },
+  passkey: {
+    deviceMembers: [['x', 'bytes32'], ['y', 'bytes32'], ['origin', 'string'], ['passkeyRpHash', 'bytes32']],
+    granteeMembers: [['x', 'bytes32'], ['y', 'bytes32'], ['origin', 'string'], ['slot', 'uint8']],
+    device: (d) => {
+      // the origin, then the RP hash, a passkey's own pin, never zero
+      const origin = visibleText(d.origin);
+      if (d.rp_id_hash.every((b) => b === 0)) throw new Error("evm_k256: a passkey's RP hash is zero");
+      return { x: toHex(rev(d.key)), y: toHex(rev(d.key2)), origin, passkeyRpHash: toHex(d.rp_id_hash) };
+    },
+    grantee: (g, _label, slot) => {
+      if (!g.origin.every((c) => c >= 33 && c <= 126)) throw new Error('evm_k256: the passkey origin is not visible ASCII');
+      return { x: toHex(rev(g.key)), y: toHex(rev(g.key2)), origin: visibleText(g.origin), slot };
+    },
+  },
 };
+
+const KINDS = EVM_K256_KIND_SCHEMES.map((scheme) => ({ scheme, ...(EVM_K256_KINDS[scheme] as EvmK256Kind) }));
+
+/** The nested descriptor types: each kind's <Kind>Device and <Kind>Grantee. */
+export const EVM_K256_DESCRIPTOR_TYPES: TypeSet = Object.fromEntries([
+  ...KINDS.map((k) => [k.deviceType, f([['scheme', 'string'], ...PAYLOADS[k.payload].deviceMembers])]),
+  ...KINDS.map((k) => [k.granteeType, f([['scheme', 'string'], ...PAYLOADS[k.payload].granteeMembers])]),
+]);
 
 /** The 16 primary types; `<Device>` / `<Grantee>` is the scheme's nested type. */
 export const EVM_K256_PRIMARY_TYPES: Record<string, [string, string][]> = {
@@ -246,14 +327,15 @@ export interface EvmK256GranteeInput {
   origin: Uint8Array; label: Uint8Array; origin_hash: Uint8Array; slot: bigint;
 }
 
-const DEVICE_TAGS: Record<string, string> = {
-  'midnight:account:device:evm:v1': 'EvmDevice', 'midnight:account:device:sol:v1': 'SolanaDevice',
-  'midnight:account:device:v1': 'JubjubDevice', 'midnight:account:device:k1:v2': 'K256Device', 'midnight:account:device:r1:v2': 'PasskeyDevice',
-};
-const GRANTEE_TAGS: Record<string, string> = {
-  'midnight:account:grant:id:evm:v1': 'EvmGrantee', 'midnight:account:grant:id:sol:v1': 'SolanaGrantee',
-  'midnight:account:grant:id:v1': 'JubjubGrantee', 'midnight:account:grant:id:k1:v1': 'K256Grantee', 'midnight:account:grant:id:r1:v1': 'PasskeyGrantee',
-};
+/** The kind a descriptor input names by its tag (the device tag for a
+ *  device, the grant-id tag for a grantee), with its scheme and the tag's
+ *  text; undefined for a tag of no kind, or a registered text with non-zero
+ *  padding. */
+export function evmK256KindOf(recipe: 'device' | 'grant-id', tag: Uint8Array): (EvmK256Kind & { scheme: EvmK256KindScheme; text: string }) | undefined {
+  const text = tagText(tag);
+  const k = KINDS.find((x) => DESCRIPTOR_TAGS[recipe][x.scheme] === text);
+  return k && isZeroPadded(tag, text) ? { ...k, text } : undefined;
+}
 /** The enumerated members' text labels are the base's shared texts
  *  (labels.ts): the circuit hashes the same constant, selected by the value,
  *  and refuses a value with no label. */
@@ -290,8 +372,8 @@ export function amountLabelText(amount: bigint, site: SiteAmount): string {
   return EVM_K256_AMOUNT_LABEL_PREFIX + ascii(siteAmountLabelBytes(amount, site.decimals, site.symbol));
 }
 
-/** A Solana key as shown: its base58 text, space-padded to 44 bytes. */
-export const solanaKeyText = (key: Uint8Array): string => ascii(base58Text32Bytes(key));
+/** An ed25519_base58 kind's key as shown: its base58 text, space-padded to 44 bytes. */
+export const ed25519Base58Text = (key: Uint8Array): string => ascii(base58Text32Bytes(key));
 
 /** `IssueGrant.passkeyRp`: the base's "not applicable" for an all-zero RP hash
  *  (only a grant whose RP pin is never checked: no passkey grantee, or one
@@ -304,61 +386,39 @@ export function labelOf(member: 'recipientKind' | 'envelope', v: bigint): string
   if (typeof v !== 'bigint') throw new Error(`eip712: ${member} is a bigint`);
   return member === 'recipientKind' ? recipientKindLabel(v) : k256EnvelopeLabel(v);
 }
-const isZeroPadded = (tag: Uint8Array, text: string) => tag.length === 32 && tag.every((c, i) => c === (i < text.length ? text.charCodeAt(i) : 0));
-
-/** The nested type and member values of a device descriptor. Refuses an
- *  unregistered tag and a passkey origin that is not visible ASCII. */
-export function deviceMember(d: EvmK256DescriptorInput): { type: string; value: Record<string, unknown> } {
-  const scheme = tagText(d.tag);
-  const type = DEVICE_TAGS[scheme];
-  if (!type || !isZeroPadded(d.tag, scheme)) throw new Error('descriptor: not a registered device tag');
-  switch (type) {
-    case 'EvmDevice': return { type, value: { scheme, wallet: evmChecksumAddress(d.address), privacySalt: toHex(d.key2) } };
-    case 'SolanaDevice': return { type, value: { scheme, publicKey: solanaKeyText(d.key), privacySalt: toHex(d.key2) } };
-    case 'JubjubDevice': return { type, value: { scheme, x: toHex(d.key), y: toHex(d.key2) } };
-    case 'K256Device': return { type, value: { scheme, x: toHex(rev(d.key)), y: toHex(rev(d.key2)), envelope: labelOf('envelope', d.envelope) } };
-    default: {
-      // the circuit's order (evm_k256_device_descriptor_hash) and messages:
-      // the origin, then the RP hash, a passkey's own pin, never zero
-      const origin = visibleText(d.origin);
-      if (d.rp_id_hash.every((b) => b === 0)) throw new Error("evm_k256: a passkey's RP hash is zero");
-      return { type, value: { scheme, x: toHex(rev(d.key)), y: toHex(rev(d.key2)), origin, passkeyRpHash: toHex(d.rp_id_hash) } };
-    }
-  }
+function isZeroPadded(tag: Uint8Array, text: string): boolean {
+  return tag.length === 32 && tag.every((c, i) => c === (i < text.length ? text.charCodeAt(i) : 0));
 }
 
-/** The nested type and member values of a grantee descriptor. */
+/** The nested type and member values of a device descriptor, and its kind's
+ *  payload form. Refuses a tag of no kind and a passkey origin that is not
+ *  visible ASCII. */
+export function deviceMember(d: EvmK256DescriptorInput): { type: string; value: Record<string, unknown>; payload: EvmK256Payload } {
+  const k = evmK256KindOf('device', d.tag);
+  if (!k) throw new Error('descriptor: not a registered device tag');
+  return { type: k.deviceType, value: { scheme: k.text, ...PAYLOADS[k.payload].device(d) }, payload: k.payload };
+}
+
 /** The RFC 8032 encoding of the Ed25519 identity (y = 1, x = 0). */
 const ED25519_IDENTITY_ENCODING = (() => { const b = new Uint8Array(32); b[0] = 1; return b; })();
 
-export function granteeMember(g: EvmK256GranteeInput): { type: string; value: Record<string, unknown> } {
+/** The nested type and member values of a grantee descriptor, and its kind's
+ *  payload form. */
+export function granteeMember(g: EvmK256GranteeInput): { type: string; value: Record<string, unknown>; payload: EvmK256Payload } {
   // The grantee checks, in the order issue_grant_with_evm_k256 and
   // revoke_grant_with_evm_k256 reach them and with their messages: the
-  // registered grant-id tag (evm_k256_grantee_scheme), a
-  // Solana grantee's key not the identity (the base's ed25519 class), then
-  // the descriptor (evm_k256_grantee_descriptor_hash): the site label, the
-  // passkey origin, the k256 envelope.
-  const scheme = tagText(g.tag);
-  const type = GRANTEE_TAGS[scheme];
-  if (!type || !isZeroPadded(g.tag, scheme)) throw new Error('evm_k256: not a registered grant-id tag');
-  if (type === 'SolanaGrantee' && g.key.length === 32 && g.key.every((b, i) => b === ED25519_IDENTITY_ENCODING[i])) {
+  // kind's grant-id tag (evm_k256_grantee_kind), an Ed25519 grantee's key
+  // not the identity (the base's ed25519 class), then the descriptor
+  // (evm_k256_grantee_descriptor_hash): the site label, the passkey origin,
+  // the k256 envelope.
+  const k = evmK256KindOf('grant-id', g.tag);
+  if (!k) throw new Error('evm_k256: not a registered grant-id tag');
+  if (k.payload === 'ed25519_base58' && g.key.length === 32 && g.key.every((b, i) => b === ED25519_IDENTITY_ENCODING[i])) {
     throw new Error('descriptor: the Ed25519 key is the identity');
   }
   const label = (): string => { try { return siteLabelText(g.label); } catch { throw new Error('evm_k256: not a site label'); } };
   const slot = u8(g.slot, 'slot');
-  switch (type) {
-    case 'EvmGrantee': return { type, value: { scheme, wallet: evmChecksumAddress(g.address), privacySalt: toHex(g.key2), siteLabel: label(), slot } };
-    case 'SolanaGrantee': return { type, value: { scheme, publicKey: solanaKeyText(g.key), privacySalt: toHex(g.key2), siteLabel: label(), slot } };
-    case 'JubjubGrantee': return { type, value: { scheme, x: toHex(g.key), y: toHex(g.key2), siteLabelHash: toHex(g.origin_hash), slot } };
-    case 'K256Grantee': {
-      if (typeof g.envelope !== 'bigint' || g.envelope > 1n) throw new Error('evm_k256: not a k256 envelope');
-      return { type, value: { scheme, x: toHex(rev(g.key)), y: toHex(rev(g.key2)), envelope: labelOf('envelope', g.envelope), siteLabelHash: toHex(g.origin_hash), slot } };
-    }
-    default: {
-      if (!g.origin.every((c) => c >= 33 && c <= 126)) throw new Error('evm_k256: the passkey origin is not visible ASCII');
-      return { type, value: { scheme, x: toHex(rev(g.key)), y: toHex(rev(g.key2)), origin: visibleText(g.origin), slot } };
-    }
-  }
+  return { type: k.granteeType, value: { scheme: k.text, ...PAYLOADS[k.payload].grantee(g, label, slot) }, payload: k.payload };
 }
 
 // ── Builders: one per operation and role ─────────────────────────────────────
@@ -431,7 +491,7 @@ export const evmK256Messages = {
     if (s.read && readZero) throw new Error('evm_k256: read without a read key');
     const m = granteeMember(g);
     const rpZero = s.rpIdHash.every((b) => b === 0);
-    const rpPinned = m.type === 'PasskeyGrantee' && (s.opWithdrawUnshielded || s.opWithdrawShielded || s.opWithdrawShieldedToContract);
+    const rpPinned = m.payload === 'passkey' && (s.opWithdrawUnshielded || s.opWithdrawShielded || s.opWithdrawShieldedToContract);
     if (!rpPinned && !rpZero) throw new Error('evm_k256: an RP hash belongs to a spending passkey grant');
     if (rpPinned && rpZero) throw new Error("evm_k256: a spending passkey grant's RP hash is zero");
     if (s.recipientKind === 0n && !s.recipient.every((b) => b === 0)) throw new Error('evm_k256: a recipient for any recipient');

@@ -15,7 +15,7 @@ import {
 } from '../wallet/evm-k256-codec.js';
 import { padTag } from '../wallet/descriptors.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { solKeyOf } from '../wallet/signer-evm-k256.js';
+import { ed25519KeyOf } from '../wallet/signer-evm-k256.js';
 import {
   bytesHint, leHint, evmK256Base58Hint,
 } from '../wallet/evm-k256-hints.js';
@@ -217,11 +217,11 @@ export function rawAmountLabel(amount: bigint, site: { decimals: number; symbol:
   const t = `${d} ${site.symbol}`.padEnd(49, ' ').slice(0, 49);
   return Array.from(new TextEncoder().encode(t), (x) => BigInt(x));
 }
-/** The base58 inputs of the key bytes a descriptor shows under the Solana
- *  type (solKeyOf), or of 32 zero bytes when the key is no valid key (a
+/** The base58 inputs of the key bytes a descriptor shows for an ed25519_base58
+ *  kind (ed25519KeyOf), or of 32 zero bytes when the key is no valid key (a
  *  negative vector, refused before the base58 text matters). */
-const b58Of = (d: any) => { try { return evmK256Base58Hint(Uint8Array.from(solKeyOf(d), Number)); } catch { return evmK256Base58Hint(new Uint8Array(32)); } };
-const solKeyOr0 = (d: any): bigint[] => { try { return solKeyOf(d); } catch { return new Array(32).fill(0n); } };
+const b58Of = (d: any) => { try { return evmK256Base58Hint(Uint8Array.from(ed25519KeyOf(d), Number)); } catch { return evmK256Base58Hint(new Uint8Array(32)); } };
+const edKeyOr0 = (d: any): bigint[] => { try { return ed25519KeyOf(d); } catch { return new Array(32).fill(0n); } };
 const descriptorHintOf = (d: any) => ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: b58Of(d) });
 const granteeHintOf = (g: any) => ({ key: bytesHint(g.key), key2: bytesHint(g.key2), origin: bytesHint(g.origin), label: bytesHint(g.label), b58: b58Of(g) });
 
@@ -274,16 +274,16 @@ export function contractStructHash(pc: any, v: VectorInput): Uint8Array {
     case 'withdrawShieldedToContract': return pc.evm_k256_struct_withdraw_shielded_to_contract(...dev, unhex(a.color), big(a.amount), unhex(a.recipientContract), ...c, h.op);
     case 'appendInbox': return pc.evm_k256_struct_append_inbox(...dev, unhex(a.entry));
     case 'rotateEncKey': return pc.evm_k256_struct_rotate_enc_key(...dev, unhex(a.newKey));
-    case 'addDevice': { const d = descriptorInput(a.descriptor); return pc.evm_k256_struct_add_device(...dev, d, solKeyOr0(d), h.op); }
-    case 'removeDevice': return pc.evm_k256_struct_remove_device(...dev, descriptorInput(a.descriptor), solKeyOr0(descriptorInput(a.descriptor)), big(a.targetEpoch), big(a.targetCounter), h.op);
+    case 'addDevice': { const d = descriptorInput(a.descriptor); return pc.evm_k256_struct_add_device(...dev, d, edKeyOr0(d), h.op); }
+    case 'removeDevice': return pc.evm_k256_struct_remove_device(...dev, descriptorInput(a.descriptor), edKeyOr0(descriptorInput(a.descriptor)), big(a.targetEpoch), big(a.targetCounter), h.op);
     case 'removeUnknownDevice': return pc.evm_k256_struct_remove_unknown_device(...dev, unhex(a.entry));
     case 'issueGrant': {
       const s = scopeInput(a.scope);
-      return pc.evm_k256_struct_issue_grant(...dev, granteeInput(a.grantee), solKeyOr0(granteeInput(a.grantee)), s.opWithdrawUnshielded, s.opWithdrawShielded, s.opWithdrawShieldedToContract,
+      return pc.evm_k256_struct_issue_grant(...dev, granteeInput(a.grantee), edKeyOr0(granteeInput(a.grantee)), s.opWithdrawUnshielded, s.opWithdrawShielded, s.opWithdrawShieldedToContract,
         s.read, s.color, s.recipientKind, s.recipient, s.maxCoinValue, s.perCallCap, s.cap, s.expiresAt, s.rpIdHash, s.readPk, s.windowLen, s.windowCap,
         s.caller ? { is_some: true, value: { bytes: s.caller } } : { is_some: false, value: { bytes: new Uint8Array(32) } }, h.op);
     }
-    case 'revokeGrant': { const g = granteeInput(a.grantee); return pc.evm_k256_struct_revoke_grant(...dev, g, solKeyOr0(g), h.op); }
+    case 'revokeGrant': { const g = granteeInput(a.grantee); return pc.evm_k256_struct_revoke_grant(...dev, g, edKeyOr0(g), h.op); }
     case 'revokeAllGrants': return pc.evm_k256_struct_revoke_all_grants(...dev);
     case 'publishRecoverySession': return pc.evm_k256_struct_publish_recovery_session(...dev, { x: big(a.recoveryPk.x), y: big(a.recoveryPk.y) },
       unhex(a.sessionNonce), ...a.phi.map(big), big(a.phiLen), unhex(a.wrap));

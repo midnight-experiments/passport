@@ -47,12 +47,16 @@ import "modules/WalletArmDescriptors";
 import "modules/EvmK256";
 import "modules/Eip712V1";
 
-// The descriptor module's derivations and tags, re-exported as pure circuits
-// of the account contract: a client derives any readable descriptor's entry,
-// boot commitment, grant id, or grant scope salt through the account's own
-// compiled module.
+// The descriptor module's derivations, tags and registry of readable arms,
+// re-exported as pure circuits of the account contract: a client derives any
+// readable descriptor's entry, boot commitment, grant id, or grant scope salt
+// through the account's own compiled module, and reads every registered
+// readable arm's class and tags from readable_arms().
 // Pure: no proving key, no deploy cost.
 export {
+  ReadableClass, ReadableArm, readable_arms,
+  is_registered_device_tag, is_registered_boot_tag, is_registered_grant_id_tag,
+  is_registered_blind_tag, is_registered_salt_tag,
   device_tag_jubjub, device_tag_k256, device_tag_p256,
   device_tag_evm_k256, device_tag_sol_ed25519,
   boot_tag_evm_k256, boot_tag_sol_ed25519,
@@ -80,15 +84,16 @@ export {
 };
 
 // The arm's EIP-712 codec (modules/EvmK256, byte contract EVM-K256.md):
-// the descriptor hashes and derivations, and the struct hash of every
-// operation, re-exported as pure oracles.
+// the enrolment kinds, the descriptor hashes and derivations, and the struct
+// hash of every operation, re-exported as pure oracles.
 export {
   EvmK256Descriptor, EvmK256GranteeDescriptor,
   EvmK256Base58Hint, EvmK256DescriptorHint, EvmK256GranteeHint, EvmK256AmountHint, EvmK256CoinHint,
   EvmK256RemoveHint, EvmK256IssueHint,
-  evm_k256_site_label_hash, evm_k256_device_scheme, evm_k256_grantee_scheme,
+  EvmK256Payload, EvmK256Kind, evm_k256_kinds, evm_k256_device_kind, evm_k256_grantee_kind,
+  evm_k256_site_label_hash,
   evm_k256_device_descriptor_hash, evm_k256_descriptor_entry,
-  evm_k256_sol_device_target, evm_k256_sol_grantee_target,
+  evm_k256_ed25519_device_target, evm_k256_ed25519_grantee_target,
   evm_k256_grantee_origin_hash, evm_k256_grantee_grant_id, evm_k256_grantee_descriptor_hash,
   evm_k256_struct_withdraw_unshielded, evm_k256_struct_withdraw_shielded,
   evm_k256_struct_withdraw_shielded_to_contract, evm_k256_struct_append_inbox,
@@ -382,30 +387,30 @@ export circuit append_inbox_with_evm_k256(entry: Bytes<192>, auth: EvmK256Auth):
 // ── Device lifecycle (MIP-0013 §6) ──────────────────────────────────────────
 //
 // The other key is a readable DESCRIPTOR: the
-// target scheme's tag text and key payload (an EVM target by its address and
-// privacy salt, a Solana target by its point (a Curve25519Point: its 32-byte
-// key derived in-circuit, the identity refused) and privacy salt, a k256
-// target by x, y and envelope, a passkey by x, y, its exact origin and the
-// RP hash, a JubJub target by its point). The approval shows exactly those
-// values, and the circuit derives the target's entry from them with the
-// target scheme's own recipe (modules/WalletArmDescriptors, by payload-width
-// class). An unregistered tag, or a registered tag of another recipe or
-// width, is refused, so a descriptor can never
-// enrol an entry that no arm recognises by its tag.
+// tag text of its enrolment kind and its key payload, in the form the kind's
+// entry names (modules/EvmK256, "Enrolment kinds": an address and privacy
+// salt; an Ed25519 key by its point (a Curve25519Point: its 32-byte key
+// derived in-circuit, the identity refused) and privacy salt; x, y and an
+// envelope; a passkey's x, y, exact origin and RP hash; a JubJub point). The
+// approval shows exactly those values under the kind's own typed-data type,
+// and the circuit derives the target's entry from them with the recipe of
+// the kind's form (modules/WalletArmDescriptors). A tag of no registered
+// kind is refused, so a descriptor can never enrol an entry that no arm
+// recognises by its tag.
 //
 // add_device derives at the CURRENT device_epoch and counter 0, never at a
 // caller-chosen epoch or counter: this arm cannot plant an entry at
 // device_epoch + 1 (README erratum 7), whatever the descriptor says.
 
-// AddDevice(bytes32 account,address device,uint64 authNonce,string effect,<Scheme>Device newDevice)
+// AddDevice(bytes32 account,address device,uint64 authNonce,string effect,<Kind>Device newDevice)
 export circuit add_device_with_evm_k256(
-  new_device: EvmK256Descriptor, sol_key: Curve25519Point, sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>,
+  new_device: EvmK256Descriptor, ed_pk: Curve25519Point, ed_bytes: Vector<32, Uint<8>>, ed_x: Vector<32, Uint<8>>,
   auth: EvmK256Auth, hint: EvmK256DescriptorHint
 ): [] {
-  const se = evm_k256_sol_device_target(kernel.self(), new_device, sol_key, sol_bytes, sol_x, device_epoch, 0 as Uint<64>)[1];
-  const [t, tail] = evm_k256_parts_add_device(new_device, sol_bytes, hint);
+  const ed_entry = evm_k256_ed25519_device_target(kernel.self(), new_device, ed_pk, ed_bytes, ed_x, device_epoch, 0 as Uint<64>)[1];
+  const [t, tail] = evm_k256_parts_add_device(new_device, ed_bytes, hint);
   require_authorised_with_evm_k256<[Bytes<32>, Bytes<32>]>(auth, t, tail);
-  do_add_device(evm_k256_descriptor_entry(kernel.self(), new_device, se, device_epoch, 0 as Uint<64>));
+  do_add_device(evm_k256_descriptor_entry(kernel.self(), new_device, ed_entry, device_epoch, 0 as Uint<64>));
 }
 
 // Two forms in one circuit:
@@ -413,7 +418,7 @@ export circuit add_device_with_evm_k256(
 //     reduces authority, so an explicit epoch is allowed: a device can evict
 //     an entry planted at device_epoch + 1 by an upstream arm's raw
 //     add_device), approved as
-//     RemoveDevice(bytes32 account,address device,uint64 authNonce,<Scheme>Device target,uint32 targetEpoch,uint64 targetCounter);
+//     RemoveDevice(bytes32 account,address device,uint64 authNonce,<Kind>Device target,uint32 targetEpoch,uint64 targetCounter);
 //   - the revocation-only literal entry, for an entry the wallet cannot
 //     describe (`unknown_entry` present), approved as
 //     RemoveUnknownDevice(bytes32 account,address device,uint64 authNonce,string effect,bytes32 entry)
@@ -424,9 +429,9 @@ export circuit add_device_with_evm_k256(
 // S13: do_remove_device's guard), nor the last device.
 export circuit remove_device_with_evm_k256(
   target:         EvmK256Descriptor,
-  sol_key:        Curve25519Point,
-  sol_bytes:      Vector<32, Uint<8>>,
-  sol_x:          Vector<32, Uint<8>>,
+  ed_pk:          Curve25519Point,
+  ed_bytes:       Vector<32, Uint<8>>,
+  ed_x:           Vector<32, Uint<8>>,
   target_epoch:   Uint<32>,
   target_counter: Uint<64>,
   unknown_entry:  Maybe<Bytes<32>>,
@@ -434,25 +439,26 @@ export circuit remove_device_with_evm_k256(
   hint:           EvmK256RemoveHint,
 ): [] {
   assert(unknown_entry.is_some || unknown_entry.value == default<Bytes<32>>, "noncanonical absent entry");
-  const se = evm_k256_sol_device_target(kernel.self(), target, sol_key, sol_bytes, sol_x, target_epoch, target_counter)[1];
-  const [t1, tail1] = evm_k256_parts_remove_device(target, sol_bytes, target_epoch, target_counter, hint);
+  const ed_entry = evm_k256_ed25519_device_target(kernel.self(), target, ed_pk, ed_bytes, ed_x, target_epoch, target_counter)[1];
+  const [t1, tail1] = evm_k256_parts_remove_device(target, ed_bytes, target_epoch, target_counter, hint);
   const [t2, tail2] = evm_k256_parts_remove_unknown_device(unknown_entry.value);
   const caller_entry = require_authorised_with_evm_k256_either<[Bytes<32>, Bytes<28>, Bytes<4>, Bytes<24>, Bytes<8>], [Bytes<32>, Bytes<32>]>(
     auth, unknown_entry.is_some, t1, tail1, t2, tail2);
-  const described = evm_k256_descriptor_entry(kernel.self(), target, se, target_epoch, target_counter);
+  const described = evm_k256_descriptor_entry(kernel.self(), target, ed_entry, target_epoch, target_counter);
   do_remove_device(unknown_entry.is_some ? unknown_entry.value : described, caller_entry);
 }
 
 // ── Scoped grants (the scoped-grants MIP) ───────────────────────────────────
 //
 // The device role issues, revokes and revokes all grants through the device
-// seam (over auth_nonce). The grantee is shown by its readable descriptor:
-// the scheme's key, the site label (or, for a k256 or JubJub grantee, the
-// labelled origin hash; for a passkey, its exact origin) and the slot; the circuit derives the grant id from exactly those
-// values with the grantee scheme's own grant-id recipe. Every scope field is
-// a member of the approval, the caller pin included (#176).
+// seam (over auth_nonce). The grantee is shown by its readable descriptor,
+// under its enrolment kind's typed-data type: the key, the site label (or,
+// for a k256 or JubJub grantee, the labelled origin hash; for a passkey, its
+// exact origin) and the slot; the circuit derives the grant id from exactly
+// those values with the grant-id recipe of the kind's form. Every scope
+// field is a member of the approval, the caller pin included (#176).
 
-// IssueGrant(bytes32 account,address device,uint64 authNonce,string effect,<Scheme>Grantee grantee,
+// IssueGrant(bytes32 account,address device,uint64 authNonce,string effect,<Kind>Grantee grantee,
 //            bool withdrawUnshielded,bool withdrawShielded,bool withdrawShieldedToContract,bool read,bytes32 color,
 //            string recipientKind,bytes32 recipient,uint128 maxCoinValue,uint128 perCallCap,uint128 cap,uint64 expiresAt,
 //            string expiry,bytes32 passkeyRpHash,string passkeyRp,bytes32 readKey,uint64 windowLength,uint128 windowCap,
@@ -479,9 +485,9 @@ export circuit remove_device_with_evm_k256(
 // computes the same value and hands it to the grantee.
 export circuit issue_grant_with_evm_k256(
   grantee:                          EvmK256GranteeDescriptor,
-  sol_key:                          Curve25519Point,
-  sol_bytes:                        Vector<32, Uint<8>>,
-  sol_x:                            Vector<32, Uint<8>>,
+  ed_pk:                            Curve25519Point,
+  ed_bytes:                         Vector<32, Uint<8>>,
+  ed_x:                             Vector<32, Uint<8>>,
   op_withdraw_unshielded:           Boolean,
   op_withdraw_shielded:             Boolean,
   op_withdraw_shielded_to_contract: Boolean,
@@ -507,8 +513,8 @@ export circuit issue_grant_with_evm_k256(
   // The RP-hash rules and the "any recipient" rule are asserted in
   // evm_k256_parts_issue_grant, which builds what is shown.
   const oh = evm_k256_grantee_origin_hash(grantee);
-  const si = evm_k256_sol_grantee_target(kernel.self(), grantee, oh, sol_key, sol_bytes, sol_x)[1];
-  const [t, tail] = evm_k256_parts_issue_grant(grantee, sol_bytes, op_withdraw_unshielded, op_withdraw_shielded,
+  const ed_id = evm_k256_ed25519_grantee_target(kernel.self(), grantee, oh, ed_pk, ed_bytes, ed_x)[1];
+  const [t, tail] = evm_k256_parts_issue_grant(grantee, ed_bytes, op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap,
     expires_at, rp_id_hash, read_pk, window_len, window_cap, caller, hint);
   require_authorised_with_evm_k256<[Bytes<32>, Bytes<32>,
@@ -517,22 +523,22 @@ export circuit issue_grant_with_evm_k256(
                                       Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>, Bytes<16>,
                                       Bytes<24>, Bytes<8>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<24>, Bytes<8>, Bytes<16>, Bytes<16>, Bytes<32>,
                                       Bytes<31>, Bytes<1>, Bytes<32>]>(auth, t, tail);
-  do_issue_grant(evm_k256_grantee_grant_id(kernel.self(), grantee, oh, si), op_withdraw_unshielded, op_withdraw_shielded,
+  do_issue_grant(evm_k256_grantee_grant_id(kernel.self(), grantee, oh, ed_id), op_withdraw_unshielded, op_withdraw_shielded,
     op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient, max_coin_value, per_call_cap, cap,
     expires_at, rp_id_hash, read ? persistentHash<Bytes<32>>(read_pk) : pad(32, ""), window_len, window_cap,
     caller, scope_salt);
 }
 
-// RevokeGrant(bytes32 account,address device,uint64 authNonce,<Scheme>Grantee grantee)
+// RevokeGrant(bytes32 account,address device,uint64 authNonce,<Kind>Grantee grantee)
 export circuit revoke_grant_with_evm_k256(
-  grantee: EvmK256GranteeDescriptor, sol_key: Curve25519Point, sol_bytes: Vector<32, Uint<8>>, sol_x: Vector<32, Uint<8>>,
+  grantee: EvmK256GranteeDescriptor, ed_pk: Curve25519Point, ed_bytes: Vector<32, Uint<8>>, ed_x: Vector<32, Uint<8>>,
   auth: EvmK256Auth, hint: EvmK256GranteeHint
 ): [] {
   const oh = evm_k256_grantee_origin_hash(grantee);
-  const si = evm_k256_sol_grantee_target(kernel.self(), grantee, oh, sol_key, sol_bytes, sol_x)[1];
-  const [t, tail] = evm_k256_parts_revoke_grant(grantee, sol_bytes, hint);
+  const ed_id = evm_k256_ed25519_grantee_target(kernel.self(), grantee, oh, ed_pk, ed_bytes, ed_x)[1];
+  const [t, tail] = evm_k256_parts_revoke_grant(grantee, ed_bytes, hint);
   require_authorised_with_evm_k256<Bytes<32>>(auth, t, tail);
-  do_revoke_grant(evm_k256_grantee_grant_id(kernel.self(), grantee, oh, si));
+  do_revoke_grant(evm_k256_grantee_grant_id(kernel.self(), grantee, oh, ed_id));
 }
 
 // RevokeAllGrants(bytes32 account,address device,uint64 authNonce)
