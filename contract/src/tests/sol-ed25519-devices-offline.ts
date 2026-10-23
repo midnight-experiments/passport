@@ -351,10 +351,10 @@ const G5 = '5 guards';
     const k = solTargetPointArg(tS3) as any;
     const b = [...k.pk_bytes]; b[3] ^= 1n;
     const tF = { ...tS3, a: Uint8Array.from(b, Number) };
-    await refused(G5, "a Solana target's key bytes with one byte flipped (shown, signed and in the descriptor alike)", 'runtime', /the Ed25519 key bytes do not match the point's y/, () =>
+    await refused(G5, "a Solana target's key bytes with one byte flipped (shown, signed and in the descriptor alike)", 'runtime', /ed25519: the encoding does not match the point's y/, () =>
       addSigned(g, tF, tF, { ...k, pk_bytes: b }));
     const x = [...k.pk_x]; x[30] ^= 2n;
-    await refused(G5, "a Solana target's x bytes with one byte flipped", 'runtime', /the Ed25519 x bytes do not match the point's x/, async () =>
+    await refused(G5, "a Solana target's x bytes with one byte flipped", 'runtime', /ed25519: the x bytes do not match the point's x/, async () =>
       add(g, tS3, await auth(g, S, { op: 'add_device', target: tS3 }), { ...k, pk_x: x }));
   }
   // the identity as a Solana target: the client refuses to decode it; past

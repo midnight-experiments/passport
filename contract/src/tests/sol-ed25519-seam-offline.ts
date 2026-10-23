@@ -246,15 +246,15 @@ const G5 = '5 verification inputs';
    *  sign bit together). */
   const nonceEnding = (last: bigint) => { for (;;) { const n = nonce(); if (n.e[31] === last) return n; } };
   { const n = nonce(); const e = [...n.e]; e[5] ^= 1n;
-    await refused(G5, "R's encoding with one byte flipped, signed over that encoding", 'runtime', /the Ed25519 key bytes do not match the point's y/, () => forged(signedOver(n, e), e, n.x)); }
+    await refused(G5, "R's encoding with one byte flipped, signed over that encoding", 'runtime', /ed25519: the encoding does not match the point's y/, () => forged(signedOver(n, e), e, n.x)); }
   { const n = nonce(); const e = [...n.e]; e[31] ^= 128n;
-    await refused(G5, "R's encoding with the sign bit flipped, signed over that encoding", 'runtime', /the Ed25519 sign bit is not x's parity/, () => forged(signedOver(n, e), e, n.x)); }
+    await refused(G5, "R's encoding with the sign bit flipped, signed over that encoding", 'runtime', /ed25519: the sign bit is not x's parity/, () => forged(signedOver(n, e), e, n.x)); }
   { const n = nonce(true); const e = le((n.R.y + P) & ((1n << 256n) - 1n));
-    await refused(G5, "R's encoding as y + p, signed over that encoding", 'runtime', /the Ed25519 key bytes do not match the point's y/, () => forged(signedOver(n, e), e, n.x)); }
+    await refused(G5, "R's encoding as y + p, signed over that encoding", 'runtime', /ed25519: the encoding does not match the point's y/, () => forged(signedOver(n, e), e, n.x)); }
   { const n = nonce(); const x = [...n.x]; x[7] ^= 1n;
-    await refused(G5, "R's x bytes with one byte flipped", 'runtime', /the Ed25519 x bytes do not match the point's x/, () => forged(signedOver(n, n.e), n.e, x)); }
+    await refused(G5, "R's x bytes with one byte flipped", 'runtime', /ed25519: the x bytes do not match the point's x/, () => forged(signedOver(n, n.e), n.e, x)); }
   { const n = nonce(); const x = le(n.R.x + P);
-    await refused(G5, "R's x bytes as x + p", 'runtime', /the Ed25519 x bytes do not match the point's x/, () => forged(signedOver(n, n.e), n.e, x)); }
+    await refused(G5, "R's x bytes as x + p", 'runtime', /ed25519: the x bytes do not match the point's x/, () => forged(signedOver(n, n.e), n.e, x)); }
   { const n = nonce(); const e = [...n.e]; const i = e.findIndex((_, j) => j > 0 && j < 30 && e[j + 1] > 0n); e[i] += 256n; e[i + 1] -= 1n;
     await refused(G5, "R's encoding with the carry attack (a byte of 256, its neighbour minus one)", 'runtime', /type error/, () => forged(signedOver(n, n.e), e, n.x)); }
   // the signing key's byte inputs: the seam's derivation checks them against
@@ -266,11 +266,11 @@ const G5 = '5 verification inputs';
     try { return await call(simC, 'rotate_enc_key_with_sol_ed25519', kC, ...args); } finally { simC.state = st; }
   };
   { const b = [...keyArgs.pk_bytes]; b[9] ^= 4n;
-    await refused(G5, "the key's bytes with one byte flipped", 'runtime', /the Ed25519 key bytes do not match the point's y/, () => withKey(b, keyArgs.pk_x)); }
+    await refused(G5, "the key's bytes with one byte flipped", 'runtime', /ed25519: the encoding does not match the point's y/, () => withKey(b, keyArgs.pk_x)); }
   { const b = [...keyArgs.pk_bytes]; b[31] ^= 128n;
-    await refused(G5, "the key's bytes with the sign bit flipped", 'runtime', /the Ed25519 sign bit is not x's parity/, () => withKey(b, keyArgs.pk_x)); }
+    await refused(G5, "the key's bytes with the sign bit flipped", 'runtime', /ed25519: the sign bit is not x's parity/, () => withKey(b, keyArgs.pk_x)); }
   { const x = [...keyArgs.pk_x]; x[20] ^= 1n;
-    await refused(G5, "the key's x bytes with one byte flipped", 'runtime', /the Ed25519 x bytes do not match the point's x/, () => withKey(keyArgs.pk_bytes, x)); }
+    await refused(G5, "the key's x bytes with one byte flipped", 'runtime', /ed25519: the x bytes do not match the point's x/, () => withKey(keyArgs.pk_bytes, x)); }
   { const b = [...keyArgs.pk_bytes]; const i = b.findIndex((_, j) => j > 0 && j < 30 && b[j + 1] > 0n); b[i] += 256n; b[i + 1] -= 1n;
     await refused(G5, "the key's bytes with the carry attack (a byte of 256, its neighbour minus one)", 'runtime', /type error/, () => withKey(b, keyArgs.pk_x)); }
   // the sign bit's boundary: a last byte of exactly 128 (y's top byte 0, x

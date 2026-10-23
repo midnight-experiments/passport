@@ -236,13 +236,13 @@ const NOTREG = 'descriptor: not a registered device tag';
 const W117 = 'descriptor: not a 117-byte device tag';
 const AUTHORISING = 'cannot remove the authorising device';
 const LAST = 'cannot remove last device';
-const IDENTITY_KEY = 'Curve25519Point identity is not a permitted ed25519Verify verification key';
+const IDENTITY_KEY = 'ed25519: the key is the identity';
 const KEY_IS_IDENTITY = 'descriptor: the Ed25519 key is the identity';
 const NOT_POINT = "descriptor: the Solana key is not the point's encoding";
-// the descriptor module's Ed25519 encoding check, for keys and for R alike
-const KEYY = "descriptor: the Ed25519 key bytes do not match the point's y";
-const KEYX = "descriptor: the Ed25519 x bytes do not match the point's x";
-const KEYSIGN = "descriptor: the Ed25519 sign bit is not x's parity";
+// the Ed25519 core's encoding check, for keys and for R alike
+const KEYY = "ed25519: the encoding does not match the point's y";
+const KEYX = "ed25519: the x bytes do not match the point's x";
+const KEYSIGN = "ed25519: the sign bit is not x's parity";
 const UNUSED_KEY = 'descriptor: unused key bytes must be zero';
 // the base rendering module's base58 checks
 const B58LO = "display: the base58 digits do not match the value's low bytes";
@@ -354,7 +354,7 @@ const controlledBy = new Map<string, string>();
  *  the readable formats (base58, the UTC date, the amount label, the literal
  *  removal's display inputs): a negative of one proves its own control. */
 const OWN_CONTROL_ASSERTS = new Set([
-  "Curve25519Point identity is not a permitted ed25519Verify verification key",
+  "ed25519: the key is the identity",
   "descriptor: unused key bytes must be zero",
   "display: a literal removal's display inputs are not those of an empty target",
   "display: day out of range",
@@ -371,9 +371,9 @@ const OWN_CONTROL_ASSERTS = new Set([
   "display: the site amount label does not match the value",
   "display: the year split is not canonical",
   "display: time of day out of range",
-  "descriptor: the Ed25519 key bytes do not match the point's y",
-  "descriptor: the Ed25519 sign bit is not x's parity",
-  "descriptor: the Ed25519 x bytes do not match the point's x",
+  "ed25519: the encoding does not match the point's y",
+  "ed25519: the sign bit is not x's parity",
+  "ed25519: the x bytes do not match the point's x",
 ]);
 /** Sections all of whose negatives target those checks or the arm's own
  *  single asserts: each proves its own control. */
