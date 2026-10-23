@@ -358,7 +358,7 @@ await section('7 unauthorised keys', async () => {
   const X = newSession().s;
   await refused('an unenrolled sol key signs the session', () => publish(stranger, X, 0n), UNKNOWN);
   await refused("the device key with another account index's blind", async () => {
-    const other = await deriveSolBlind({ publicKey: S.key, sign: (m: Uint8Array) => (S as any).signFn(m) } as any, { network: 'undeployed', accountIndex: 1 }).catch(() => null);
+    const other = await deriveSolBlind((S as any).signer, { network: 'undeployed', accountIndex: 1 }).catch(() => null);
     const a = await authFor(S, X);
     return call(PUBLISH, [...sessionArgs(X), ...authArgs({ ...a, blind: other?.blind ?? rnd() })]);
   }, UNKNOWN);

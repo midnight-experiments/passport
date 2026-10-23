@@ -2767,7 +2767,7 @@ async function sectionFormats() {
   const SITE = 'Formats prover test';
   const { seed, d: S } = await solDevice(rnd());
   // the same key and blind, signing as an off-chain message v1: one device
-  const SO = new sol.SolEd25519Device({ publicKey: S.key, blind: S.blind, sign: sol.solSoftwareSigner(seed).sign, format: 'offchain' });
+  const SO = new sol.SolEd25519Device({ publicKey: S.key, blind: S.blind, signer: sol.solSoftwareSigner(seed), format: 'offchain' });
   interface FCase { circuit: string; seam: 'device' | 'grant'; a: LocalAccount; raw: unknown[]; off: unknown[]; rawAsOff: unknown[]; offAsRaw: unknown[]; note: string; shown?: Uint8Array }
   const cases: FCase[] = [];
   const device = async (circuit: string, a: LocalAccount, o: any, argsOf: (au: any) => unknown[], note: string, shown?: Uint8Array) => {
@@ -2812,7 +2812,7 @@ async function sectionFormats() {
   }
   const gSeed = rnd();
   const G = await sol.SolEd25519Grantee.enrol(sol.solSoftwareSigner(gSeed), { network: 'undeployed', issuingAccount: A0.addressBytes }, 'Example dApp');
-  const GO = new sol.SolEd25519Grantee(new sol.SolEd25519Device({ publicKey: G.key, blind: G.blind, sign: sol.solSoftwareSigner(gSeed).sign, format: 'offchain' }), G.label);
+  const GO = new sol.SolEd25519Grantee(new sol.SolEd25519Device({ publicKey: G.key, blind: G.blind, signer: sol.solSoftwareSigner(gSeed), format: 'offchain' }), G.label);
   const COLS = fill(32, 0xa1), COLU = fill(32, 0xc7), RCPTU = fill(32, 0x7e);
   const scS = scopeOf({ opWithdrawShielded: true, opWithdrawShieldedToContract: true, read: true, readPk: fill(32, 0x77), color: COLS, maxCoinValue: 1000n, perCallCap: 600n, cap: 1200n });
   const scU = scopeOf({ opWithdrawUnshielded: true, color: COLU, recipientKind: RECIPIENT_USER_ADDRESS, recipient: RCPTU, maxCoinValue: 300n, perCallCap: 300n, cap: 450n });

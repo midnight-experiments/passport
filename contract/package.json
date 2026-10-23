@@ -16,7 +16,7 @@
     "prove:webauthn-variable": "tsx src/tests/webauthn-variable/prove.ts",
     "resources:webauthn-variable": "tsx src/tests/webauthn-variable/resources.ts",
     "check:webauthn-transcripts": "tsx src/tests/webauthn-variable/check-transcripts.ts",
-    "test:sol-ed25519-offline": "tsx src/tests/sol-ed25519-offline.ts && tsx src/tests/sol-ed25519-message-offline.ts && tsx src/tests/sol-ed25519-seam-offline.ts && tsx src/tests/sol-ed25519-custody-offline.ts && tsx src/tests/sol-ed25519-devices-offline.ts && tsx src/tests/sol-ed25519-grants-offline.ts && tsx src/tests/sol-ed25519-recovery-sim.ts && tsx src/tests/sol-ed25519-taint-offline.ts",
+    "test:sol-ed25519-offline": "tsx src/tests/sol-ed25519-offline.ts && tsx src/tests/sol-ed25519-message-offline.ts && tsx src/tests/sol-ed25519-seam-offline.ts && tsx src/tests/sol-ed25519-custody-offline.ts && tsx src/tests/sol-ed25519-devices-offline.ts && tsx src/tests/sol-ed25519-grants-offline.ts && tsx src/tests/sol-ed25519-recovery-sim.ts && tsx src/tests/sol-ed25519-taint-offline.ts && tsx src/tests/sol-ed25519-client-offline.ts",
     "check:sol-ed25519-taint-controls": "tsx src/tests/sol-ed25519-taint-controls.ts",
     "test:sol-ed25519": "tsx src/tests/sol-ed25519-prover.ts",
     "test:p256": "tsx src/tests/p256-conformance.ts",

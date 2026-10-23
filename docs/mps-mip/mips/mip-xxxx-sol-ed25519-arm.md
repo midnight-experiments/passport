@@ -8,9 +8,9 @@ a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
 This document records an EdDSA construction, specified as a delta
 to [MIP-0030](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md)
-(ECDSA Authorisation for Custody Accounts): a Solana wallet (any
-wallet whose `signMessage` signs raw bytes with RFC 8032 PureEdDSA over
-edwards25519) as a device or a grantee. Its signing bytes and key
+(ECDSA Authorisation for Custody Accounts): a Solana wallet (one that
+signs raw bytes with `signMessage`, or the Solana off-chain message v1,
+with RFC 8032 PureEdDSA over edwards25519) as a device or a grantee. Its signing bytes and key
 binding depart from MIP-0030 section 2 as stated here. Byte contract, frozen
 vectors and acceptance policy:
 [SOL-ED25519](../../../contract/SOL-ED25519.md); costs:
@@ -34,8 +34,8 @@ authority-granting operations, and the freshness state (`auth_nonce`,
 or the grant's label, slot, issue nonce and use nonce). The circuit
 renders the message itself from the executed values (the seam renders
 the account, the key and the freshness state) and verifies the
-signature over it with the standard library's Ed25519 algorithm, plus
-an explicit `R != O`. Bytes are shown as
+signature over the signing format's 50-byte head followed by it, with
+the standard library's Ed25519 algorithm, plus an explicit `R != O`. Bytes are shown as
 lowercase hex in full; numbers as left-aligned decimal digits in
 full; every Solana key (the signer's, and a Solana target or grantee)
 as its base58 text, as Solana wallets show it, padded to 44 bytes; a
@@ -61,11 +61,41 @@ descriptor (scheme tag text and key payload) from which the circuit
 derives that scheme's entry or grant ID with the scheme's own recipe;
 an unregistered tag is refused; a Solana target is taken as its point
 with its 32-byte encoding, which the circuit checks against the point
-and shows in base58, refusing the identity. Every message starts with `Midn`, which as a legacy Solana
-transaction message claims 110 account keys: every message is
-shorter than the resulting parse bound (3,557 bytes; the longest is
-1,690), none is a versioned or off-chain message, and none carries the
-Sign-In With Solana statement.
+and shows in base58, refusing the identity.
+
+**Signing formats.** A wallet signs `head || text`, with one of two
+50-byte heads: raw, the ASCII line `Midnight Passport, Solana
+signMessage format (v1)` and a line feed (what `signMessage` signs);
+or the off-chain message v1, `ff || "solana offchain" || 01 (version)
+|| 01 (signer count) || key` (what hardware wallets and a wallet's
+own off-chain signing sign), whose one signer is the key the seam
+checked against the point the signature is verified under. A private
+flag selects the head; it is never disclosed (no public instruction
+of any circuit depends on it, and both formats leave the same public
+transcript), so one circuit and one verifier key serve both formats
+and the chain does not learn which kind of wallet signed. A signature
+made in one format verifies only in that format. Every raw message
+starts with `Midn`, which as a legacy Solana transaction message
+claims 110 account keys: every raw message is shorter than the
+resulting parse bound (3,557 bytes; the longest is 1,740), none is a
+versioned or off-chain message, and none carries the Sign-In With
+Solana statement. Every off-chain message is an off-chain message v1
+by design, and no transaction or message.
+
+**Formats by wallet.** Clients MUST NOT ask a wallet for a format it
+cannot sign: Phantom signs raw only (it refuses an off-chain message);
+Ledger and Trezor sign the off-chain message only (their Solana apps
+refuse raw bytes); Backpack and Solflare sign raw, and the off-chain
+message through their own wallet-standard `solana:signOffchainMessage`
+when they advertise it with message version 1, which clients SHOULD
+use instead of handing them the envelope's bytes (shown as garbled
+characters). Clients MUST verify every signature a wallet returns
+against the expected key, over exactly the bytes the wallet was asked
+to sign, before proving: a wallet may answer with another key than the
+one it reports. A refusal names another key only when the signature
+verifies under it. A wallet setting that signs messages unseen
+(auto-approve) signs Passport approvals unseen; clients cannot detect
+it, and users must keep it off.
 
 **The four labelled values.** Exactly four hash-like values may
 appear, each under a fixed label, none granting authority: a
@@ -115,9 +145,8 @@ toolchain's input decoding. A `Field` shown as
 32 bytes (recovery material) has exactly one rendering: the lowering's
 bit decomposition is canonical. Clients decode keys and signatures
 strictly (RFC 8032 canonical encodings, torsion-free `A` and `R`) and
-pre-check every signature over exactly the bytes the circuit renders;
-wallets that cannot sign raw bytes (a Ledger-backed account) cannot
-enrol.
+pre-check every signature over exactly the bytes of the device's
+format, the head and the text the circuit renders.
 
 **Wallet-key grantees.** A grantee key is a wallet key reused across
 sites, not a key bound to one origin. Its `Grant label` is a label the
@@ -152,17 +181,41 @@ ledger, where it is proposed.
 
 **Blinding.** Device entries, boot commitments and grant IDs are
 blinded with a per-account secret: the blind above, taken over the raw
-64-byte signature of a deterministic `signMessage` on a readable
-request naming Midnight Passport, the network, the wallet's key and an
-account index, and warning that it reveals the account's privacy key.
-Its first line differs from every authorisation's, and no circuit
-accepts it. Clients MUST sign it twice and refuse a wallet whose two
+64-byte signature of a deterministic signer on a readable request
+naming Midnight Passport, the network, the wallet's key and an account
+index, and warning that it reveals the account's privacy key, signed
+in a format of the wallet: raw, the request's bytes unchanged; or the
+off-chain message v1 head naming the key, then the same bytes. Its
+first line differs from every authorisation's, and no circuit accepts
+it. Clients MUST sign it twice and refuse a wallet whose two
 signatures differ. The ledger then holds no value a known key can be
 tested against; whoever obtains the signature learns the blind (a
 privacy loss, not an authority). A grantee's blind, which the issuer
 must know, comes from a separate request naming the role and the
 issuing account (no account index), so an issuer never learns a device
 blind and each issuer gets its own.
+
+**A device is bound to its format.** One key gives one blind per
+format, so a device is usable only with the blind of the format it was
+enrolled in; its identity (the key and the arm's tag) does not depend
+on the format. Clients MUST store per device its arm, format and
+account index, and SHOULD cache the blind with them in local storage,
+never sending it. On restore a client uses the cached blind, else
+derives it in the stored format, else, with no record, in every format
+the wallet can sign; it never derives a blind in another format than
+the stored one. A device enrolled through a raw-only wallet cannot be
+re-derived from an off-chain-only wallet of the same key: the client
+says so (naming the format needed, or, without a record, that no
+account was found in the wallet's formats and that the device may have
+been enrolled through another one), and the remedy is a new device,
+added from another device of the account or through its recovery.
+
+**Upgrades.** Adding an enrolment kind or a readable arm is additive
+in source (new entries and new files), but it changes the ZKIR and
+verifier keys of the readable arms' enrolment and grant circuits. A
+deployed account has retired its maintenance authority and cannot take
+new keys, so such an upgrade is new code, new keys and a new account
+version.
 
 **What is public.** Every call publishes which arm and role it uses
 (the circuit name), and the ledger holds only blinded device entries
@@ -176,8 +229,8 @@ the standard library: a permissionless deposit changes the shared
 `round`, so a prepared call must be proved again (its approval stays
 valid); whoever knows a spent coin can follow a `sendShielded` spend,
 because its output nonces derive from the input coin's; a hosted or
-delegated proof server sees the key, the blind and the signature, so
-clients SHOULD prove locally; a read key reused across grants would
+delegated proof server sees the key, the blind, the signature and the
+signing format, so clients SHOULD prove locally; a read key reused across grants would
 link them through `read_pk_hash`; one device's rolling entries form a
 public chain of its activity within the account; `jubjub`, `k256` and
 passkey targets and grantees use upstream's unblinded recipes, so
