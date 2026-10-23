@@ -1,5 +1,6 @@
-// The blind of a readable device or grantee — the request messages and the
-// canonical signature forms.
+// The blind of a readable device or grantee — the request messages, the
+// canonical signature forms, the restore over the arm's formats, and the
+// signer check.
 //
 // A readable arm's device entries and grant ids bind a per-account secret,
 // the BLIND, so that a public wallet identity (an Ethereum address, a Solana
@@ -51,6 +52,23 @@
 // encoding. Enrolment signs twice and refuses the wallet unless both
 // canonical forms are equal (sameCanonicalSignature): a non-deterministic
 // wallet would lose its accounts on restore.
+//
+// FORMATS. A readable arm's wallets sign in one or more formats (the entry's
+// `formats`), and a wallet signs the blind request in its device's format, so
+// the blind depends on the format: a device is usable only with the blind of
+// the format it was enrolled in, and a wallet that cannot sign that format
+// cannot derive that blind again. The client therefore stores per device (and
+// per grant a wallet holds) its arm, its format and its account index, which
+// are not secret, and caches the blind with them in its local storage; the
+// blind never leaves the client. restoreBlind is the one rule for finding the
+// blind again: the cache, else the stored format, else every format the
+// wallet can sign, and never a format the wallet cannot sign.
+//
+// THE SIGNER CHECK. A wallet may answer with another key than the one asked
+// for (two installed extensions, a switched account), and the key a wallet
+// reports is not evidence of who signed. Every signature is therefore checked
+// against the key it must come from before it is used (checkSigner), and a
+// refusal names another key only when the signature verifies under it.
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
@@ -246,4 +264,210 @@ export function blindCall(scheme: BlindScheme, canonical: Uint8Array): { circuit
   const tag = blindTagText(scheme, 'blindCall');
   if (canonical.length !== 64) throw new Error('blind: a canonical signature is 64 bytes');
   return { circuit: 'derive_blind', args: [padTag(tag), canonical] };
+}
+
+// ── Formats and restore ─────────────────────────────────────────────────────
+
+/** The formats of a blind scheme, in its entry's order; any other scheme is
+ *  refused. */
+export function blindFormats(scheme: BlindScheme): readonly string[] {
+  return Object.keys(blindArm(scheme, 'blindFormats').formats);
+}
+
+/** Refuses a value that is not one of the scheme's formats; returns it. */
+export function checkBlindFormat(scheme: BlindScheme, format: unknown): string {
+  const formats = blindArm(scheme, 'checkBlindFormat').formats;
+  if (typeof format !== 'string' || !Object.prototype.hasOwnProperty.call(formats, format)) {
+    const shown = typeof format === 'string' ? JSON.stringify(format.length > 40 ? `${format.slice(0, 40)}...` : format) : typeof format;
+    throw new Error(`blind: ${scheme} has no format ${shown} (formats: ${Object.keys(formats).join(', ')})`);
+  }
+  return format;
+}
+
+/** The name the client shows for a format of a scheme. */
+export function blindFormatName(scheme: BlindScheme, format: string): string {
+  return blindArm(scheme, 'blindFormatName').formats[checkBlindFormat(scheme, format)];
+}
+
+/** What the client stores for a device, or for a grant its wallet holds: the
+ *  format the blind was derived in and, while the cache survives, the blind. */
+export interface StoredBlind {
+  format: string;
+  blind?: Uint8Array;
+}
+
+export interface BlindRestoreRequest {
+  scheme: BlindScheme;
+  /** 'device' for a device of the wallet's own account (the default),
+   *  'grantee' for a grant the wallet holds from another account; it only
+   *  changes the wording of a failure. */
+  role?: 'device' | 'grantee';
+  /** The stored record, when the client has one. */
+  stored?: StoredBlind;
+  /** The formats this wallet can sign, as the arm detects them. The restore
+   *  never asks the wallet for any other format. */
+  walletFormats: readonly string[];
+  /** Asks the wallet to sign the blind request in `format` (twice, with the
+   *  sign-twice check) and returns the blind. */
+  derive: (format: string) => Promise<Uint8Array>;
+  /** Whether a blind finds the device (or the grant): the caller tests the
+   *  account's entries (or the grant id). Asked only when no format is
+   *  stored. */
+  finds: (blind: Uint8Array, format: string) => Promise<boolean>;
+}
+
+export interface BlindMatch {
+  format: string;
+  blind: Uint8Array;
+}
+
+/** The result of restoreBlind. Narrow it with `ok === true` or `ok === false`
+ *  (without strictNullChecks, `!r.ok` does not narrow a union). */
+export type BlindRestore =
+  /** `cache`: the stored blind, no signature asked; `stored-format`: derived
+   *  in the stored format; `search`: every format the wallet can sign was
+   *  tried, and each match is listed (one wallet may hold devices or grants
+   *  in two formats). */
+  | { ok: true; source: 'cache' | 'stored-format' | 'search'; matches: BlindMatch[] }
+  /** `format-unavailable`: the stored format is one this wallet cannot sign;
+   *  `not-found`: no format the wallet can sign finds the device (or grant);
+   *  `no-format`: the wallet signs none of the arm's formats. */
+  | { ok: false; reason: 'format-unavailable' | 'not-found' | 'no-format'; tried: string[]; untried: string[]; message: string };
+
+const orList = (names: string[]): string =>
+  names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+
+function checkBlind(scheme: BlindScheme, blind: unknown, where: string): Uint8Array {
+  if (!(blind instanceof Uint8Array) || blind.length !== 32) throw new Error(`blind: ${where} for ${scheme} is not 32 bytes`);
+  return new Uint8Array(blind);
+}
+
+/**
+ * Finds a device's (or a grant's) blind again, without ever deriving one in
+ * a format other than the one it was enrolled in, and without asking the
+ * wallet for a format it cannot sign:
+ *   1. a cached blind is used as it is;
+ *   2. with a stored format, the wallet derives the blind in that format, or,
+ *      when it cannot sign that format, nothing is derived and the message
+ *      names the format needed;
+ *   3. without a stored record, the wallet derives the blind in every format
+ *      it can sign, and each blind that finds the device (or grant) is a
+ *      match; without a match, the message names the formats tried and those
+ *      the device may have been enrolled through instead.
+ * A failure's message also says what remains: another device of the account
+ * or the account's recovery enrols this wallet as a new device (a grantee
+ * asks for a new grant). The request is checked before anything is asked of
+ * the wallet: an unknown scheme, role or format, a format listed twice, or a
+ * cached blind that is not 32 bytes throws at once.
+ */
+export function restoreBlind(req: BlindRestoreRequest): Promise<BlindRestore> {
+  const { scheme } = req;
+  const all = [...blindFormats(scheme)];
+  const role = req.role ?? 'device';
+  if (role !== 'device' && role !== 'grantee') throw new Error(`blind: unknown role ${String(role)}`);
+  if (!Array.isArray(req.walletFormats)) throw new Error('blind: walletFormats is a list of formats');
+  const wallet = req.walletFormats.map((f) => checkBlindFormat(scheme, f));
+  if (new Set(wallet).size !== wallet.length) throw new Error('blind: walletFormats lists a format twice');
+  const stored = req.stored === undefined ? undefined : {
+    format: checkBlindFormat(scheme, req.stored.format),
+    blind: req.stored.blind === undefined ? undefined : checkBlind(scheme, req.stored.blind, 'the cached blind'),
+  };
+  return restoreChecked(req, scheme, all, wallet, role, stored);
+}
+
+async function restoreChecked(
+  req: BlindRestoreRequest, scheme: BlindScheme, all: string[], wallet: string[],
+  role: 'device' | 'grantee', stored: { format: string; blind?: Uint8Array } | undefined,
+): Promise<BlindRestore> {
+  const name = (f: string) => blindFormatName(scheme, f);
+  const remedy = role === 'device'
+    ? 'add this wallet as a new device from another device of the account, or through the account\'s recovery'
+    : 'ask the issuing account\'s owner for a new grant to this wallet';
+  const what = role === 'device' ? 'device' : 'grant';
+  const Remedy = remedy[0].toUpperCase() + remedy.slice(1);
+
+  if (stored !== undefined) {
+    const { format } = stored;
+    if (stored.blind !== undefined) return { ok: true, source: 'cache', matches: [{ format, blind: stored.blind }] };
+    if (!wallet.includes(format)) {
+      return {
+        ok: false, reason: 'format-unavailable', tried: [], untried: [format],
+        message: `This ${what}'s privacy key was derived in the ${name(format)} format, which this wallet cannot sign, so it cannot be derived again here. ` +
+          `Use a wallet that signs the ${name(format)} format, or ${remedy}.`,
+      };
+    }
+    return { ok: true, source: 'stored-format', matches: [{ format, blind: checkBlind(scheme, await req.derive(format), 'the derived blind') }] };
+  }
+
+  const tried = all.filter((f) => wallet.includes(f));
+  const untried = all.filter((f) => !wallet.includes(f));
+  if (tried.length === 0) {
+    return {
+      ok: false, reason: 'no-format', tried, untried,
+      message: `This wallet signs none of the formats of this arm (${orList(untried.map(name))}), so no ${what} can be found with it. ${Remedy}.`,
+    };
+  }
+  const matches: BlindMatch[] = [];
+  for (const format of tried) {
+    const blind = checkBlind(scheme, await req.derive(format), 'the derived blind');
+    if ((await req.finds(new Uint8Array(blind), format)) === true) matches.push({ format, blind });
+  }
+  if (matches.length > 0) return { ok: true, source: 'search', matches };
+  const found = role === 'device' ? 'No account was found' : 'No grant was found';
+  return {
+    ok: false, reason: 'not-found', tried, untried,
+    message: `${found} in the formats this wallet can sign (${tried.map(name).join(', ')}).` +
+      (untried.length > 0 ? ` The ${what} may have been ${role === 'device' ? 'enrolled' : 'issued'} through another format (${orList(untried.map(name))}).` : '') +
+      ` ${Remedy}.`,
+  };
+}
+
+// ── The signer check ────────────────────────────────────────────────────────
+
+/** A signature that is not from the key it must come from. `signer` is set
+ *  only when the signature verifies under that other identity. */
+export class SignerMismatchError extends Error {
+  constructor(
+    readonly scheme: BlindScheme,
+    readonly expected: Uint8Array,
+    readonly signer: Uint8Array | undefined,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SignerMismatchError';
+  }
+}
+
+/**
+ * Checks, before any proof, that a signature comes from `expected` (the
+ * device's or grantee's identity, as the arm's entry defines it). `verifies`
+ * is the arm's own verification of the signature under a given identity, over
+ * the exact bytes the wallet was asked to sign; an exception in it counts as
+ * "does not verify". On a mismatch, `others` (for example the keys other
+ * connected wallets report) are tried in order, and the refusal names the
+ * first one under which the signature verifies; a reported key is never named
+ * on the wallet's word alone. Otherwise the signer is unknown.
+ */
+export function checkSigner(
+  scheme: BlindScheme,
+  expected: Uint8Array,
+  verifies: (identity: Uint8Array) => boolean,
+  others: readonly Uint8Array[] = [],
+): void {
+  const arm = blindArm(scheme, 'checkSigner');
+  const exp = arm.identity.parse(expected);
+  const holds = (identity: Uint8Array): boolean => {
+    try { return verifies(new Uint8Array(identity)) === true; } catch { return false; }
+  };
+  if (holds(exp)) return;
+  const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+  for (const candidate of others) {
+    let identity: Uint8Array;
+    try { identity = arm.identity.parse(candidate); } catch { continue; }
+    if (same(identity, exp) || !holds(identity)) continue;
+    throw new SignerMismatchError(scheme, exp, identity,
+      `signer: refused before proving: the signature is not from the expected ${arm.identity.walletText(exp)}; it verifies under ${arm.identity.walletText(identity)}, another wallet's key`);
+  }
+  throw new SignerMismatchError(scheme, exp, undefined,
+    `signer: refused before proving: the signature is not from the expected ${arm.identity.walletText(exp)}, and the signer is unknown`);
 }
