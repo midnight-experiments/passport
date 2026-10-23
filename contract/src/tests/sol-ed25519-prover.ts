@@ -875,9 +875,9 @@ async function sectionDevices() {
   const live = (a: LocalAccount, e: Uint8Array) => ledgerOf(a).devices.member(e);
   const epochOf = (a: LocalAccount) => ledgerOf(a).device_epoch as bigint;
   const leN = (v: bigint, n: number) => { const o = new Uint8Array(n); let x = v; for (let i = 0; i < n; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
-  // the evm_eip712 entry by its preimage pad32(tag) || account || address(20) || blind(32) || le4(epoch) || le8(counter)
+  // the evm_k256 entry by its preimage pad32(tag) || account || address(20) || blind(32) || le4(epoch) || le8(counter)
   const evmEntry = (account: Uint8Array, address: Uint8Array, blind: Uint8Array, e: bigint, c: bigint): Uint8Array =>
-    new Uint8Array(createHash('sha256').update(padTag(DESCRIPTOR_TAGS.device.evm_eip712)).update(account).update(address).update(blind).update(leN(e, 4)).update(leN(c, 8)).digest());
+    new Uint8Array(createHash('sha256').update(padTag(DESCRIPTOR_TAGS.device.evm_k256)).update(account).update(address).update(blind).update(leN(e, 4)).update(leN(c, 8)).digest());
   const jub = JubjubDevice.generate();
   const k1 = K256Device.generate();
   const pass = softwarePasskey();
@@ -887,7 +887,7 @@ async function sectionDevices() {
     ['jubjub', { scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y }, (a, e, c) => jub.entryAt(a, e, c)],
     ['k256', { scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: Number(k1.envelope) }, (a, e, c) => k1.entryAt(a, e, c)],
     ['p256', { scheme: 'p256', x: pass.pk.x, y: pass.pk.y, policy: { rpIdHash: pass.policy.rp_id_hash, origin: pass.policy.origin } }, (a, e, c) => pass.device.entryAt(a, e, c)],
-    ['evm_eip712', { scheme: 'evm_eip712', address: evmAddr, blind: evmBlind }, (a, e, c) => evmEntry(a, evmAddr, evmBlind, e, c)],
+    ['evm_k256', { scheme: 'evm_k256', address: evmAddr, blind: evmBlind }, (a, e, c) => evmEntry(a, evmAddr, evmBlind, e, c)],
     ['sol_ed25519', S2.descriptor(), (a, e, c) => S2.entryAt(a, e, c)],
   ];
   const addArgs = (t: any, au: any) => [msg.solTargetArg(t), msg.solTargetPointArg(t), ...authArgs(au)];
@@ -896,7 +896,7 @@ async function sectionDevices() {
     const t = sol.solTargetOf(d);
     const au = await authFor(A0, { op: 'add_device', target: t });
     const ep = epochOf(A0);
-    await positive('devices', `add_device: a ${scheme} target by descriptor; the entry equals ${scheme === 'evm_eip712' ? 'the spec recipe (SHA-256, recomputed)' : `the ${scheme} arm's own derivation`} at (epoch, 0); nothing at epoch + 1`,
+    await positive('devices', `add_device: a ${scheme} target by descriptor; the entry equals ${scheme === 'evm_k256' ? 'the spec recipe (SHA-256, recomputed)' : `the ${scheme} arm's own derivation`} at (epoch, 0); nothing at epoch + 1`,
       scheme === 'jubjub' ? pass0 : undefined, A0, ADD, addArgs(t, au),
       (after) => live(after, entryOf(after.addressBytes, ep, 0n)) && !live(after, entryOf(after.addressBytes, ep + 1n, 0n)) && ledgerOf(after).device_count === 2n);
   }
@@ -946,7 +946,7 @@ async function sectionDevices() {
     ['the evm address', tE, { ...tE, address: flip((tE as any).address) }],
     ['the sol key (another valid key)', tS2, { ...tS2, a: sol.solSoftwareSigner(rnd()).publicKey }],
     ['the device privacy salt (sol)', tS2, { ...tS2, b: flip((tS2 as any).b) }],
-    ['the scheme: a jubjub key signed, the same bytes executed as an evm target', tJ, { tag: DESCRIPTOR_TAGS.device.evm_eip712, address: new Uint8Array(20), a: tJ.a }],
+    ['the scheme: a jubjub key signed, the same bytes executed as an evm target', tJ, { tag: DESCRIPTOR_TAGS.device.evm_k256, address: new Uint8Array(20), a: tJ.a }],
   ];
   for (const [name, signed, executed] of B) await negative('devices', `binding: add_device, ${name} changed at execution`, A0, ADD, await consAdd(A0, signed, executed), INVALID, [INVALID], ctlAdd);
   const consRem = async (signed: any, executed: any, a: LocalAccount = A1) => {
@@ -2458,11 +2458,11 @@ async function sectionArmAsserts() {
     // contract's own bytes (the same bytes as with the fields zero)
     const jub = JubjubDevice.generate();
     const tJ = sol.solTargetOf({ scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y } as any);
-    const tE = sol.solTargetOf({ scheme: 'evm_eip712', address: rnd(20), blind: rnd() } as any);
+    const tE = sol.solTargetOf({ scheme: 'evm_k256', address: rnd(20), blind: rnd() } as any);
     const ctlJ = { a: A0, args: addArgs(tJ, await K.authFor(A0, { op: 'add_device', target: tJ })) };
     const ctlE = { a: A0, args: addArgs(tE, await K.authFor(A0, { op: 'add_device', target: tE })) };
     const D: [string, any, string, typeof ctlJ][] = [
-      ['an evm_eip712 target with a non-zero second field', { ...tE, b: rnd() }, UNUSED_SECOND, ctlE],
+      ['an evm_k256 target with a non-zero second field', { ...tE, b: rnd() }, UNUSED_SECOND, ctlE],
       ['a jubjub target with a non-zero RP hash', { ...tJ, c: rnd() }, UNUSED_RP, ctlJ],
       ['a jubjub target with a non-zero origin (its characters equal its bytes)', { ...tJ, origin: rnd(21) }, UNUSED_ORIGIN, ctlJ],
     ];
@@ -2478,12 +2478,12 @@ async function sectionArmAsserts() {
     const jub = JubjubDevice.generate();
     const gK = sol.solGranteeOf({ scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: Number(k1.envelope) } as any, { originHash: rnd() }, 1n);
     const gJ = sol.solGranteeOf({ scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y } as any, { originHash: rnd() }, 2n);
-    const gE = sol.solGranteeOf({ scheme: 'evm_eip712', address: rnd(20), blind: rnd() } as any, { label: 'Example dApp' }, 3n);
+    const gE = sol.solGranteeOf({ scheme: 'evm_k256', address: rnd(20), blind: rnd() } as any, { label: 'Example dApp' }, 3n);
     const gP = sol.solGranteeOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y } as any, { origin: pass.policy.origin }, 4n);
     const sRO = scopeOf({ read: true, readPk: rnd() });
     const ctlOf = async (g: any, sc: any) => ({ a: A0, args: issueArgsOf(g, sc, await K.authFor(A0, { op: 'issue_grant', grantee: g, ...sc })) });
     const C: [string, any, any, string, any][] = [
-      ['an evm_eip712 grantee with a non-zero second field', { ...gE, b: rnd() }, sU, UNUSED_SECOND, await ctlOf(gE, sU)],
+      ['an evm_k256 grantee with a non-zero second field', { ...gE, b: rnd() }, sU, UNUSED_SECOND, await ctlOf(gE, sU)],
       ['a k256 grantee carrying a label', { ...gK, label: 'Example dApp' }, sU, UNUSED_LABEL, await ctlOf(gK, sU)],
       ['a jubjub grantee with a non-zero origin (its characters equal its bytes)', { ...gJ, origin: rnd(21) }, sU, UNUSED_ORIGIN, await ctlOf(gJ, sU)],
       ['a sol_ed25519 grantee carrying an origin hash (a readable grantee\'s is derived from its label)', { ...gG, originHash: rnd() }, sU, READABLE_OH, ctlIssue],

@@ -3,7 +3,7 @@
 // `remove_device_with_sol_ed25519`.
 //
 // A sol_ed25519 device adds a device of every scheme by readable descriptor
-// (jubjub, k256, p256, evm_eip712, sol_ed25519); each entry must equal the
+// (jubjub, k256, p256, evm_k256, sol_ed25519); each entry must equal the
 // target scheme's own derivation at the current epoch and counter 0, and
 // each new upstream device and the new sol device then authorise their own
 // call. Devices of the upstream arms enrol a sol device by upstream's raw
@@ -116,16 +116,16 @@ const D: [string, Descriptor, any][] = [
   ['jubjub', { scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y }, jub],
   ['k256', { scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: Number(k1.envelope) as 0 | 1 }, k1],
   ['p256', { scheme: 'p256', x: pass.pk.x, y: pass.pk.y, policy: { rpIdHash: pass.policy.rp_id_hash, origin: pass.policy.origin } }, pass.device],
-  ['evm_eip712', { scheme: 'evm_eip712', address: evmAddr, blind: evmBlind }, null],
+  ['evm_k256', { scheme: 'evm_k256', address: evmAddr, blind: evmBlind }, null],
   ['sol_ed25519', S2.descriptor(), S2],
 ];
-// The evm_eip712 entry recomputed independently: SHA-256 of the documented preimage
+// The evm_k256 entry recomputed independently: SHA-256 of the documented preimage
 // (pad32(tag) || account || address(20) || blind(32) || le4(epoch) || le8(counter)).
 const le = (v: bigint, n: number) => { const o = new Uint8Array(n); let x = v; for (let i = 0; i < n; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
 const evmEntry = (addr: Uint8Array, address: Uint8Array, blind: Uint8Array, e: bigint, c: bigint) =>
-  sha256(new Uint8Array([...padTag(DESCRIPTOR_TAGS.device.evm_eip712), ...addr, ...address, ...blind, ...le(e, 4), ...le(c, 8)]));
+  sha256(new Uint8Array([...padTag(DESCRIPTOR_TAGS.device.evm_k256), ...addr, ...address, ...blind, ...le(e, 4), ...le(c, 8)]));
 const entryOf = (scheme: string, d: Descriptor, dev: any, addr: Uint8Array, e: bigint, c: bigint) =>
-  scheme === 'evm_eip712' ? evmEntry(addr, (d as any).address, (d as any).blind, e, c) : dev.entryAt(addr, e, c);
+  scheme === 'evm_k256' ? evmEntry(addr, (d as any).address, (d as any).blind, e, c) : dev.entryAt(addr, e, c);
 
 // ── 1. add_device: every scheme, its own recipe, then its own call ─────────
 const G1 = '1 add_device, all five schemes';
@@ -137,7 +137,7 @@ for (const [scheme, d, dev] of D) {
   ok(G1, `${scheme}: the message is the contract's own (685 bytes) and shows the consequence`, a.message.length === 685 && a.text.includes('Consequence: gives this device FULL control of this account.\n'));
   await add(sim, t, a);
   const e0 = entryOf(scheme, d, dev, sim.bytes, ep, 0n);
-  ok(G1, `${scheme}: the entry equals ${scheme === 'evm_eip712' ? 'the descriptor module recipe' : `the ${scheme} arm's own derivation`} at (epoch, 0); nothing at epoch + 1`,
+  ok(G1, `${scheme}: the entry equals ${scheme === 'evm_k256' ? 'the descriptor module recipe' : `the ${scheme} arm's own derivation`} at (epoch, 0); nothing at epoch + 1`,
     live(sim, e0) && !live(sim, entryOf(scheme, d, dev, sim.bytes, ep + 1n, 0n)));
 }
 ok(G1, 'six devices', ledgerOf(sim.state).device_count === 6n);
@@ -225,7 +225,7 @@ const G4 = '4 binding';
     ['the evm address', tE, { ...tE, address: flip(tE.address!) }],
     ['the sol key (another valid key)', tS2, { ...tS2, a: other.key }],
     ['the sol device privacy salt', tS2, { ...tS2, b: flip(tS2.b!) }],
-    ['the scheme (a jubjub key signed, the same bytes executed as an evm target)', tJ, { tag: DESCRIPTOR_TAGS.device.evm_eip712, address: new Uint8Array(20), a: tJ.a }],
+    ['the scheme (a jubjub key signed, the same bytes executed as an evm target)', tJ, { tag: DESCRIPTOR_TAGS.device.evm_k256, address: new Uint8Array(20), a: tJ.a }],
   ];
   for (const [name, signed, executed] of B) {
     await refused(G4, `add_device: ${name} changed at execution (consistent display inputs)`, 'runtime', /invalid signature/, async () => {
@@ -246,7 +246,7 @@ const G4 = '4 binding';
       });
     const ep = epochOf(b);
     await add(b, tE, await auth(b, S, { op: 'add_device', target: tE }));
-    ok(G4, 'add_device (evm target): positive control, the honest approval lands', live(b, entryOf('evm_eip712', D[3][1], null, b.bytes, ep, 0n)));
+    ok(G4, 'add_device (evm target): positive control, the honest approval lands', live(b, entryOf('evm_k256', D[3][1], null, b.bytes, ep, 0n)));
   }
   const sR = await deploy(S);
   await add(sR, tJ, await auth(sR, S, { op: 'add_device', target: tJ }));
@@ -307,7 +307,7 @@ const G5 = '5 guards';
   // fields a class does not show, non-zero: the message is the same bytes as
   // with them zero, and the wallet signed the contract's own bytes
   for (const [name, t, re] of [
-    ['an evm_eip712 target with a non-zero second field', { ...solTargetOf(D[3][1]), b: rnd(32) }, /unused second field must be zero/],
+    ['an evm_k256 target with a non-zero second field', { ...solTargetOf(D[3][1]), b: rnd(32) }, /unused second field must be zero/],
     ['a jubjub target with a non-zero RP hash', { ...tJ, c: rnd(32) }, /unused rp hash must be zero/],
     ['a jubjub target with a non-zero origin (its characters equal its bytes)', { ...tJ, origin: rnd(21) }, /unused origin must be zero/],
     ['a jubjub target with a non-zero address (its hex digits supplied consistently)', { ...tJ, address: rnd(20) }, /unused address must be zero/],

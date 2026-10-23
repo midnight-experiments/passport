@@ -1,6 +1,6 @@
 // Readable device descriptors — client encoders and strict decoders.
 //
-// A readable arm (`evm_eip712`, `sol_ed25519`) shows another key as a
+// A readable arm (`evm_k256`, `sol_ed25519`) shows another key as a
 // DESCRIPTOR: the target recipe's tag text and the key payload in the target
 // scheme's own form. The contract derives the target's device entry, boot
 // commitment, or grant id from exactly those values, one circuit per payload
@@ -41,17 +41,17 @@ import { k256EnvelopeLabel } from './labels.js';
 
 // ── Schemes, recipes, and tags ───────────────────────────────────────────────
 
-export type DescriptorScheme = 'jubjub' | 'k256' | 'p256' | 'evm_eip712' | 'sol_ed25519';
+export type DescriptorScheme = 'jubjub' | 'k256' | 'p256' | 'evm_k256' | 'sol_ed25519';
 export type DescriptorRecipe = 'device' | 'boot' | 'grant-id';
-export const DESCRIPTOR_SCHEMES: readonly DescriptorScheme[] = ['jubjub', 'k256', 'p256', 'evm_eip712', 'sol_ed25519'];
+export const DESCRIPTOR_SCHEMES: readonly DescriptorScheme[] = ['jubjub', 'k256', 'p256', 'evm_k256', 'sol_ed25519'];
 
 /** The schemes with a boot recipe in the module: the readable arms. A boot
  *  commitment exists only for an account's first device, and each readable
  *  arm activates only its own scheme; an account whose first device is
  *  `jubjub`, `k256`, or `p256` boots through upstream's own
  *  `derive_boot_commitment_with_<scheme>`. */
-export type BootScheme = 'evm_eip712' | 'sol_ed25519';
-export const BOOT_SCHEMES: readonly BootScheme[] = ['evm_eip712', 'sol_ed25519'];
+export type BootScheme = 'evm_k256' | 'sol_ed25519';
+export const BOOT_SCHEMES: readonly BootScheme[] = ['evm_k256', 'sol_ed25519'];
 
 /** Per recipe, a table over the schemes that recipe has: every scheme for
  *  device entries and grant ids, the readable schemes for boot commitments. */
@@ -67,25 +67,25 @@ export const DESCRIPTOR_TAGS: DescriptorTable<string> = {
     jubjub: 'midnight:account:device:v1',
     k256: 'midnight:account:device:k1:v2',
     p256: 'midnight:account:device:r1:v2',
-    evm_eip712: 'midnight:account:device:evm:v1',
+    evm_k256: 'midnight:account:device:evm:v1',
     sol_ed25519: 'midnight:account:device:sol:v1',
   },
   boot: {
-    evm_eip712: 'midnight:account:boot:evm:v1',
+    evm_k256: 'midnight:account:boot:evm:v1',
     sol_ed25519: 'midnight:account:boot:sol:v1',
   },
   'grant-id': {
     jubjub: 'midnight:account:grant:id:v1',
     k256: 'midnight:account:grant:id:k1:v1',
     p256: 'midnight:account:grant:id:r1:v1',
-    evm_eip712: 'midnight:account:grant:id:evm:v1',
+    evm_k256: 'midnight:account:grant:id:evm:v1',
     sol_ed25519: 'midnight:account:grant:id:sol:v1',
   },
 };
 
 /** The blind's tag per readable scheme. */
-export const BLIND_TAGS: Readonly<Record<'evm_eip712' | 'sol_ed25519', string>> = {
-  evm_eip712: 'midnight:account:blind:evm:v1',
+export const BLIND_TAGS: Readonly<Record<'evm_k256' | 'sol_ed25519', string>> = {
+  evm_k256: 'midnight:account:blind:evm:v1',
   sol_ed25519: 'midnight:account:blind:sol:v1',
 };
 
@@ -94,16 +94,16 @@ export const GRANT_ORIGIN_TAG = 'midnight:account:grant:origin:v1';
 
 /** The grant scope salt's tag per readable scheme: the salt an arm's
  *  issue_grant derives for the grant's commitments. */
-export const SALT_TAGS: Readonly<Record<'evm_eip712' | 'sol_ed25519', string>> = {
-  evm_eip712: 'midnight:account:salt:evm:v1',
+export const SALT_TAGS: Readonly<Record<'evm_k256' | 'sol_ed25519', string>> = {
+  evm_k256: 'midnight:account:salt:evm:v1',
   sol_ed25519: 'midnight:account:salt:sol:v1',
 };
 
 /** The width of the payload each recipe and scheme hashes (bytes). */
 export const PAYLOAD_WIDTH: DescriptorTable<52 | 64 | 65 | 117> = {
-  device: { jubjub: 64, k256: 65, p256: 117, evm_eip712: 52, sol_ed25519: 64 },
-  boot: { evm_eip712: 52, sol_ed25519: 64 },
-  'grant-id': { jubjub: 64, k256: 65, p256: 64, evm_eip712: 52, sol_ed25519: 64 },
+  device: { jubjub: 64, k256: 65, p256: 117, evm_k256: 52, sol_ed25519: 64 },
+  boot: { evm_k256: 52, sol_ed25519: 64 },
+  'grant-id': { jubjub: 64, k256: 65, p256: 64, evm_k256: 52, sol_ed25519: 64 },
 };
 
 export type DescriptorClass = 'w52' | 'w64' | 'w65' | 'w117' | 'ed25519';
@@ -113,9 +113,9 @@ export type DescriptorClass = 'w52' | 'w64' | 'w65' | 'w117' | 'ed25519';
  *  own class (its payload is a Curve25519Point, not bytes), although the
  *  preimage it hashes is 64 bytes wide. */
 export const DESCRIPTOR_CLASS: DescriptorTable<DescriptorClass> = {
-  device: { jubjub: 'w64', k256: 'w65', p256: 'w117', evm_eip712: 'w52', sol_ed25519: 'ed25519' },
-  boot: { evm_eip712: 'w52', sol_ed25519: 'ed25519' },
-  'grant-id': { jubjub: 'w64', k256: 'w65', p256: 'w64', evm_eip712: 'w52', sol_ed25519: 'ed25519' },
+  device: { jubjub: 'w64', k256: 'w65', p256: 'w117', evm_k256: 'w52', sol_ed25519: 'ed25519' },
+  boot: { evm_k256: 'w52', sol_ed25519: 'ed25519' },
+  'grant-id': { jubjub: 'w64', k256: 'w65', p256: 'w64', evm_k256: 'w52', sol_ed25519: 'ed25519' },
 };
 
 const TEXT = new TextEncoder();
@@ -159,7 +159,7 @@ export function unknownScheme(value: never, where: string, registered: readonly 
  *  it (upstream's own), and an unknown scheme as everywhere else. */
 export function bootScheme(scheme: DescriptorScheme, where: string): BootScheme {
   switch (scheme) {
-    case 'evm_eip712':
+    case 'evm_k256':
     case 'sol_ed25519':
       return scheme;
     case 'jubjub':
@@ -207,7 +207,7 @@ export interface PasskeyPolicy { rpIdHash: Uint8Array; origin: Uint8Array; rpId?
 /** A passkey: its key and, for device entries and boot commitments, its
  *  policy. A grant id binds the key only (the RP is a scope field). */
 export interface P256Descriptor { scheme: 'p256'; x: bigint; y: bigint; policy?: PasskeyPolicy }
-export interface EvmDescriptor { scheme: 'evm_eip712'; address: Uint8Array; blind: Uint8Array }
+export interface EvmDescriptor { scheme: 'evm_k256'; address: Uint8Array; blind: Uint8Array }
 /** A Solana key: its 32-byte RFC 8032 encoding (what the wallet exports and a
  *  person compares) and the account's blind. The circuits take the key as
  *  its point with these 32 bytes and its x-coordinate as checked inputs
@@ -402,7 +402,7 @@ export function evmDescriptor(address: Uint8Array | string, blind: Uint8Array): 
   if (a.length !== 20) throw new Error('descriptor: an Ethereum address is 20 bytes');
   if (a.every((b) => b === 0)) throw new Error('descriptor: the zero address is not a device');
   if (blind.length !== 32) throw new Error('descriptor: a blind is 32 bytes');
-  return { scheme: 'evm_eip712', address: a, blind: new Uint8Array(blind) };
+  return { scheme: 'evm_k256', address: a, blind: new Uint8Array(blind) };
 }
 
 export function solDescriptor(key: Uint8Array | string, blind: Uint8Array): SolDescriptor {
@@ -436,7 +436,7 @@ export function checkDescriptor(d: Descriptor): Descriptor {
       }
       return { scheme: 'p256', ...key, policy: { rpIdHash: new Uint8Array(rpIdHash), origin: new Uint8Array(origin), ...(rpId !== undefined ? { rpId } : {}) } };
     }
-    case 'evm_eip712': return evmDescriptor(d.address, d.blind);
+    case 'evm_k256': return evmDescriptor(d.address, d.blind);
     case 'sol_ed25519': return solDescriptor(d.key, d.blind);
     default: return unknownScheme(d, 'checkDescriptor');
   }
@@ -468,7 +468,7 @@ export function payloadParts(d: Descriptor, recipe: DescriptorRecipe): unknown[]
       if (!d.policy) throw new Error('descriptor: a passkey device entry needs its policy');
       return [...xyLE(d), d.policy.rpIdHash, d.policy.origin];
     }
-    case 'evm_eip712': return [d.address, d.blind];
+    case 'evm_k256': return [d.address, d.blind];
     case 'sol_ed25519': {
       const k = solanaKeyInputs(d.key);
       return [k.point, k.pkBytes, k.pkX, d.blind];
@@ -494,7 +494,7 @@ export function entryCall(d: Descriptor, account: Uint8Array, epoch: bigint, cou
   };
 }
 
-/** The boot commitment of `d` under a salt: an `evm_eip712` or
+/** The boot commitment of `d` under a salt: an `evm_k256` or
  *  `sol_ed25519` key only (BOOT_SCHEMES). A `jubjub`, `k256`, or `p256`
  *  first device boots through upstream's derive_boot_commitment_with_<scheme>,
  *  so bootCall refuses it. */
@@ -568,7 +568,7 @@ export function decodeDescriptor(recipe: DescriptorRecipe, tag: Uint8Array, part
         policy: { rpIdHash: bytes(parts[2], 32, 'rp_id_hash'), origin: bytes(parts[3], WEBAUTHN_ORIGIN_BYTES, 'origin') },
       });
     }
-    case 'evm_eip712':
+    case 'evm_k256':
       want(2);
       return evmDescriptor(bytes(parts[0], 20, 'address'), bytes(parts[1], 32, 'blind'));
     case 'sol_ed25519': {
@@ -650,7 +650,7 @@ export function describeDescriptor(recipe: DescriptorRecipe, d: Descriptor): Des
       }
       return lines;
     }
-    case 'evm_eip712': return [tag, { label: 'Ethereum address', value: evmChecksumAddress(d.address), verifiableByEye: true },
+    case 'evm_k256': return [tag, { label: 'Ethereum address', value: evmChecksumAddress(d.address), verifiableByEye: true },
       salt(d.blind)];
     case 'sol_ed25519': return [tag, { label: 'Solana public key', value: base58Encode(d.key), verifiableByEye: true },
       { label: 'Solana public key (hex)', value: toHex(d.key), verifiableByEye: true },
@@ -673,7 +673,7 @@ export function grantOriginHash(fixedWidth: Uint8Array): Uint8Array {
  *  32-byte blind, the 32-byte account address and auth_nonce (the value the
  *  device signed, 8 bytes little-endian). The issuing client hands it to the
  *  grantee, which opens the grant's commitments with it when it spends. */
-export function grantScopeSalt(scheme: 'evm_eip712' | 'sol_ed25519', blind: Uint8Array, account: Uint8Array, authNonce: bigint): Uint8Array {
+export function grantScopeSalt(scheme: 'evm_k256' | 'sol_ed25519', blind: Uint8Array, account: Uint8Array, authNonce: bigint): Uint8Array {
   const tag = Object.prototype.hasOwnProperty.call(SALT_TAGS, scheme) ? SALT_TAGS[scheme] : undefined;
   if (tag === undefined) return unknownScheme(scheme as never, 'grantScopeSalt', Object.keys(SALT_TAGS));
   if (!(blind instanceof Uint8Array) || blind.length !== 32) throw new Error('descriptor: a blind is 32 bytes');

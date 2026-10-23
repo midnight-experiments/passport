@@ -28,7 +28,7 @@
 //                scheme's comparison display equals the bytes the circuit
 //                binds in the display byte order (secp256k1 and P-256
 //                coordinates big-endian, as SEC1; JubJub little-endian) and
-//                the values the frozen evm_eip712 approvals show
+//                the values the frozen evm_k256 approvals show
 //   blind        golden request messages, input refusals, low-S EVM and
 //                strict Ed25519 canonical forms, the sign-twice check against
 //                a deterministic and a hedged signer, and derive_blind
@@ -120,7 +120,7 @@ for (const recipe of Object.keys(DESCRIPTOR_TAGS) as DescriptorRecipe[]) {
     ok('tags');
   }
 }
-assert.ok(eq(padTag(BLIND_TAGS.evm_eip712), probe.blind_tag_evm_eip712()));
+assert.ok(eq(padTag(BLIND_TAGS.evm_k256), probe.blind_tag_evm_k256()));
 assert.ok(eq(padTag(BLIND_TAGS.sol_ed25519), probe.blind_tag_sol_ed25519()));
 assert.ok(eq(padTag(GRANT_ORIGIN_TAG), probe.grant_origin_tag()));
 refused('tags', () => tagOf(padTag('midnight:account:device:ed:v1')), /unregistered tag/, 'an unregistered tag');
@@ -187,7 +187,7 @@ for (const t of ED25519_TORSION_SUBGROUP) refused('solana key', () => parseSolan
     assert.ok(eq(solanaKeyFromPoint(pt), pk));
     const k = solanaKeyInputs(base58Encode(pk));
     assert.deepEqual(k.point, pt);
-    assert.ok(eq(probe.encode_public_key_with_sol_ed25519(k.point, k.pkBytes, k.pkX), pk), 'the circuit checks the wallet\'s bytes against the point');
+    assert.ok(eq(probe.encode_public_key_ed25519(k.point, k.pkBytes, k.pkX), pk), 'the circuit checks the wallet\'s bytes against the point');
     ok('solana key point');
   }
   refused('solana key point', () => solanaKeyPoint(base58Encode(unhex(ED25519_TORSION_SUBGROUP[0]))), /small order|canonical/, 'the identity in base58');
@@ -287,7 +287,7 @@ for (let round = 0; round < 4; round++) {
       assert.deepEqual(parts[1], [...d.key].map(BigInt));
       assert.deepEqual(parts[2], [...le((parts[0] as any).x, 32)].map(BigInt));
       assert.deepEqual(solanaKeyInputs(d.key), { point: parts[0], pkBytes: parts[1], pkX: parts[2] });
-      assert.ok(eq(probe.encode_public_key_with_sol_ed25519(...(parts.slice(0, 3) as [any, any, any])), d.key));
+      assert.ok(eq(probe.encode_public_key_ed25519(...(parts.slice(0, 3) as [any, any, any])), d.key));
     }
     // Independent SHA-256 of the preimage, every scheme.
     assert.ok(eq(entry, sha(TAG('device', d), account, payloadBytes(d, 'device'), le(epoch, 4), le(counter, 8))), `${d.scheme} entry`);
@@ -412,13 +412,13 @@ const ctrBeforeDisplayOrder = ctr; // restored below: later sections keep their 
             }
             break;
           }
-          case 'evm_eip712':
+          case 'evm_k256':
             assert.equal(shown['Ethereum address'].toLowerCase(), h0x(parts[0] as Uint8Array), `evm address ${r}`);
             assert.equal(shown[privacySaltLabel(r)], h0x(parts[1] as Uint8Array), `evm blind ${r}`);
             break;
           case 'sol_ed25519': {
             // The circuit takes the point and binds its RFC 8032 encoding.
-            const bound = probe.encode_public_key_with_sol_ed25519(...(parts.slice(0, 3) as [any, any, any]));
+            const bound = probe.encode_public_key_ed25519(...(parts.slice(0, 3) as [any, any, any]));
             assert.ok(eq(base58Decode(shown['Solana public key'], 32), bound), `sol key ${r}`);
             assert.equal(shown['Solana public key (hex)'], hex(bound), `sol key hex ${r}`);
             assert.equal(shown[privacySaltLabel(r)], h0x(parts[3] as Uint8Array), `sol blind ${r}`);
@@ -429,7 +429,7 @@ const ctrBeforeDisplayOrder = ctr; // restored below: later sections keep their 
       }
     }
   }
-  // Frozen evm_eip712 approval values: the descriptor arguments the circuit
+  // Frozen evm_k256 approval values: the descriptor arguments the circuit
   // takes (key = x_le, key2 = y_le, as stored) and the nested member values
   // the wallet shows.
   // The keys are random bytes, not points: only the rendering is compared.
@@ -476,7 +476,7 @@ const ctrBeforeDisplayOrder = ctr; // restored below: later sections keep their 
   assert.notEqual('0x' + hex(Uint8Array.from(le((jj.d as any).x, 32)).reverse()), jj.shown.x, 'a big-endian JubJub display differs from the approval');
   assert.throws(() => coordinateHex('sol_ed25519' as any, 1n), /no coordinates/);
   ctr = ctrBeforeDisplayOrder;
-  console.log(`  ✓ display order: ${tally['display order'].pass} descriptor × recipe displays equal the circuit's bound bytes (JubJub little-endian; secp256k1 and P-256 big-endian, equal to SEC1); ${tally['frozen approvals'].pass} frozen evm_eip712 approvals shown identically`);
+  console.log(`  ✓ display order: ${tally['display order'].pass} descriptor × recipe displays equal the circuit's bound bytes (JubJub little-endian; secp256k1 and P-256 big-endian, equal to SEC1); ${tally['frozen approvals'].pass} frozen evm_k256 approvals shown identically`);
 }
 
 // ── Grant origin labels ──────────────────────────────────────────────────────
@@ -506,15 +506,15 @@ const GOLDEN_EVM = [
   'Sign it only in a Midnight Passport client you trust.',
   'It authorises nothing: no transfer, no new device, no grant.',
 ].join('\n');
-assert.equal(blindMessage({ scheme: 'evm_eip712', network: 'undeployed', identity: evmWallet, accountIndex: 0 }), GOLDEN_EVM);
+assert.equal(blindMessage({ scheme: 'evm_k256', network: 'undeployed', identity: evmWallet, accountIndex: 0 }), GOLDEN_EVM);
 const solMsg = blindMessage({ scheme: 'sol_ed25519', network: 'preprod', identity: solWallet, accountIndex: 7n });
 assert.equal(solMsg.split('\n')[2], `Wallet: Solana public key ${base58Encode(solWallet)}`);
 assert.equal(solMsg.split('\n')[3], 'Account index: 7');
 assert.ok(/^[\x20-\x7e\n]+$/.test(solMsg) && !solMsg.endsWith('\n'), 'printable ASCII, LF lines, no trailing newline');
 assert.ok(eq(blindMessageBytes({ scheme: 'sol_ed25519', network: 'preprod', identity: solWallet, accountIndex: 7 }), new TextEncoder().encode(solMsg)), 'deterministic');
-assert.notEqual(blindMessage({ scheme: 'evm_eip712', network: 'preview', identity: evmWallet, accountIndex: 0 }), GOLDEN_EVM, 'the network changes the message');
-assert.notEqual(blindMessage({ scheme: 'evm_eip712', network: 'undeployed', identity: evmWallet, accountIndex: 1 }), GOLDEN_EVM, 'the account index changes the message');
-const req = { scheme: 'evm_eip712' as const, network: 'undeployed', identity: evmWallet, accountIndex: 0 };
+assert.notEqual(blindMessage({ scheme: 'evm_k256', network: 'preview', identity: evmWallet, accountIndex: 0 }), GOLDEN_EVM, 'the network changes the message');
+assert.notEqual(blindMessage({ scheme: 'evm_k256', network: 'undeployed', identity: evmWallet, accountIndex: 1 }), GOLDEN_EVM, 'the account index changes the message');
+const req = { scheme: 'evm_k256' as const, network: 'undeployed', identity: evmWallet, accountIndex: 0 };
 refused('blind message', () => blindMessage({ ...req, network: 'Mainnet' }), /network name/, 'an upper-case network');
 refused('blind message', () => blindMessage({ ...req, network: 'pre prod' }), /network name/, 'a space in the network');
 refused('blind message', () => blindMessage({ ...req, network: '' }), /network name/, 'an empty network');
@@ -542,7 +542,7 @@ const GOLDEN_EVM_GRANTEE = [
   'Sign it only in a Midnight Passport client you trust.',
   'It authorises nothing: no transfer, no new device, no grant.',
 ].join('\n');
-const greq: GranteeBlindRequest = { scheme: 'evm_eip712', network: 'undeployed', identity: evmWallet, issuingAccount: ISSUER_1 };
+const greq: GranteeBlindRequest = { scheme: 'evm_k256', network: 'undeployed', identity: evmWallet, issuingAccount: ISSUER_1 };
 assert.equal(granteeBlindMessage(greq), GOLDEN_EVM_GRANTEE);
 const solGranteeMsg = granteeBlindMessage({ scheme: 'sol_ed25519', network: 'preprod', identity: solWallet, issuingAccount: ISSUER_1 });
 {
@@ -568,7 +568,7 @@ for (const m of [GOLDEN_EVM_GRANTEE, solGranteeMsg]) {
 // The first lines differ from the device request's (title and second line), for every index and network.
 for (const network of ['undeployed', 'preprod']) {
   for (const accountIndex of [0, 1, 7, 2 ** 31, 2 ** 32 - 1]) {
-    for (const [scheme, identity] of [['evm_eip712', evmWallet], ['sol_ed25519', solWallet]] as const) {
+    for (const [scheme, identity] of [['evm_k256', evmWallet], ['sol_ed25519', solWallet]] as const) {
       const d = blindMessage({ scheme, network, identity, accountIndex }).split('\n');
       const g = granteeBlindMessage({ scheme, network, identity, issuingAccount: ISSUER_1 }).split('\n');
       assert.notEqual(g[0], d[0], 'the first line differs from the device request');
@@ -607,7 +607,7 @@ const personalSign = (sk: Uint8Array, msg: Uint8Array, hedged = false): Uint8Arr
   const sk = be(1n);
   const msg = blindMessageBytes(req);
   const a = personalSign(sk, msg), b = personalSign(sk, msg);
-  assert.ok(sameCanonicalSignature('evm_eip712', a, b), 'RFC 6979: signing twice gives one canonical form');
+  assert.ok(sameCanonicalSignature('evm_k256', a, b), 'RFC 6979: signing twice gives one canonical form');
   const c = canonicalEvmSignature(a);
   const r = BigInt('0x' + hex(c.subarray(0, 32))), s = BigInt('0x' + hex(c.subarray(32)));
   assert.ok(s <= N / 2n, 'low S');
@@ -615,16 +615,16 @@ const personalSign = (sk: Uint8Array, msg: Uint8Array, hedged = false): Uint8Arr
   assert.ok(eq(canonicalEvmSignature(highS), c), 'the high-S twin has the same canonical form');
   assert.ok(eq(canonicalEvmSignature(a.subarray(0, 64)), c), '64-byte form');
   const hedged1 = personalSign(sk, msg, true), hedged2 = personalSign(sk, msg, true);
-  assert.equal(sameCanonicalSignature('evm_eip712', hedged1, hedged2), false, 'a hedged signer fails the sign-twice check');
+  assert.equal(sameCanonicalSignature('evm_k256', hedged1, hedged2), false, 'a hedged signer fails the sign-twice check');
   refused('evm canonical', () => canonicalEvmSignature(new Uint8Array([...be(0n), ...be(s), 27])), /outside \[1, n\)/, 'r = 0');
   refused('evm canonical', () => canonicalEvmSignature(new Uint8Array([...be(r), ...be(0n), 27])), /outside \[1, n\)/, 's = 0');
   refused('evm canonical', () => canonicalEvmSignature(new Uint8Array([...be(r), ...be(N), 27])), /outside \[1, n\)/, 's = n');
   refused('evm canonical', () => canonicalEvmSignature(new Uint8Array([...be(N + 1n), ...be(s), 27])), /outside \[1, n\)/, 'r above n');
   refused('evm canonical', () => canonicalEvmSignature(new Uint8Array([...c, 29])), /recovery byte/, 'v = 29');
   refused('evm canonical', () => canonicalEvmSignature(c.subarray(0, 63)), /64 or 65 bytes/, '63 bytes');
-  const blind = deriveBlind('evm_eip712', c);
-  assert.ok(eq(blind, probe.derive_blind(padTag(BLIND_TAGS.evm_eip712), c)), 'derive_blind (circuit) == deriveBlind (client)');
-  assert.ok(eq(blind, derive(probe, blindCall('evm_eip712', c))));
+  const blind = deriveBlind('evm_k256', c);
+  assert.ok(eq(blind, probe.derive_blind(padTag(BLIND_TAGS.evm_k256), c)), 'derive_blind (circuit) == deriveBlind (client)');
+  assert.ok(eq(blind, derive(probe, blindCall('evm_k256', c))));
   assert.ok(eq(blind, sha(padTag('midnight:account:blind:evm:v1'), c)));
   console.log(`  ✓ EVM canonical form: low-S r || s; high-S twin and 64/65-byte forms agree; hedged signer refused by the sign-twice check; ${tally['evm canonical'].refused} malformed signatures refused`);
 }
@@ -644,7 +644,7 @@ const personalSign = (sk: Uint8Array, msg: Uint8Array, hedged = false): Uint8Arr
   const c = canonicalEd25519Signature(a);
   assert.ok(eq(deriveBlind('sol_ed25519', c), probe.derive_blind(padTag(BLIND_TAGS.sol_ed25519), c)));
   assert.ok(eq(deriveBlind('sol_ed25519', c), sha(padTag('midnight:account:blind:sol:v1'), c)));
-  assert.ok(!eq(deriveBlind('sol_ed25519', c), deriveBlind('evm_eip712', c)), 'the blind tags separate the schemes');
+  assert.ok(!eq(deriveBlind('sol_ed25519', c), deriveBlind('evm_k256', c)), 'the blind tags separate the schemes');
   console.log(`  ✓ Ed25519 canonical form: raw R || S; deterministic; ${tally['ed25519 canonical'].refused} malformed signatures refused`);
 }
 
@@ -663,8 +663,8 @@ const separation: Record<string, unknown>[] = [];
   const ISSUERS = [ISSUER_1, ...Array.from({ length: 7 }, () => rnd(32)), lowAccount, new Uint8Array(32).fill(0xff)];
   const evmSk = rnd(32), solSeed = rnd(32);
   const wallets: { name: string; scheme: BlindScheme; identity: Uint8Array; sign: (m: Uint8Array) => Uint8Array }[] = [
-    { name: 'evm key 1', scheme: 'evm_eip712', identity: evmWallet, sign: (m) => personalSign(be(1n), m) },
-    { name: 'evm seeded key', scheme: 'evm_eip712', identity: evmAddressOf(secp256k1.Point.fromBytes(secp256k1.getPublicKey(evmSk, false)).toAffine()), sign: (m) => personalSign(evmSk, m) },
+    { name: 'evm key 1', scheme: 'evm_k256', identity: evmWallet, sign: (m) => personalSign(be(1n), m) },
+    { name: 'evm seeded key', scheme: 'evm_k256', identity: evmAddressOf(secp256k1.Point.fromBytes(secp256k1.getPublicKey(evmSk, false)).toAffine()), sign: (m) => personalSign(evmSk, m) },
     { name: 'sol seeded key', scheme: 'sol_ed25519', identity: ed25519.getPublicKey(solSeed), sign: (m) => { const s = ed25519.sign(m, solSeed); assert.ok(ed25519.verify(s, m, ed25519.getPublicKey(solSeed), { zip215: false })); return s; } },
   ];
   for (const w of wallets) {
@@ -728,12 +728,12 @@ const unknownSchemeReport: { schemes: string[]; functions: string[]; refusals: n
     ok('known schemes');
   }
   assert.deepEqual([...unknownSchemeReport.knownSchemesAccepted].sort(), [...DESCRIPTOR_SCHEMES].sort(), 'the positive control covers every registered scheme');
-  const evm = samples.find((d) => d.scheme === 'evm_eip712')!;
+  const evm = samples.find((d) => d.scheme === 'evm_k256')!;
   const sig = new Uint8Array(64).fill(1), salt = rnd(32), oh = rnd(32);
   const BAD: [string, unknown][] = [
     ['an unregistered scheme', 'zz'],
     ['a curve name without its arm', 'ed25519'],
-    ['another case', 'EVM_EIP712'],
+    ['another case', 'EVM_K256'],
     ['a trailing space', 'sol_ed25519 '],
     ['an Object.prototype key', 'constructor'],
     ['__proto__', '__proto__'],
@@ -773,13 +773,13 @@ const unknownSchemeReport: { schemes: string[]; functions: string[]; refusals: n
     refuse(`${scheme} (no blind)`, 'blindCall', 'blind', shown, () => blindCall(s, sig));
     refuse(`${scheme} (no blind)`, 'the blind request', 'blind', shown, () => blindMessage({ scheme: s, network: 'undeployed', identity: evmWallet, accountIndex: 0 }));
   }
-  assert.match((() => { try { canonicalSignature('k256' as BlindScheme, sig); } catch (e: any) { return e.message; } return ''; })(), /\(registered: evm_eip712, sol_ed25519\)$/, 'a blind refusal names the readable schemes');
-  assert.match((() => { try { checkDescriptor({ ...evm, scheme: 'zz' } as any); } catch (e: any) { return e.message; } return ''; })(), /\(registered: jubjub, k256, p256, evm_eip712, sol_ed25519\)$/, 'a descriptor refusal names the registered schemes');
+  assert.match((() => { try { canonicalSignature('k256' as BlindScheme, sig); } catch (e: any) { return e.message; } return ''; })(), /\(registered: evm_k256, sol_ed25519\)$/, 'a blind refusal names the readable schemes');
+  assert.match((() => { try { checkDescriptor({ ...evm, scheme: 'zz' } as any); } catch (e: any) { return e.message; } return ''; })(), /\(registered: jubjub, k256, p256, evm_k256, sol_ed25519\)$/, 'a descriptor refusal names the registered schemes');
   // A long scheme is cut in the message.
   refused('unknown scheme', () => checkDescriptor({ ...evm, scheme: 'x'.repeat(5000) } as any), /unknown scheme "x{40}\.\.\." in checkDescriptor/, 'a 5000-character scheme (message cut to 40)');
   // Not a descriptor at all, and a missing tag text.
   refused('unknown scheme', () => checkDescriptor(null as any), /descriptor: not a descriptor object \(null\)$/, 'null');
-  refused('unknown scheme', () => checkDescriptor('evm_eip712' as any), /descriptor: not a descriptor object \(string\)$/, 'a scheme name instead of a descriptor');
+  refused('unknown scheme', () => checkDescriptor('evm_k256' as any), /descriptor: not a descriptor object \(string\)$/, 'a scheme name instead of a descriptor');
   refused('unknown scheme', () => padTag(undefined as any), /descriptor: a tag is text, not undefined$/, 'padTag(undefined): never an all-zero tag');
   refused('unknown scheme', () => padTag((DESCRIPTOR_TAGS.device as any).zz), /descriptor: a tag is text/, 'a device tag looked up with an unknown scheme');
   refused('unknown scheme', () => padTag((BLIND_TAGS as any).k256), /descriptor: a tag is text/, 'a blind tag looked up with a scheme that has none');
@@ -805,15 +805,15 @@ const bootReport: { refusedSchemes: string[]; bootSchemesAccepted: string[]; ref
   const ctrBefore = ctr;
   const samples = sampleDescriptors();
   const salt = rnd(32);
-  assert.deepEqual([...BOOT_SCHEMES], ['evm_eip712', 'sol_ed25519']);
+  assert.deepEqual([...BOOT_SCHEMES], ['evm_k256', 'sol_ed25519']);
   for (const d of samples) {
     if (boots(d.scheme)) {
       // Positive control: the readable schemes boot through the module's own circuits.
       const call = bootCall(d, salt);
-      assert.equal(call.circuit, d.scheme === 'evm_eip712' ? 'derive_descriptor_boot_w52' : 'derive_descriptor_boot_ed25519');
-      const identity = d.scheme === 'evm_eip712' ? d.address : (d as any).key as Uint8Array;
+      assert.equal(call.circuit, d.scheme === 'evm_k256' ? 'derive_descriptor_boot_w52' : 'derive_descriptor_boot_ed25519');
+      const identity = d.scheme === 'evm_k256' ? d.address : (d as any).key as Uint8Array;
       assert.ok(eq(derive(probe, call), sha(TAG('boot', d), salt, identity, (d as any).blind)), `${d.scheme}: boot == SHA-256 of its preimage`);
-      assert.equal(describeDescriptor('boot', d)[0].value, DESCRIPTOR_TAGS.boot[d.scheme as 'evm_eip712' | 'sol_ed25519']);
+      assert.equal(describeDescriptor('boot', d)[0].value, DESCRIPTOR_TAGS.boot[d.scheme as 'evm_k256' | 'sol_ed25519']);
       if (!bootReport.bootSchemesAccepted.includes(d.scheme)) bootReport.bootSchemesAccepted.push(d.scheme);
       ok('boot');
       continue;

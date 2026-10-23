@@ -55,10 +55,10 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { BLIND_TAGS, padTag, evmChecksumAddress, base58Encode, parseSolanaPublicKey, unknownScheme } from './descriptors.js';
 
-export type BlindScheme = 'evm_eip712' | 'sol_ed25519';
+export type BlindScheme = 'evm_k256' | 'sol_ed25519';
 /** The readable schemes that have a blind. Every switch over a BlindScheme
  *  ends in unknownScheme (a `never` check): any other scheme is refused. */
-export const BLIND_SCHEMES: readonly BlindScheme[] = ['evm_eip712', 'sol_ed25519'];
+export const BLIND_SCHEMES: readonly BlindScheme[] = ['evm_k256', 'sol_ed25519'];
 const unknownBlindScheme = (scheme: never, where: string): never => unknownScheme(scheme, where, BLIND_SCHEMES, 'blind');
 
 /** The device request message's format version, named on its first line. */
@@ -87,7 +87,7 @@ function checkNetwork(network: string): void {
 /** The wallet line's value: the EIP-55 address, or the base58 Ed25519 key. */
 function walletText(scheme: BlindScheme, identity: Uint8Array): string {
   switch (scheme) {
-    case 'evm_eip712':
+    case 'evm_k256':
       if (identity.length !== 20 || identity.every((b) => b === 0)) throw new Error('blind: an Ethereum address is 20 bytes, not zero');
       return `Ethereum address ${evmChecksumAddress(identity)}`;
     case 'sol_ed25519': return `Solana public key ${base58Encode(parseSolanaPublicKey(identity))}`;
@@ -99,7 +99,7 @@ function walletText(scheme: BlindScheme, identity: Uint8Array): string {
  *  looked up as undefined). */
 function blindTagText(scheme: BlindScheme, where: string): string {
   switch (scheme) {
-    case 'evm_eip712': return BLIND_TAGS.evm_eip712;
+    case 'evm_k256': return BLIND_TAGS.evm_k256;
     case 'sol_ed25519': return BLIND_TAGS.sol_ed25519;
     default: return unknownBlindScheme(scheme, where);
   }
@@ -215,7 +215,7 @@ export function canonicalEd25519Signature(sig: Uint8Array): Uint8Array {
 /** The canonical form for a scheme; any other scheme is refused. */
 export function canonicalSignature(scheme: BlindScheme, sig: Uint8Array): Uint8Array {
   switch (scheme) {
-    case 'evm_eip712': return canonicalEvmSignature(sig);
+    case 'evm_k256': return canonicalEvmSignature(sig);
     case 'sol_ed25519': return canonicalEd25519Signature(sig);
     default: return unknownBlindScheme(scheme, 'canonicalSignature');
   }
