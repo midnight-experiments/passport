@@ -39,7 +39,8 @@
 // node:crypto).
 
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { DESCRIPTOR_TAGS, parseSolanaPublicKey, type DescriptorScheme } from './descriptors.js';
+import { DESCRIPTOR_TAGS, parseSolanaPublicKey, type DescriptorScheme, type ReadableFormat } from './descriptors.js';
+import { BLIND_MESSAGE_VERSION, GRANTEE_BLIND_MESSAGE_VERSION, blindFormats } from './blind.js';
 import { ENUM_TEXT_WIDTH, k256EnvelopeLabel, recipientKindLabel } from './labels.js';
 import {
   BASE58_TEXT_WIDTH, DATETIME_TEXT_WIDTH, EXPIRY_TEXT_WIDTH, RP_HASH_TEXT_WIDTH, SITE_AMOUNT_LABEL_WIDTH, WINDOW_CAP_TEXT_WIDTH, WINDOW_TEXT_WIDTH,
@@ -53,10 +54,12 @@ export const SOL_FIRST_LINE = 'Midnight Passport approval (sol v1)';
  *  (32 each) + blockhash (32) + instruction count (1). */
 export const SOL_PARSE_BOUND = 3 + 1 + 110 * 32 + 32 + 1;
 
-/** The two signing formats of an approval: `raw` (a wallet's
- *  `signMessage`) and `offchain` (the Solana off-chain message v1). */
-export type SolFormat = 'raw' | 'offchain';
-export const SOL_FORMATS: readonly SolFormat[] = ['raw', 'offchain'];
+/** The arm's two signing formats, as its READABLE_ARMS entry lists them:
+ *  `raw` (what a wallet's `signMessage` signs) and `offchain` (the Solana
+ *  off-chain message v1). A device's approvals and its blind request are
+ *  signed in one of them. */
+export type SolFormat = ReadableFormat<'sol_ed25519'>;
+export const SOL_FORMATS: readonly SolFormat[] = Object.freeze(blindFormats('sol_ed25519') as SolFormat[]);
 /** Every format's head is 50 bytes. */
 export const SOL_HEAD_LENGTH = 50;
 /** The raw head: a line naming the format, then LF (50 ASCII bytes). */
@@ -455,13 +458,64 @@ export function assertSafeSolMessage(b: Uint8Array): void {
  *  domain, version 1, exactly one signer, which is `key`, then an approval
  *  text. */
 export function assertSolOffchainMessage(b: Uint8Array, key: Uint8Array): void {
+  assertSolOffchainHead(b, key);
+  assertSolText(b.subarray(SOL_HEAD_LENGTH));
+}
+
+/** The head of an off-chain message v1: the signing domain, version 1, and
+ *  exactly one signer, which is `key`. */
+function assertSolOffchainHead(b: Uint8Array, key: Uint8Array): void {
   hex(key, 32, 'the signing key');
   const d = SOL_OFFCHAIN_DOMAIN.length;
   if (b.length < SOL_HEAD_LENGTH || !SOL_OFFCHAIN_DOMAIN.every((x, i) => b[i] === x)) throw new Error('sol message: not an off-chain message');
   if (b[d] !== SOL_OFFCHAIN_VERSION) throw new Error(`sol message: off-chain message version ${b[d]}, not ${SOL_OFFCHAIN_VERSION}`);
   if (b[d + 1] !== SOL_OFFCHAIN_SIGNERS) throw new Error(`sol message: ${b[d + 1]} off-chain signers, not ${SOL_OFFCHAIN_SIGNERS}`);
   if (!key.every((x, i) => b[d + 2 + i] === x)) throw new Error('sol message: the off-chain envelope names another signer');
-  assertSolText(b.subarray(SOL_HEAD_LENGTH));
+}
+
+/** The format of bytes built for signing (an approval or a blind request):
+ *  an off-chain message begins with the signing domain's 0xff, which no raw
+ *  message can (assertSafeSolMessage, assertSolBlindRequest). A wallet
+ *  adapter uses it to ask the wallet for that format, and refuses one the
+ *  wallet cannot sign. */
+export function solFormatOfSigned(b: Uint8Array): SolFormat {
+  if (!(b instanceof Uint8Array) || b.length === 0) throw new Error('sol message: nothing to sign');
+  return b[0] === SOL_OFFCHAIN_DOMAIN[0] ? 'offchain' : 'raw';
+}
+
+/** The first lines of the two blind requests (blind.ts): the device's and
+ *  the grantee's. */
+const BLIND_FIRST_LINES = [
+  `Midnight Passport account privacy key (v${BLIND_MESSAGE_VERSION})`,
+  `Midnight Passport grantee privacy key (v${GRANTEE_BLIND_MESSAGE_VERSION})`,
+];
+
+/** A blind request text (blind.ts): printable ASCII and LF only, its first
+ *  line one of the two requests', so never an approval text (whose first
+ *  line is SOL_FIRST_LINE), and, as a raw message, never anything else a
+ *  Solana wallet signs: it starts with "Midn" and stays below
+ *  SOL_PARSE_BOUND. */
+export function assertSolBlindRequest(b: Uint8Array): void {
+  const text = new TextDecoder().decode(b);
+  if (!/^[\x20-\x7e\n]*$/.test(text)) throw new Error('sol message: a blind request is printable ASCII');
+  if (!BLIND_FIRST_LINES.includes(text.split('\n')[0])) throw new Error('sol message: not a blind request');
+  if (b.length >= SOL_PARSE_BOUND) throw new Error(`sol message: ${b.length} bytes, at or above the parse bound ${SOL_PARSE_BOUND}`);
+}
+
+/** What a wallet signs for a blind request (device or grantee) in a format:
+ *  raw, the request's bytes unchanged (so a raw blind stays the blind it has
+ *  always been); off-chain, the off-chain v1 head naming `key`, then the
+ *  same bytes. The blind depends on the format: a device is usable only with
+ *  the blind of the format it was enrolled in. */
+export function solBlindSignedMessage(format: SolFormat, key: Uint8Array, request: Uint8Array): Uint8Array {
+  assertSolBlindRequest(request);
+  if (format === 'raw') return new Uint8Array(request);
+  if (format !== 'offchain') throw new Error(`sol message: unknown format ${String(format)}`);
+  const head = solMessageHead('offchain', key);
+  const b = new Uint8Array(head.length + request.length);
+  b.set(head); b.set(request, head.length);
+  assertSolOffchainHead(b, key);
+  return b;
 }
 
 // ── The circuits' display inputs and target structs ────────────────────────

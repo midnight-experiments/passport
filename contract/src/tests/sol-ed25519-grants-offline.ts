@@ -685,12 +685,12 @@ const G8 = '8 grantee blind';
   const w = solSoftwareSigner(rnd());
   const devBlinds = await Promise.all([0, 1, 2].map(async (i) => hex((await deriveSolBlind(w, { network: 'undeployed', accountIndex: i })).blind)));
   const accounts = [rnd(), rnd(), rnd()];
-  const gBlinds = await Promise.all(accounts.map(async (acc) => hex(await deriveSolGranteeBlind(w, { network: 'undeployed', issuingAccount: acc }))));
+  const gBlinds = await Promise.all(accounts.map(async (acc) => hex((await deriveSolGranteeBlind(w, { network: 'undeployed', issuingAccount: acc })).blind)));
   ok(G8, 'no grantee blind equals a device blind of the same wallet (3 issuing accounts × 3 account indexes)', gBlinds.every((g) => !devBlinds.includes(g)));
   ok(G8, 'grantee blinds differ per issuing account', new Set(gBlinds).size === 3);
-  const again = hex(await deriveSolGranteeBlind(w, { network: 'undeployed', issuingAccount: accounts[0] }));
+  const again = hex((await deriveSolGranteeBlind(w, { network: 'undeployed', issuingAccount: accounts[0] })).blind);
   ok(G8, 'and are re-derivable (deterministic)', again === gBlinds[0]);
-  ok(G8, 'another network gives another grantee blind', hex(await deriveSolGranteeBlind(w, { network: 'preview', issuingAccount: accounts[0] })) !== gBlinds[0]);
+  ok(G8, 'another network gives another grantee blind', hex((await deriveSolGranteeBlind(w, { network: 'preview', issuingAccount: accounts[0] })).blind) !== gBlinds[0]);
 }
 // the client: an unregistered grantee scheme is refused before any message
 await refused(G1, 'an unregistered grantee scheme: the facade refuses the descriptor (no message, no call)', 'client', /not a registered descriptor scheme \(zz\)/,

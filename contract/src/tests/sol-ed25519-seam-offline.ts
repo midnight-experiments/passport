@@ -91,7 +91,7 @@ const sim = await deploy(devA);
 const k1 = rnd(32);
 const before = ledgerOf(sim.state);
 const a1 = await authoriseSolDevice(devA, ctxOf(sim), SITE, { op: 'rotate_enc_key', newKey: k1 }, 0n);
-ok(G1, 'authArgs routes through the signer.ts registration branch', JSON.stringify(authArgs(a1), (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) === JSON.stringify(solEd25519AuthArgs(a1), (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
+ok(G1, 'authArgs routes through the signer.ts registry entry', JSON.stringify(authArgs(a1), (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) === JSON.stringify(solEd25519AuthArgs(a1), (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
 await rotate(sim, k1, a1);
 const after = ledgerOf(sim.state);
 ok(G1, 'rotate lands: enc_key set, auth_nonce +1, round +1, entry rolled 0 -> 1, one device', hex(after.enc_key) === hex(k1)
@@ -297,7 +297,7 @@ const G5 = '5 verification inputs';
 // `offchain` names the format.
 const G6 = '6 signing formats';
 {
-  const devOff = new SolEd25519Device({ publicKey: devA.key, blind: devA.blind, sign: signerA.sign, format: 'offchain' });
+  const devOff = new SolEd25519Device({ publicKey: devA.key, blind: devA.blind, signer: signerA, format: 'offchain' });
   const simF = await deploy(devA);
   const kF = rnd(32);
   const aRaw = await authoriseSolDevice(devA, ctxOf(simF), SITE, { op: 'rotate_enc_key', newKey: kF }, 0n);

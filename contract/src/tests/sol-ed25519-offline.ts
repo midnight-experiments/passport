@@ -104,7 +104,7 @@ const SEEDS: Uint8Array[] = [new Uint8Array(32), new Uint8Array(32).fill(0xff), 
       && strict.x === pk.x && strict.y === pk.y;
     if (same) agree++; else ok(G, `seed ${hex(seed)}`, false, `contract ${hex(key)} noble ${hex(noble)} openssl ${hex(ossl)}`);
   }
-  ok(G, `compute_public_key_with_sol_ed25519 == noble == OpenSSL, encode(point) == key, strict decode(key) == point (${SEEDS.length} seeds incl. zero, 0xff.., 00..1f)`, agree === SEEDS.length, `${agree}/${SEEDS.length}`);
+  ok(G, `compute_public_key_ed25519 == noble == OpenSSL, encode(point) == key, strict decode(key) == point (${SEEDS.length} seeds incl. zero, 0xff.., 00..1f)`, agree === SEEDS.length, `${agree}/${SEEDS.length}`);
   // The clamped scalar exceeds L on every seed: the helper's reduction is exercised every time.
   const h = sha512(SEEDS[3]).subarray(0, 32).slice(); h[0] &= 248; h[31] &= 127; h[31] |= 64;
   ok(G, 'clamped scalar >= L (reduction mod L exercised)', BigInt('0x' + hex(h.reverse())) >= ED25519_L);
@@ -275,6 +275,7 @@ const SMALL_ORDER = [
   const a = (() => { const h = sha512(SEEDS[7]).subarray(0, 32).slice(); h[0] &= 248; h[31] &= 127; h[31] |= 64; return BigInt('0x' + hex(h.reverse())) % ED25519_L; })();
   const hedged: SolSigner = {
     publicKey: signer.publicKey,
+    formats: signer.formats,
     sign: (m) => {
       const r = BigInt('0x' + hex(rnd(64))) % ED25519_L;
       const R = ed25519.Point.BASE.multiply(r).toBytes();
@@ -285,10 +286,10 @@ const SMALL_ORDER = [
   const hs = hedged.sign(msg.bytes) as Uint8Array;
   ok(G, 'the hedged signer produces valid signatures (oracle accepts)', oracleAccepts(msg.bytes, hs, signer.publicKey));
   await refused(G, 'sign-twice check refuses a non-deterministic (hedged) wallet', 'client', /not deterministic/, () => deriveSolBlind(hedged, req));
-  const liar: SolSigner = { publicKey: signer.publicKey, sign: (m) => signer.sign(new Uint8Array([...m, 0x20])) };
-  await refused(G, 'a wallet that signs other bytes is refused', 'client', /does not verify/, () => deriveSolBlind(liar, req));
-  const impostor: SolSigner = { publicKey: signer.publicKey, sign: (m) => solSoftwareSigner(SEEDS[8]).sign(m) };
-  await refused(G, 'a wallet that signs with another key is refused', 'client', /does not verify/, () => deriveSolBlind(impostor, req));
+  const liar: SolSigner = { publicKey: signer.publicKey, formats: signer.formats, sign: (m) => signer.sign(new Uint8Array([...m, 0x20])) };
+  await refused(G, 'a wallet that signs other bytes is refused', 'client', /refused before proving: the signature is not from the expected/, () => deriveSolBlind(liar, req));
+  const impostor: SolSigner = { publicKey: signer.publicKey, formats: signer.formats, sign: (m) => solSoftwareSigner(SEEDS[8]).sign(m) };
+  await refused(G, 'a wallet that signs with another key is refused', 'client', /refused before proving: the signature is not from the expected/, () => deriveSolBlind(impostor, req));
   await refused(G, 'bad network name refused', 'client', /blind:/, () => deriveSolBlind(signer, { network: 'Main Net', accountIndex: 0 }));
   await refused(G, 'account index above 2^32 - 1 refused', 'client', /blind:/, () => deriveSolBlind(signer, { network: 'undeployed', accountIndex: 2n ** 32n }));
   // Roster persistence.

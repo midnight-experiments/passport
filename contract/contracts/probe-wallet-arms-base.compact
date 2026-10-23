@@ -9,7 +9,8 @@ import CompactStandardLibrary;
 // them (upstream's probe-*.compact pattern).
 //
 //   modules/Ed25519Core           the shared RFC 8032 encoding of an
-//                                 Ed25519 key, checked against its point
+//                                 Ed25519 key, checked against its point,
+//                                 and the key of an RFC 8032 seed
 //   modules/WalletArmDescriptors  readable-descriptor derivations (device
 //                                 entries, boot commitments, grant ids,
 //                                 origin_hash, the blind and the grant scope
@@ -49,7 +50,7 @@ export {
   derive_descriptor_boot_w52,
   derive_descriptor_grant_id_w52, derive_descriptor_grant_id_w64,
   derive_descriptor_grant_id_w65,
-  encode_public_key_ed25519,
+  encode_public_key_ed25519, compute_public_key_ed25519,
   derive_descriptor_entry_ed25519, derive_descriptor_boot_ed25519,
   derive_descriptor_grant_id_ed25519,
   derive_signer_entries_ed25519,

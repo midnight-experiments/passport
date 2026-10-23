@@ -104,21 +104,39 @@ once, below every arm.
   The arm's specification, a delta to MIP-0030, is
   [mip-xxxx-evm-k256-arm.md](../docs/mps-mip/mips/mip-xxxx-evm-k256-arm.md).
 
-- **Arm `sol_ed25519`** — a Solana wallet (Phantom, or any wallet whose
-  `signMessage` signs raw bytes with RFC 8032 Ed25519) as a device or a
-  grantee, authorising every operation with **one readable message**:
+- **Arm `sol_ed25519`** — a Solana wallet as a device or a grantee:
+  Phantom (raw `signMessage`), Backpack and Solflare (their own
+  `solana:signOffchainMessage` where they advertise it, else raw), Ledger
+  and Trezor (the Solana off-chain message v1), each signing with RFC 8032
+  Ed25519. Every operation is authorised with **one readable message**:
   printable ASCII, a circuit-fixed first line (`Midnight Passport approval
   (sol v1)`), every operand and every consumed witness value in full (hex,
   decimal digits, every Solana key in base58 as Solana wallets show it, a
   grant's expiry also as a UTC date, words for exact protocol values),
-  rendered in-circuit from exactly the executed values and verified with
-  the standard library's Ed25519 algorithm plus an explicit `R != O`. No challenge hash is signed;
-  four labelled values are the only hash-like lines, and no message can
-  parse as a Solana transaction or off-chain message. The identity is the
-  wallet's 32-byte key, related in-circuit to its `Curve25519Point` and
-  **blinded** with a per-account secret the client re-derives from a
-  signed request, so the ledger holds only SHA-256 outputs over key and
-  blind. The other key in `add_device`, `remove_device`, `issue_grant` and
+  rendered in-circuit from exactly the executed values, and signed in
+  either of **two formats**: the format's 50-byte head (a line naming the
+  format, for `signMessage`; the off-chain message v1 envelope naming the
+  key, for off-chain signing), then the text, verified with the standard
+  library's Ed25519 algorithm plus an explicit `R != O`. The format is a
+  private input, never disclosed, so one circuit serves both. No challenge
+  hash is signed; four labelled values are the only hash-like lines, and
+  no raw message can parse as a Solana transaction or off-chain message.
+  The identity is the wallet's 32-byte key, related in-circuit to its
+  `Curve25519Point` and **blinded** with a per-account secret the client
+  re-derives from a signed request, so the ledger holds only SHA-256
+  outputs over key and blind. The client asks a wallet only for a format
+  it can sign, and refuses a signature that does not come from the
+  expected key before proving (naming another key only when the signature
+  verifies under it). The blind depends on the format, so **a device is
+  bound to the format it was enrolled in**: the client stores each
+  device's format and caches its blind; a restore uses the cache, the
+  stored format, or every format the wallet can sign, and a device
+  enrolled through Phantom cannot be re-derived from a Ledger of the same
+  seed (add the Ledger as a new device, or use the account's recovery). A
+  wallet setting that signs messages unseen (auto-approve) would sign
+  approvals unseen too, and must stay off. Adding a kind or an arm later
+  is additive in source but changes keys, so a deployed account takes it
+  as a new account version. The other key in `add_device`, `remove_device`, `issue_grant` and
   `revoke_grant` is a readable descriptor from which the circuit derives
   that scheme's entry or grant id. See [SOL-ED25519.md](SOL-ED25519.md)
   (message grammar, layouts, acceptance policy) and
@@ -293,10 +311,15 @@ npm run test:evm_k256-offline      # evm_k256: frozen EIP-712 vectors (contract 
 VIEM_DIR=<viem 2.x> npx tsx src/tests/evm-k256-viem.ts  # evm_k256: the vectors,
                                      # addresses, blinds and signatures against viem
                                      # (not a dependency; loaded at run time)
-npm run test:sol-ed25519-offline     # sol_ed25519: the frozen sol v1 corpus (contract ==
-                                     # independent renderer), the parse bound, the
-                                     # key relation and blind, and the seam, custody,
-                                     # device, grant and recovery matrices in the simulator
+npm run test:sol-ed25519-offline     # sol_ed25519 (ten files): the frozen sol v1 corpus
+                                     # (contract == independent renderer), the parse bound,
+                                     # the key relation and blind, the seam, custody,
+                                     # device, grant and recovery matrices in the simulator,
+                                     # the format flag's taint analysis, the client's formats
+                                     # per wallet, signer check and restore, and the
+                                     # emulated Ledger and Trezor signatures
+npm run check:sol-ed25519-taint-controls  # sol_ed25519: the compiler refuses an undisclosed
+                                     # path from a private flag to the ledger (needs compact)
 npm run verify:p256-browser         # recorded live assertion + account binding (Node/OpenSSL)
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
@@ -572,7 +595,8 @@ two k=17 proofs at 20 to 31 s (`GRANTS-E2.md`).
 | `recovery-sim` | n/a | n/a | Recovery MIP Testing in the circuit simulator under explicit wall-clock control: session freshness (reused identifier and commitment, all-zero identifier after a real session), slot gating and the length bound, unauthorised publish, the signature gate's refusals (identity and small-order keys, missing co-signature, wrong secret, every signed binding tampered, reused successor commitment, a forgery against an identity birth key), delegation safety (no scalar among the arguments), pending exclusivity, the veto window, cancel and verbatim replay, finalisation effects (epoch, count, nonce, round, key rotation, vector cleared), epoch-bump revocation, and a post-recovery session; REC-1, REC-4, REC-6, REC-7, REC-8, REC-9, REC-11, AUTH-6 |
 | `recovery-conformance` | n/a | n/a | Recovery MIP lifecycle on node: four-wave deploy with birth artefacts, session publish through the jubjub seam, on-node freshness rejection, reconstruction from chain data and the wrap round-trip, the signature-gate submission proved on the proof server, an early finalisation held by a real 60 s window, cancel, resubmission, finalisation after the window with nonce and round advanced, successor control and the old device dead, a post-recovery session (`evidence/rec-1-9-recovery-conformance.json`) |
 | `grants-unshielded` | 6 (the mirror, under a GRANT rather than a device) | n/a | MIP-scoped-grants: the UNSHIELDED grant twins included on node, which GRANTS-E2 could not run. Five groups, each its own evidence file and each selectable as a `GRANTS_E4_GROUPS` prefix: funding (a non-native color minted and deposited through `deposit_unshielded`, with the NIGHT arm skipped and priced), issue (ten `op_withdraw_unshielded` scopes across both device arms and both grantee arms, `object_commit` recomputed from each opening), spend (`withdraw_unshielded_with_grant_jubjub` and `withdraw_unshielded_with_grant_k256` included on node, the mirror debit, the per-grant nonce settle, the cumulative `spent_commit`, and a recipient pin honoured), rejections (fourteen rows labelled by class: twelve pre-custody, which abort before `do_withdraw_unshielded` is entered, and two in-custody, which reach it and are refused by the mirror gate; neither class emits an unshielded offer, because `debit_unshielded` runs before `sendUnshielded`), proving (the first proving times either unshielded twin has had); GR-2, GR-5, GR-7, GR-12, GR-13, GR-14, INV-8 |
-| `sol-ed25519-offline` (+ `-message-`, `-seam-`, `-custody-`, `-devices-`, `-grants-offline`, `-recovery-sim`) | n/a | n/a | The `sol_ed25519` arm off-node: the RFC 8032 key relation against OpenSSL and noble, the blind protocol, the frozen `sol v1` corpus (contract pure circuits == the independent renderer), the Solana parse bound, the display-input checks, the seam's binding and replay matrix, custody with witness substitution, devices of all five schemes, the grant matrix and the recovery matrix incl. the entry planted at `device_epoch + 1` — see [SOL-ED25519.md](SOL-ED25519.md) |
+| `sol-ed25519-offline` (+ `-message-`, `-seam-`, `-custody-`, `-devices-`, `-grants-offline`, `-recovery-sim`, `-taint-`, `-client-`, `-fixtures-offline`) | n/a | n/a | The `sol_ed25519` arm off-node: the RFC 8032 key relation against OpenSSL and noble, the blind protocol, the frozen `sol v1` corpus (contract pure circuits == the independent renderer), the Solana parse bound, the display-input checks, the seam's binding and replay matrix and the two signing formats, custody with witness substitution, devices of all five schemes, the grant matrix and the recovery matrix incl. the entry planted at `device_epoch + 1`, the format flag in no public instruction (a taint analysis of the compiled ZKIR), the client (formats per wallet with mocked wallets, the signer check, the blind per format and role, the restore and its messages), and signatures of emulated Ledger and Trezor devices on the circuit's path through `contracts/probe-sol-ed25519-fixtures.compact` — see [SOL-ED25519.md](SOL-ED25519.md) |
+| `check:sol-ed25519-taint-controls` | n/a | n/a | The `sol_ed25519` format flag's compiled controls: the compiler refuses an undisclosed path from a private flag to the ledger (a write, a branch, a selection), and the taint analysis reports a disclosed flag and clears one that only feeds a hash |
 | `sol-ed25519` (prover) | n/a (local account states) | n/a | The `sol_ed25519` arm at the constraint level: every negative refused by the generated JavaScript and, with that check bypassed in a patched copy that first proved the honest call, by the proof server for the circuit under test (the activation, the device seam and its replays, custody and the shielded witness, devices, grants and every scope check of the three grantee twins, recovery, the canonical rendering of a `Field`, the exact words, the RP hash and any-recipient rules, the base modules' asserts it reaches); each refusal labelled by its layer — see [SOL-ED25519-MEASUREMENTS.md](SOL-ED25519-MEASUREMENTS.md) and `evidence/sol-ed25519/prover-suite.json` |
 | `probe:wave-ceiling` | n/a | n/a | The per-maintenance-update verifier-byte ceiling, bracketed to one key at (29,484, 32,229] on node 2.1.0, and the budget the wave planner ships; the evidence behind MIP-scoped-grants Testing 6 and section 6.7 |
 | `evm-k256-offline` (+ `-grants-offline`, `-recovery-sim`, `-seam-offline`, `-hints-offline`) | n/a | n/a | The `evm_k256` arm off-node: the frozen EIP-712 vectors (contract pure circuits == client codec == the frozen hashes), the no-blob classification of every member, the enumerated-member labels and the readable texts (UTC expiry, window word, amount label, base58 key) against the base's text circuits, every checked byte argument with one byte changed and with the carry attack, the blind protocol, the grant matrices (owner and grantee on every scheme pair), the recovery matrix, and the authorisation of every gated export (a foreign frame, another key and zero scalars refused, then the honest call; colour and recipient pin on the shielded paths) — see [EVM-K256.md](EVM-K256.md) |

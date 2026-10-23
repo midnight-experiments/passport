@@ -1,6 +1,7 @@
 // Offline suite for the readable-arm client helpers: src/wallet/descriptors.ts
 // (descriptor encoders and strict decoders) and src/wallet/blind.ts (the blind
-// request message and the canonical signature forms).
+// request message, the canonical signature forms, the restore over the arm's
+// formats and the signer check).
 //
 //   tags         the client's tag tables equal the module's constants; every
 //                readable table (tags, blind and salt tags, classes, widths,
@@ -40,6 +41,24 @@
 //                scheme, no grantee blind equals any of its device blinds,
 //                and each issuing account (and network) gives its own grantee
 //                blind, under the same blind tag
+//   formats      each readable arm's signing formats (the registry's
+//                `formats`): codes, names and order; every other value
+//                refused
+//   restore      restoreBlind: a cached blind is used without a signature;
+//                the stored format re-derives the blind, and a wallet that
+//                cannot sign it is asked for nothing and told which format
+//                is needed; without a record every format the wallet signs
+//                is tried and each match listed, and a failure names the
+//                formats tried and those the device may have been enrolled
+//                through; grantee wording; user story 4, scenario 2 with
+//                real Ed25519 signatures (a raw blind is never derived from
+//                an off-chain-only wallet); malformed requests refused before
+//                the wallet is asked
+//   signer       checkSigner: the expected signer passes; any other is
+//                refused before proving, naming another key only when the
+//                signature verifies under it (the key a wallet reports is
+//                never named on its word), for Solana (strict RFC 8032) and
+//                EVM (address recovery)
 //   unknown      an unknown descriptor or blind scheme (unregistered, a
 //                typo, another case, an Object.prototype key, a number,
 //                none) is refused at client decode by every function that
@@ -75,6 +94,7 @@ import {
   blindMessage, blindMessageBytes, canonicalEvmSignature, canonicalEd25519Signature,
   sameCanonicalSignature, deriveBlind, blindCall, granteeBlindMessage, granteeBlindMessageBytes,
   canonicalSignature, BLIND_SCHEMES, type GranteeBlindRequest, type BlindScheme,
+  blindFormats, blindFormatName, checkBlindFormat, restoreBlind, checkSigner, SignerMismatchError,
 } from '../wallet/blind.js';
 
 const SEED = 'wallet-arms-base/v1/wallet-arms-client-offline';
@@ -792,6 +812,10 @@ const unknownSchemeReport: { schemes: string[]; functions: string[]; refusals: n
     refuse(why, 'blindCall', 'blind', shown, () => blindCall(s, sig));
     refuse(why, 'the blind request', 'blind', shown, () => blindMessage({ scheme: s, network: 'undeployed', identity: evmWallet, accountIndex: 0 }));
     refuse(why, 'the blind request', 'blind', shown, () => granteeBlindMessage({ scheme: s, network: 'undeployed', identity: evmWallet, issuingAccount: ISSUER_1 }));
+    refuse(why, 'blindFormats', 'blind', shown, () => blindFormats(s));
+    refuse(why, 'checkBlindFormat', 'blind', shown, () => checkBlindFormat(s, 'raw'));
+    refuse(why, 'blindFormats', 'blind', shown, () => restoreBlind({ scheme: s, walletFormats: [], derive: async () => new Uint8Array(32), finds: async () => false }));
+    refuse(why, 'checkSigner', 'blind', shown, () => checkSigner(s, evmWallet, () => true));
   }
   // The descriptor schemes that have no blind are unknown to every blind function.
   for (const scheme of ['jubjub', 'k256', 'p256']) {
@@ -800,6 +824,8 @@ const unknownSchemeReport: { schemes: string[]; functions: string[]; refusals: n
     refuse(`${scheme} (no blind)`, 'deriveBlind', 'blind', shown, () => deriveBlind(s, sig));
     refuse(`${scheme} (no blind)`, 'blindCall', 'blind', shown, () => blindCall(s, sig));
     refuse(`${scheme} (no blind)`, 'the blind request', 'blind', shown, () => blindMessage({ scheme: s, network: 'undeployed', identity: evmWallet, accountIndex: 0 }));
+    refuse(`${scheme} (no blind)`, 'blindFormats', 'blind', shown, () => blindFormats(s));
+    refuse(`${scheme} (no blind)`, 'checkSigner', 'blind', shown, () => checkSigner(s, evmWallet, () => true));
   }
   assert.match((() => { try { canonicalSignature('k256' as BlindScheme, sig); } catch (e: any) { return e.message; } return ''; })(), /\(registered: evm_k256, sol_ed25519\)$/, 'a blind refusal names the readable schemes');
   assert.match((() => { try { checkDescriptor({ ...evm, scheme: 'zz' } as any); } catch (e: any) { return e.message; } return ''; })(), /\(registered: jubjub, k256, p256, evm_k256, sol_ed25519\)$/, 'a descriptor refusal names the registered schemes');
@@ -866,11 +892,242 @@ const bootReport: { refusedSchemes: string[]; bootSchemesAccepted: string[]; ref
   console.log(`  ✓ boot: ${bootReport.bootSchemesAccepted.join(' and ')} boot (${tally.boot.pass}); ${bootReport.refusedSchemes.join(', ')} refused by bootCall, payloadParts, and describeDescriptor with upstream's circuit named, before the policy or salt checks (${tally.boot.refused} refusals)`);
 }
 
+// ── Formats: each readable arm's signing formats ─────────────────────────────
+
+const formatsReport: Record<string, { formats: string[]; names: string[] }> = {};
+{
+  for (const scheme of BLIND_SCHEMES) {
+    const formats = blindFormats(scheme);
+    assert.deepEqual([...formats], Object.keys(READABLE_ARMS[scheme].formats), `${scheme}: blindFormats is the entry's formats, in order`);
+    assert.ok(formats.length >= 1, `${scheme}: at least one format`);
+    assert.equal(new Set(formats).size, formats.length, `${scheme}: no format listed twice`);
+    const names = formats.map((f) => blindFormatName(scheme, f));
+    for (const [i, f] of formats.entries()) {
+      assert.ok(/^[a-z0-9][a-z0-9-]*$/.test(f), `${scheme}: format code ${f} is lower-case letters, digits and hyphens`);
+      assert.equal(checkBlindFormat(scheme, f), f);
+      assert.ok(names[i].length > 0 && names[i] === names[i].trim());
+      ok('formats');
+    }
+    formatsReport[scheme] = { formats: [...formats], names };
+    const others = BLIND_SCHEMES.filter((s) => s !== scheme).flatMap((s) => blindFormats(s)).filter((f) => !formats.includes(f));
+    for (const bad of ['', 'RAW', `${formats[0]} `, 'constructor', '__proto__', 'toString', 'hasOwnProperty', ...others]) {
+      refused('formats', () => checkBlindFormat(scheme, bad), new RegExp(`blind: ${scheme} has no format`), `the format ${JSON.stringify(bad)}`);
+      refused('formats', () => blindFormatName(scheme, bad), new RegExp(`blind: ${scheme} has no format`), `the name of the format ${JSON.stringify(bad)}`);
+    }
+    for (const bad of [1, undefined, null, ['raw']]) refused('formats', () => checkBlindFormat(scheme, bad), /has no format/, `a ${bad === null ? 'null' : typeof bad} format`);
+  }
+  assert.deepEqual(formatsReport.sol_ed25519.formats, ['raw', 'offchain'], 'the Solana arm signs raw and off-chain');
+  assert.deepEqual(formatsReport.evm_k256.formats, ['eip712-v1'], 'the EVM arm has one format');
+  console.log(`  ✓ formats: ${BLIND_SCHEMES.map((s) => `${s} ${formatsReport[s].formats.join('/')}`).join(', ')}; ${tally.formats.refused} other values refused`);
+}
+
+// ── Restore: the cache, the stored format, else every format the wallet signs ─
+//
+// A model wallet per case: derive(format) stands for the wallet signing the
+// blind request in that format twice (its blind a fixed function of the
+// format), and finds(blind) for testing the account's entries. Each case
+// records which formats the wallet was asked for: never one it cannot sign,
+// and none when the blind is cached.
+
+interface RestoreCase { case: string; scheme: string; role: string; result: string; asked: string[]; tested: string[]; message?: string }
+const restoreCases: RestoreCase[] = [];
+{
+  const blindOf = (scheme: string, format: string, seed: string) => sha(new TextEncoder().encode(`${scheme}/${format}/${seed}`));
+  const run = async (name: string, scheme: BlindScheme, opts: {
+    role?: 'device' | 'grantee'; stored?: { format: string; cached?: boolean }; wallet: string[]; enrolled: string[];
+  }) => {
+    const asked: string[] = [], tested: string[] = [];
+    const account = new Set(opts.enrolled.map((f) => hex(blindOf(scheme, f, name))));
+    const r = await restoreBlind({
+      scheme, role: opts.role, walletFormats: opts.wallet,
+      stored: opts.stored && { format: opts.stored.format, ...(opts.stored.cached ? { blind: blindOf(scheme, opts.stored.format, name) } : {}) },
+      derive: async (f) => { asked.push(f); return blindOf(scheme, f, name); },
+      finds: async (b, f) => { tested.push(f); return account.has(hex(b)); },
+    });
+    for (const f of asked) assert.ok(opts.wallet.includes(f), `${name}: the wallet is never asked for a format it cannot sign (${f})`);
+    restoreCases.push({ case: name, scheme, role: opts.role ?? 'device', result: r.ok === true ? r.source : r.reason, asked, tested, ...(r.ok === true ? {} : { message: r.message }) });
+    ok('restore');
+    return { r, asked, tested };
+  };
+  const matchesOf = (r: Awaited<ReturnType<typeof restoreBlind>>) => (r.ok === true ? r.matches.map((m) => m.format) : []);
+
+  for (const scheme of BLIND_SCHEMES) {
+    const all = [...blindFormats(scheme)];
+    for (const f of all) {
+      // 1. The cache: no signature asked, nothing tested.
+      let x = await run(`${scheme} cache ${f}`, scheme, { stored: { format: f, cached: true }, wallet: [], enrolled: [f] });
+      assert.ok(x.r.ok === true && x.r.source === 'cache' && eq(x.r.matches[0].blind, blindOf(scheme, f, `${scheme} cache ${f}`)));
+      assert.deepEqual([x.asked, x.tested], [[], []]);
+      // 2. The stored format, the cache lost, a wallet that signs it: derived once, in that format.
+      x = await run(`${scheme} stored ${f}`, scheme, { stored: { format: f }, wallet: all, enrolled: [f] });
+      assert.ok(x.r.ok === true && x.r.source === 'stored-format' && x.r.matches.length === 1 && x.r.matches[0].format === f);
+      assert.ok(eq(x.r.ok === true ? x.r.matches[0].blind : new Uint8Array(), blindOf(scheme, f, `${scheme} stored ${f}`)), 'the stored format re-derives the blind');
+      assert.deepEqual([x.asked, x.tested], [[f], []]);
+      // 3. The stored format, a wallet that cannot sign it: nothing derived, the format named.
+      const without = all.filter((g) => g !== f);
+      x = await run(`${scheme} stored ${f}, wallet without it`, scheme, { stored: { format: f }, wallet: without, enrolled: [f] });
+      assert.ok(x.r.ok === false && x.r.reason === 'format-unavailable');
+      assert.deepEqual(x.asked, [], 'never derived in another format');
+      if (x.r.ok === false) {
+        assert.ok(x.r.message.includes(`derived in the ${blindFormatName(scheme, f)} format, which this wallet cannot sign`), x.r.message);
+        assert.ok(x.r.message.endsWith('or add this wallet as a new device from another device of the account, or through the account\'s recovery.'), x.r.message);
+      }
+      // 4. No record: every format the wallet signs is tried; the enrolled one matches.
+      x = await run(`${scheme} search finds ${f}`, scheme, { wallet: all, enrolled: [f] });
+      assert.deepEqual(matchesOf(x.r), [f]);
+      assert.deepEqual(x.asked, all, 'every format the wallet signs, in the entry order');
+      assert.deepEqual(x.tested, all);
+      // 5. No record, the device in a format the wallet cannot sign: not found, the other format named.
+      if (without.length > 0) {
+        x = await run(`${scheme} search, device in ${f}, wallet without it`, scheme, { wallet: without, enrolled: [f] });
+        assert.ok(x.r.ok === false && x.r.reason === 'not-found');
+        assert.deepEqual(x.asked, without);
+        if (x.r.ok === false) {
+          assert.deepEqual([x.r.tried, x.r.untried], [without, [f]]);
+          assert.ok(x.r.message.startsWith(`No account was found in the formats this wallet can sign (${without.map((g) => blindFormatName(scheme, g)).join(', ')}).`), x.r.message);
+          assert.ok(x.r.message.includes(`The device may have been enrolled through another format (${blindFormatName(scheme, f)}).`), x.r.message);
+        }
+      }
+    }
+    // 6. No record, devices in every format: one match per format, in order.
+    let x = await run(`${scheme} search, a device in every format`, scheme, { wallet: all, enrolled: all });
+    assert.deepEqual(matchesOf(x.r), all);
+    // 7. No record, no device: not found; with every format tried, no other format is named.
+    x = await run(`${scheme} search, no device`, scheme, { wallet: all, enrolled: [] });
+    assert.ok(x.r.ok === false && x.r.reason === 'not-found' && x.r.untried.length === 0 && !x.r.message.includes('another format'), 'every format tried: no other format to name');
+    // 8. A wallet that signs none of the formats: nothing asked.
+    x = await run(`${scheme} a wallet with no format`, scheme, { wallet: [], enrolled: all });
+    assert.ok(x.r.ok === false && x.r.reason === 'no-format');
+    assert.deepEqual([x.asked, x.tested], [[], []]);
+    // 9. A grantee: the same rules, the grant's wording.
+    x = await run(`${scheme} grantee search, no grant`, scheme, { role: 'grantee', wallet: [all[0]], enrolled: all.slice(1) });
+    assert.ok(x.r.ok === false && x.r.message.startsWith('No grant was found in the formats this wallet can sign') && x.r.message.endsWith('Ask the issuing account\'s owner for a new grant to this wallet.'), x.r.ok === false ? x.r.message : '');
+    if (all.length > 1 && x.r.ok === false) assert.ok(x.r.message.includes('The grant may have been issued through another format'), x.r.message);
+    x = await run(`${scheme} grantee stored ${all[0]}, wallet without it`, scheme, { role: 'grantee', stored: { format: all[0] }, wallet: all.slice(1), enrolled: [all[0]] });
+    assert.ok(x.r.ok === false && x.r.reason === 'format-unavailable' && x.r.message.startsWith('This grant\'s privacy key was derived in the'));
+  }
+
+  // User Story 4, scenario 2 with real signatures: a Solana key enrolled
+  // through a raw-only wallet, restored with an off-chain-only wallet holding
+  // the same seed. The two blind requests are the same text, the off-chain one
+  // under the off-chain message v1 head (an independent encoder here), so the
+  // two blinds differ; the off-chain-only wallet is never asked for the raw
+  // request, so the raw blind is never derived from it.
+  {
+    const seed = rnd(32), key = ed25519.getPublicKey(seed);
+    const text = blindMessageBytes({ scheme: 'sol_ed25519', network: 'undeployed', identity: key, accountIndex: 0 });
+    const offchainHead = new Uint8Array([0xff, ...new TextEncoder().encode('solana offchain'), 1, 1, ...key]);
+    const bytesIn = (f: string) => (f === 'raw' ? text : new Uint8Array([...offchainHead, ...text]));
+    const blindIn = (f: string) => {
+      const a = ed25519.sign(bytesIn(f), seed), b = ed25519.sign(bytesIn(f), seed);
+      assert.ok(sameCanonicalSignature('sol_ed25519', a, b), 'the sign-twice check');
+      return deriveBlind('sol_ed25519', canonicalSignature('sol_ed25519', a));
+    };
+    const enrolled = blindIn('raw');
+    assert.ok(!eq(enrolled, blindIn('offchain')), 'the raw and off-chain blinds of one key differ (a device is bound to its format)');
+    const asked: string[] = [];
+    const wallet = { walletFormats: ['offchain'], derive: async (f: string) => { asked.push(f); return blindIn(f); }, finds: async (b: Uint8Array) => eq(b, enrolled) };
+    const none = await restoreBlind({ scheme: 'sol_ed25519', ...wallet });
+    assert.ok(none.ok === false && none.reason === 'not-found');
+    assert.equal(none.ok === false && none.message, 'No account was found in the formats this wallet can sign (off-chain). The device may have been enrolled through another format (raw). ' +
+      'Add this wallet as a new device from another device of the account, or through the account\'s recovery.');
+    const named = await restoreBlind({ scheme: 'sol_ed25519', stored: { format: 'raw' }, ...wallet });
+    assert.ok(named.ok === false && named.reason === 'format-unavailable' && named.message.includes('derived in the raw format'));
+    assert.deepEqual(asked, ['offchain'], 'the off-chain-only wallet signed the off-chain request only');
+    const restored = await restoreBlind({ scheme: 'sol_ed25519', stored: { format: 'raw' }, walletFormats: ['raw', 'offchain'], derive: async (f) => blindIn(f), finds: async () => false });
+    assert.ok(restored.ok === true && eq(restored.matches[0].blind, enrolled), 'a raw-signing wallet with the stored format re-derives the enrolled blind');
+    restoreCases.push({ case: 'sol_ed25519 user story 4 scenario 2 (real signatures)', scheme: 'sol_ed25519', role: 'device', result: 'not-found, then format-unavailable, then stored-format', asked, tested: [], message: none.ok === false ? none.message : '' });
+    ok('restore');
+  }
+
+  // Refusals: a malformed request throws before the wallet is asked.
+  const never = async (): Promise<Uint8Array> => { throw new Error('the wallet must not be asked'); };
+  const base = { scheme: 'sol_ed25519' as BlindScheme, walletFormats: ['raw'], derive: never, finds: async () => false };
+  refused('restore', () => restoreBlind({ ...base, walletFormats: ['raw', 'raw'] }), /lists a format twice/, 'a format listed twice');
+  refused('restore', () => restoreBlind({ ...base, walletFormats: ['eip712-v1'] }), /sol_ed25519 has no format "eip712-v1"/, 'another arm\'s format');
+  refused('restore', () => restoreBlind({ ...base, walletFormats: 'raw' as any }), /walletFormats is a list/, 'a string for the list');
+  refused('restore', () => restoreBlind({ ...base, stored: { format: 'RAW' } }), /has no format "RAW"/, 'an unknown stored format');
+  refused('restore', () => restoreBlind({ ...base, stored: { format: 'raw', blind: new Uint8Array(31) } }), /the cached blind for sol_ed25519 is not 32 bytes/, 'a 31-byte cached blind');
+  refused('restore', () => restoreBlind({ ...base, role: 'owner' as any }), /unknown role/, 'an unknown role');
+  await assert.rejects(restoreBlind({ ...base, stored: { format: 'raw' }, derive: async () => new Uint8Array(33) }), /the derived blind for sol_ed25519 is not 32 bytes/);
+  (tally.restore ??= { pass: 0, refused: 0 }).refused++;
+  await assert.rejects(restoreBlind({ ...base, derive: async () => new Uint8Array(31) }), /the derived blind for sol_ed25519 is not 32 bytes/);
+  (tally.restore ??= { pass: 0, refused: 0 }).refused++;
+  // finds must answer true to match.
+  const truthy = await restoreBlind({ ...base, derive: async () => new Uint8Array(32), finds: async () => 1 as any });
+  assert.ok(truthy.ok === false && truthy.reason === 'not-found', 'only `true` is a match');
+  console.log(`  ✓ restore: ${tally.restore.pass} cases (cache, stored format, format unavailable, search over every format the wallet signs, matches in two formats, no device, no format, grantee wording; user story 4 scenario 2 with real Ed25519 signatures); the wallet never asked for a format it cannot sign; ${tally.restore.refused} malformed requests refused`);
+}
+
+// ── The signer check: refused before proving, another key named only if verified ─
+
+interface SignerCase { case: string; scheme: string; result: string; signer?: string }
+const signerCases: SignerCase[] = [];
+{
+  const expectMismatch = (name: string, scheme: BlindScheme, f: () => void, signer: Uint8Array | undefined, text: RegExp) => {
+    let err: unknown;
+    try { f(); } catch (e) { err = e; }
+    assert.ok(err instanceof SignerMismatchError, `${name}: a SignerMismatchError`);
+    const e = err as SignerMismatchError;
+    assert.equal(e.scheme, scheme);
+    assert.ok(signer === undefined ? e.signer === undefined : (e.signer !== undefined && eq(e.signer, signer)), `${name}: the named signer`);
+    assert.match(e.message, text, name);
+    signerCases.push({ case: name, scheme, result: signer ? 'another key named' : 'unknown signer', ...(signer ? { signer: hex(signer) } : {}) });
+    (tally.signer ??= { pass: 0, refused: 0 }).refused++;
+  };
+  // Solana: the arm's verification over the exact bytes (strict RFC 8032).
+  {
+    const phantom = rnd(32), backpack = rnd(32), third = rnd(32);
+    const [pk1, pk2, pk3] = [phantom, backpack, third].map((s) => ed25519.getPublicKey(s));
+    const msg = new TextEncoder().encode('an approval text');
+    const verifiesFor = (sig: Uint8Array) => (identity: Uint8Array) => ed25519.verify(sig, msg, identity, { zip215: false });
+    const own = ed25519.sign(msg, phantom), foreign = ed25519.sign(msg, backpack);
+    checkSigner('sol_ed25519', pk1, verifiesFor(own), [pk2]);
+    ok('signer');
+    // The Backpack-for-Phantom case: the wallet reports Phantom's key, Backpack signed.
+    expectMismatch('sol: another connected wallet signed', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign), [pk1, pk3, pk2]), pk2,
+      new RegExp(`^signer: refused before proving: the signature is not from the expected Solana public key ${base58Encode(pk1)}; it verifies under Solana public key ${base58Encode(pk2)}, another wallet's key$`));
+    expectMismatch('sol: the signer is not among the candidates', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign), [pk1, pk3]), undefined,
+      new RegExp(`^signer: refused before proving: the signature is not from the expected Solana public key ${base58Encode(pk1)}, and the signer is unknown$`));
+    expectMismatch('sol: no candidates', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign)), undefined, /the signer is unknown$/);
+    // Candidates that are not keys are skipped; the reported key itself is never named.
+    expectMismatch('sol: junk candidates', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign), [new Uint8Array(31), unhex(ED25519_TORSION_SUBGROUP[0]), pk1]), undefined, /the signer is unknown$/);
+    // A signature of other bytes verifies under no key.
+    const other = ed25519.sign(new TextEncoder().encode('other bytes'), phantom);
+    expectMismatch('sol: other bytes signed', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(other), [pk2, pk3]), undefined, /the signer is unknown$/);
+    // A throwing verification counts as "does not verify".
+    expectMismatch('sol: a throwing verification', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, () => { throw new Error('bad signature'); }, [pk2]), undefined, /the signer is unknown$/);
+    refused('signer', () => checkSigner('sol_ed25519', unhex(ED25519_TORSION_SUBGROUP[0]), verifiesFor(own)), /small order|canonical/, 'an expected key that is not admissible');
+  }
+  // EVM: the arm's verification is recovery of the address from the digest.
+  {
+    const sks = [rnd(32), rnd(32), rnd(32)];
+    const addrOf = (sk: Uint8Array) => evmAddressOf(secp256k1.Point.fromBytes(secp256k1.getPublicKey(sk, false)).toAffine());
+    const [a1, a2, a3] = sks.map(addrOf);
+    const msg = new TextEncoder().encode('an approval digest stands in here');
+    const digest = keccak_256(new Uint8Array([...new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msg.length}`), ...msg]));
+    const verifiesFor = (sig: Uint8Array) => (identity: Uint8Array) => {
+      const s = secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27);
+      return eq(evmAddressOf(s.recoverPublicKey(digest).toAffine()), identity);
+    };
+    const own = personalSign(sks[0], msg), foreign = personalSign(sks[1], msg);
+    checkSigner('evm_k256', a1, verifiesFor(own), [a2]);
+    ok('signer');
+    expectMismatch('evm: another connected wallet signed', 'evm_k256', () => checkSigner('evm_k256', a1, verifiesFor(foreign), [a3, a2]), a2,
+      new RegExp(`^signer: refused before proving: the signature is not from the expected Ethereum address ${evmChecksumAddress(a1)}; it verifies under Ethereum address ${evmChecksumAddress(a2)}, another wallet's key$`));
+    expectMismatch('evm: the signer is not among the candidates', 'evm_k256', () => checkSigner('evm_k256', a1, verifiesFor(foreign), [a3]), undefined, /and the signer is unknown$/);
+    expectMismatch('evm: junk candidates', 'evm_k256', () => checkSigner('evm_k256', a1, verifiesFor(foreign), [new Uint8Array(20), rnd(19), a1]), undefined, /and the signer is unknown$/);
+    refused('signer', () => checkSigner('evm_k256', new Uint8Array(20), verifiesFor(own)), /zero address/, 'the zero address expected');
+  }
+  console.log(`  ✓ signer check: the expected signer passes (${tally.signer.pass}); ${signerCases.length} mismatches refused before proving, another key named only when the signature verifies under it (Solana and EVM; the reported key never named on the wallet's word); ${tally.signer.refused - signerCases.length} bad expected keys refused`);
+}
+
 const report = {
   suite: 'wallet-arms-client-offline', seed: SEED, ranAt: new Date().toISOString(), tally,
   goldenEvmMessage: GOLDEN_EVM, solanaMessage: solMsg,
   goldenEvmGranteeMessage: GOLDEN_EVM_GRANTEE, solanaGranteeMessage: solGranteeMsg, granteeBlindSeparation: separation,
   unknownSchemes: unknownSchemeReport, boot: bootReport,
+  formats: formatsReport, restore: restoreCases, signer: signerCases,
   verdict: 'PASS',
 };
 if (process.env.EVIDENCE_DIR) {
