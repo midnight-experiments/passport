@@ -104,9 +104,12 @@ async function refused(label: string, f: () => Promise<unknown>, needle: string 
 
 // ── Forging one hint ────────────────────────────────────────────────────────
 
-const BYTE = 'evm_k256: byte hint does not match its value';
-const HASH = 'evm_k256: hash hint does not match the hash';
-const DIGEST = 'evm_k256: digest hint does not match the digest';
+// the EVM identity module's 32-byte check (key coordinates, key hash, site labels)
+const BYTE = 'evm_identity: byte hint does not match its value';
+// the codec's own check of a passkey origin's 21 bytes
+const ORIGIN = 'evm_k256: byte hint does not match its value';
+const HASH = 'evm_identity: hash hint does not match the hash';
+const DIGEST = 'k256: digest hint does not match the digest';
 const WORD = 'evm_k256: word hint does not match its value';
 const CARRY = /type error:[\s\S]*expected/;
 const SOL_Y = "descriptor: the Ed25519 key bytes do not match the point's y";
@@ -213,7 +216,7 @@ await section('the descriptor hints of add_device and remove_device (the two-for
   const K = new K256Device(0x5eed9n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
   const add = async () => [kIn, ...solArgs(kIn), await honest((f) => evmK256Messages.addDevice(f, kIn)), evmK256DescriptorHint(kIn)];
-  await eachForged('add_device', 'add_device_with_evm_k256', add, 4, [['op', ['key'], BYTE], ['op', ['key2'], BYTE], ['op', ['origin'], BYTE], ['op', ['b58', 'digits'], B58]], true);
+  await eachForged('add_device', 'add_device_with_evm_k256', add, 4, [['op', ['key'], BYTE], ['op', ['key2'], BYTE], ['op', ['origin'], ORIGIN], ['op', ['b58', 'digits'], B58]], true);
   // any target: the filler key's inputs are checked like a Solana key's
   await eachForged('add_device (the filler key of a k256 target)', 'add_device_with_evm_k256', add, 4, [[2, [], SOL_Y], [3, [], SOL_X]]);
   await lands('add_device', 'add_device_with_evm_k256', await add(), 4);
@@ -221,7 +224,7 @@ await section('the descriptor hints of add_device and remove_device (the two-for
   const NONE = { is_some: false, value: new Uint8Array(32) };
   const rm = async () => [kIn, ...solArgs(kIn), ep, 0n, NONE, await honest((f) => evmK256Messages.removeDevice(f, kIn, ep, 0n)), { target: evmK256DescriptorHint(kIn), epoch: leHint(ep, 4), counter: leHint(0n, 8) }];
   await eachForged('remove_device', 'remove_device_with_evm_k256', rm, 7, [
-    ['op', ['target', 'key'], BYTE], ['op', ['target', 'key2'], BYTE], ['op', ['target', 'origin'], BYTE], ['op', ['epoch'], WORD], ['op', ['counter'], WORD],
+    ['op', ['target', 'key'], BYTE], ['op', ['target', 'key2'], BYTE], ['op', ['target', 'origin'], ORIGIN], ['op', ['epoch'], WORD], ['op', ['counter'], WORD],
     ['auth', ['nonce'], WORD], ['auth', ['digest'], DIGEST], ['auth', ['account_hash'], HASH], [2, [], SOL_Y], [3, [], SOL_X],
     ['op', ['target', 'b58', 'digits'], B58],
   ]);
@@ -245,7 +248,7 @@ await section('the grantee and scope hints of issue_grant and revoke_grant', asy
   const issue = async () => [gin, ...solArgs(gin), ...evmK256IssueArgs(s), await honest((f) => evmK256Messages.issueGrant(f, gin, s))];
   const withHint = async () => { const a = await issue(); return [...a, withExecutedHints(pc, ctx(), 'issue_grant_with_evm_k256', a).at(-1)]; };
   await eachForged('issue_grant', 'issue_grant_with_evm_k256', withHint, 20, [
-    ['op', ['grantee', 'key'], BYTE], ['op', ['grantee', 'key2'], BYTE], ['op', ['grantee', 'origin'], BYTE], ['op', ['grantee', 'label'], BYTE],
+    ['op', ['grantee', 'key'], BYTE], ['op', ['grantee', 'key2'], BYTE], ['op', ['grantee', 'origin'], ORIGIN], ['op', ['grantee', 'label'], BYTE],
     ['op', ['max_coin_value'], WORD], ['op', ['per_call_cap'], WORD], ['op', ['cap'], WORD], ['op', ['expires_at'], WORD], ['op', ['window_len'], WORD], ['op', ['window_cap'], WORD],
     [2, [], SOL_Y], [3, [], SOL_X], ['op', ['grantee', 'b58', 'digits'], B58], ['op', ['expiry_text'], MONTH], ['op', ['year_split'], SPLIT],
   ], true);
@@ -259,7 +262,7 @@ await section('the grantee and scope hints of issue_grant and revoke_grant', asy
   const gin2 = g2.descriptor();
   await call('issue_grant_with_evm_k256', [gin2, ...solArgs(gin2), ...evmK256IssueArgs(s), await honest((f) => evmK256Messages.issueGrant(f, gin2, s))]);
   const rv = async () => [gin2, ...solArgs(gin2), await honest((f) => evmK256Messages.revokeGrant(f, gin2)), evmK256GranteeHint(gin2)];
-  await eachForged('revoke_grant', 'revoke_grant_with_evm_k256', rv, 4, [['op', ['key'], BYTE], ['op', ['key2'], BYTE], ['op', ['origin'], BYTE], ['op', ['label'], BYTE],
+  await eachForged('revoke_grant', 'revoke_grant_with_evm_k256', rv, 4, [['op', ['key'], BYTE], ['op', ['key2'], BYTE], ['op', ['origin'], ORIGIN], ['op', ['label'], BYTE],
     [2, [], SOL_Y], [3, [], SOL_X], ['op', ['b58', 'digits'], B58]]);
   await lands('revoke_grant', 'revoke_grant_with_evm_k256', await rv(), 4);
 });

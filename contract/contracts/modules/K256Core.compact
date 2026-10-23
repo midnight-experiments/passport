@@ -27,7 +27,7 @@ module K256Core {
   // of them.
   // compact row optimization | ECDSA verify with the digest from checked bytes | -38% rows
   export circuit k256_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point): Boolean {
-    assert(Bytes[...h] == digest, "evm_k256: digest hint does not match the digest");
+    assert(Bytes[...h] == digest, "k256: digest hint does not match the digest");
     const z = Bytes[h[31], h[30], h[29], h[28], h[27], h[26], h[25], h[24], h[23], h[22], h[21], h[20], h[19], h[18], h[17], h[16],
                     h[15], h[14], h[13], h[12], h[11], h[10], h[9],  h[8],  h[7],  h[6],  h[5],  h[4],  h[3],  h[2],  h[1],  h[0]] as Secp256k1Scalar;
     const {r, s} = sig;
