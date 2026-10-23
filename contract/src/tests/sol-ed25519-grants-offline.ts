@@ -249,7 +249,7 @@ const G2 = '2 rules';
     const k = solTargetPointArg(g) as any;
     const b = [...k.pk_bytes]; b[0] ^= 1n;
     const gF = { ...g, a: Uint8Array.from(b, Number) };
-    await refused(G2, "a sol grantee's key bytes with one byte flipped (shown, signed and in the descriptor alike)", 'runtime', /the Ed25519 key bytes do not match the point's y/, () =>
+    await refused(G2, "a sol grantee's key bytes with one byte flipped (shown, signed and in the descriptor alike)", 'runtime', /ed25519: the encoding does not match the point's y/, () =>
       issueSigned(gF, gF, baseScope(), { ...k, pk_bytes: b }));
   }
   await bad('the shared chip through the arm: per-call cap above cap', baseScope({ perCallCap: 600n }), /per-call cap above cap/);

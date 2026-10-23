@@ -148,12 +148,12 @@ const CASES: [string, unknown[], unknown[], string][] = [
   ['probe_boot_ed25519', [pad('midnight:account:boot:sol:v1'), B32, PT, PTB, PTX, B32], [pad('midnight:account:boot:sol:v1'), B32, O, OB, OX, B32], 'descriptor: the Ed25519 key is the identity'],
   ['probe_grant_id_ed25519', [pad('midnight:account:grant:id:sol:v1'), A, PT, PTB, PTX, B32, B32, 3n], [pad('midnight:account:grant:id:sol:v1'), A, O, OB, OX, B32, B32, 3n], 'descriptor: the Ed25519 key is the identity'],
   // The checked encoding: inputs other than the point's own bytes.
-  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, with1(PTB, 7, (x) => x ^ 1n), PTX], "descriptor: the Ed25519 key bytes do not match the point's y"],
-  ['probe_encode_ed25519', [O, OB, OX], [O, le32(1n + P_ED), OX], "descriptor: the Ed25519 key bytes do not match the point's y"],
-  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, PTB, with1(PTX, 9, (x) => x ^ 4n)], "descriptor: the Ed25519 x bytes do not match the point's x"],
-  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, with1(PTB, 31, (x) => x ^ 0x80n), le32(PT.x + P_ED)], "descriptor: the Ed25519 x bytes do not match the point's x"],
-  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, with1(PTB, 31, (x) => x ^ 0x80n), PTX], "descriptor: the Ed25519 sign bit is not x's parity"],
-  ['probe_entry_ed25519', [pad('midnight:account:device:sol:v1'), A, PT, PTB, PTX, B32, 0n, 0n], [pad('midnight:account:device:sol:v1'), A, PT, with1(PTB, 0, (x) => x ^ 1n), PTX, B32, 0n, 0n], "descriptor: the Ed25519 key bytes do not match the point's y"],
+  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, with1(PTB, 7, (x) => x ^ 1n), PTX], "ed25519: the encoding does not match the point's y"],
+  ['probe_encode_ed25519', [O, OB, OX], [O, le32(1n + P_ED), OX], "ed25519: the encoding does not match the point's y"],
+  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, PTB, with1(PTX, 9, (x) => x ^ 4n)], "ed25519: the x bytes do not match the point's x"],
+  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, with1(PTB, 31, (x) => x ^ 0x80n), le32(PT.x + P_ED)], "ed25519: the x bytes do not match the point's x"],
+  ['probe_encode_ed25519', [PT, PTB, PTX], [PT, with1(PTB, 31, (x) => x ^ 0x80n), PTX], "ed25519: the sign bit is not x's parity"],
+  ['probe_entry_ed25519', [pad('midnight:account:device:sol:v1'), A, PT, PTB, PTX, B32, 0n, 0n], [pad('midnight:account:device:sol:v1'), A, PT, with1(PTB, 0, (x) => x ^ 1n), PTX, B32, 0n, 0n], "ed25519: the encoding does not match the point's y"],
   ['probe_grant_id_w65', [pad('midnight:account:grant:id:k1:v1'), A, B32, B32, 0n, B32, 3n], [pad('midnight:account:device:k1:v2'), A, B32, B32, 0n, B32, 3n], 'descriptor: not a 65-byte grant-id tag'],
   ['probe_blind', [pad('midnight:account:blind:sol:v1'), fill(64, 0x44)], [spaced('midnight:account:blind:evm:v1'), fill(64, 0x44)], 'descriptor: not a blind tag'],
   ['probe_grant_scope_salt', [pad('midnight:account:salt:sol:v1'), B32, A, 7n], [pad('midnight:account:blind:sol:v1'), B32, A, 7n], 'descriptor: not a grant salt tag'],
@@ -300,10 +300,10 @@ const B58_KEY = b58(PT_KEY) as [bigint[], bigint[], bigint, bigint, bigint];
 //  own JavaScript trips on the carried bytes (bypassed; the proof refuses by
 //  the range check before any of them)]
 const CARRY: [string, string, unknown[], unknown[], string[]][] = [
-  ['the key bytes carried', 'probe_encode_ed25519', [PT, PTB, PTX], [PT, carry(PTB), PTX], ["descriptor: the Ed25519 key bytes do not match the point's y"]],
-  ['the x bytes carried', 'probe_encode_ed25519', [PT, PTB, PTX], [PT, PTB, carry(PTX)], ["descriptor: the Ed25519 x bytes do not match the point's x"]],
+  ['the key bytes carried', 'probe_encode_ed25519', [PT, PTB, PTX], [PT, carry(PTB), PTX], ["ed25519: the encoding does not match the point's y"]],
+  ['the x bytes carried', 'probe_encode_ed25519', [PT, PTB, PTX], [PT, PTB, carry(PTX)], ["ed25519: the x bytes do not match the point's x"]],
   ['the key bytes carried in a derivation', 'probe_entry_ed25519', [pad('midnight:account:device:sol:v1'), A, PT, PTB, PTX, B32, 0n, 0n],
-    [pad('midnight:account:device:sol:v1'), A, PT, carry(PTB, 20), PTX, B32, 0n, 0n], ["descriptor: the Ed25519 key bytes do not match the point's y"]],
+    [pad('midnight:account:device:sol:v1'), A, PT, carry(PTB, 20), PTX, B32, 0n, 0n], ["ed25519: the encoding does not match the point's y"]],
   ["base58's value bytes carried (high half)", 'probe_base58_text_32', [...B58_KEY], [carry(B58_KEY[0], 3), ...B58_KEY.slice(1)], ["display: the base58 digits do not match the value's high bytes"]],
   ["base58's value bytes carried (low half)", 'probe_base58_text_32', [...B58_KEY], [carry(B58_KEY[0], 20), ...B58_KEY.slice(1)], ["display: the base58 digits do not match the value's low bytes"]],
 ];
