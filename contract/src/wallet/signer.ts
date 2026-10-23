@@ -34,7 +34,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { P256Device, P256Grantee, P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
 export { P256Device, P256Grantee, p256Challenges, p256GrantChallenges } from './signer-p256.js';
 export type { P256Authorisation, P256GrantAuthorisation } from './signer-p256.js';
-import type { EvmK256Authorisation, EvmK256GrantAuthorisation } from './signer-evm-k256.js';
+import { evmK256AuthArgs, evmK256GrantAuthArgs, type EvmK256Authorisation, type EvmK256GrantAuthorisation } from './signer-evm-k256.js';
 
 import {
   pureCircuits,
@@ -430,12 +430,7 @@ export function authArgs(a: Authorisation): unknown[] {
     const { arm, ...auth } = a;
     return [auth];
   }
-  if (a.arm === 'evm_k256') {
-    // The auth struct (its seam hints included), then the operation's own
-    // hints when the circuit takes them.
-    const { arm, op, ...auth } = a;
-    return op === undefined ? [auth] : [auth, op];
-  }
+  if (a.arm === 'evm_k256') return evmK256AuthArgs(a);
   return a.arm === 'jubjub'
     ? [a.pk, a.use_counter, a.sig_r, a.sig_s, a.grind_nonce]
     : [a.pk, a.use_counter, a.sig, a.envelope];
@@ -901,10 +896,7 @@ export function grantAuthArgs(o: GrantOpening, a: GrantAuthorisation): unknown[]
     const { arm, ...auth } = a;
     return [o.originHash, o.slot, ...openings, auth];
   }
-  if (a.arm === 'evm_k256') {
-    const { arm, label, op, ...auth } = a;
-    return op === undefined ? [label, o.slot, ...openings, auth] : [label, o.slot, ...openings, auth, op];
-  }
+  if (a.arm === 'evm_k256') return evmK256GrantAuthArgs(o, a);
   return a.arm === 'k256'
     ? [a.pk, a.envelope, o.originHash, o.slot, ...openings, a.sig]
     : [a.pk, o.originHash, o.slot, ...openings, a.sig_r, a.sig_s, a.grind_nonce];

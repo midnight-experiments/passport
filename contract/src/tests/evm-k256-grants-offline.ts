@@ -52,7 +52,7 @@ import {
 } from '../wallet/signer.js';
 import {
   SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256GranteeInput, evmK256IssueArgs, evmK256GrantScopeSalt, parseEvmSignature,
-  type EvmK256GrantAuthorisation, solArgs} from '../wallet/signer-evm-k256.js';
+  type EvmK256GrantAuthorisation, ed25519Args} from '../wallet/signer-evm-k256.js';
 import { evmK256Messages, typedDataDigest, toHex, labelOf, expiryText, passkeyRpWord, windowWord, type IssueScope, type EvmK256GranteeInput } from '../wallet/evm-k256-codec.js';
 import { grantLabel, grantScopeSalt } from '../wallet/descriptors.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -255,7 +255,7 @@ async function openAccount(ownerArm: OwnerArm): Promise<Account> {
       const derived = evmK256GrantScopeSalt(evmOwner.blind, address, L().auth_nonce as bigint);
       const args = evmK256IssueArgs(executed);
       if (opts.rawReadPk) args[12] = opts.rawReadPk;
-      await call('issue_grant_with_evm_k256', [gin, ...solArgs(gin), ...args, auth]);
+      await call('issue_grant_with_evm_k256', [gin, ...ed25519Args(gin), ...args, auth]);
       counter++;
       return derived;
     } else {
@@ -272,7 +272,7 @@ async function openAccount(ownerArm: OwnerArm): Promise<Account> {
   async function revoke(g: Grantee, slot: bigint) {
     if (evmOwner) {
       const gin = g.descriptor(slot);
-      await call('revoke_grant_with_evm_k256', [gin, ...solArgs(gin), await evmAuth(evmK256Messages.revokeGrant(evmFrame(), gin))]);
+      await call('revoke_grant_with_evm_k256', [gin, ...ed25519Args(gin), await evmAuth(evmK256Messages.revokeGrant(evmFrame(), gin))]);
     } else {
       const id = g.grantId(address, slot);
       const a = jub ? jub.sign(jubjubChallenges.revokeGrant(ctx(), jub.pk, id), counter) : k1!.sign(k256Challenges.revokeGrant(ctx(), k1!.pk, id), counter);

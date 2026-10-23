@@ -31,7 +31,7 @@ import { hexToBytes } from '../wallet/hex.js';
 import { makeWitnesses, emptyCoinStore, type CoinStorePrivateState } from '../wallet/witnesses.js';
 import { JubjubDevice, K256Device, grantAuthArgs, RECIPIENT_USER_ADDRESS, RECIPIENT_ZSWAP_COIN_PUBLIC_KEY, type GrantOpening } from '../wallet/signer.js';
 import {
-  SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmK256IssueArgs, evmK256GrantScopeSalt, solArgs, solKeyOf,
+  SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmK256IssueArgs, evmK256GrantScopeSalt, ed25519Args, ed25519KeyOf,
 } from '../wallet/signer-evm-k256.js';
 import { evmK256Messages, type Eip712TypedData, type IssueScope } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
@@ -215,14 +215,14 @@ await section('the operation hints of the custody circuits', async () => {
 await section('the descriptor hints of add_device and remove_device (the two-form body)', async () => {
   const K = new K256Device(0x5eed9n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
-  const add = async () => [kIn, ...solArgs(kIn), await honest((f) => evmK256Messages.addDevice(f, kIn)), evmK256DescriptorHint(kIn)];
+  const add = async () => [kIn, ...ed25519Args(kIn), await honest((f) => evmK256Messages.addDevice(f, kIn)), evmK256DescriptorHint(kIn)];
   await eachForged('add_device', 'add_device_with_evm_k256', add, 4, [['op', ['key'], BYTE], ['op', ['key2'], BYTE], ['op', ['origin'], ORIGIN], ['op', ['b58', 'digits'], B58]], true);
   // any target: the filler key's inputs are checked like a Solana key's
   await eachForged('add_device (the filler key of a k256 target)', 'add_device_with_evm_k256', add, 4, [[2, [], SOL_Y], [3, [], SOL_X]]);
   await lands('add_device', 'add_device_with_evm_k256', await add(), 4);
   const ep = L().device_epoch as bigint;
   const NONE = { is_some: false, value: new Uint8Array(32) };
-  const rm = async () => [kIn, ...solArgs(kIn), ep, 0n, NONE, await honest((f) => evmK256Messages.removeDevice(f, kIn, ep, 0n)), { target: evmK256DescriptorHint(kIn), epoch: leHint(ep, 4), counter: leHint(0n, 8) }];
+  const rm = async () => [kIn, ...ed25519Args(kIn), ep, 0n, NONE, await honest((f) => evmK256Messages.removeDevice(f, kIn, ep, 0n)), { target: evmK256DescriptorHint(kIn), epoch: leHint(ep, 4), counter: leHint(0n, 8) }];
   await eachForged('remove_device', 'remove_device_with_evm_k256', rm, 7, [
     ['op', ['target', 'key'], BYTE], ['op', ['target', 'key2'], BYTE], ['op', ['target', 'origin'], ORIGIN], ['op', ['epoch'], WORD], ['op', ['counter'], WORD],
     ['auth', ['nonce'], WORD], ['auth', ['digest'], DIGEST], [2, [], SOL_Y], [3, [], SOL_X],
@@ -233,7 +233,7 @@ await section('the descriptor hints of add_device and remove_device (the two-for
 
 await section('the Solana key inputs of a Solana target (add_device)', async () => {
   const solIn = evmK256DescriptorInput({ scheme: 'sol_ed25519', key: ed25519.getPublicKey(rnd()), blind: rnd() });
-  const add = async () => [solIn, ...solArgs(solIn), await honest((f) => evmK256Messages.addDevice(f, solIn)), evmK256DescriptorHint(solIn)];
+  const add = async () => [solIn, ...ed25519Args(solIn), await honest((f) => evmK256Messages.addDevice(f, solIn)), evmK256DescriptorHint(solIn)];
   await eachForged('add_device (Solana target)', 'add_device_with_evm_k256', add, 4, [[2, [], SOL_Y], [3, [], SOL_X], ['op', ['b58', 'digits'], B58]], true);
   await lands('add_device (Solana target)', 'add_device_with_evm_k256', await add(), 4);
 });
@@ -245,7 +245,7 @@ await section('the grantee and scope hints of issue_grant and revoke_grant', asy
   const gin = g.descriptor();
   const s = scope({ opWithdrawUnshielded: true, color: U_COLOR, recipientKind: RECIPIENT_USER_ADDRESS, recipient: RCPT, maxCoinValue: 100n, perCallCap: 100n, cap: 500n,
     expiresAt: 4_000_000_000n });
-  const issue = async () => [gin, ...solArgs(gin), ...evmK256IssueArgs(s), await honest((f) => evmK256Messages.issueGrant(f, gin, s))];
+  const issue = async () => [gin, ...ed25519Args(gin), ...evmK256IssueArgs(s), await honest((f) => evmK256Messages.issueGrant(f, gin, s))];
   const withHint = async () => { const a = await issue(); return [...a, withExecutedHints(pc, ctx(), 'issue_grant_with_evm_k256', a).at(-1)]; };
   await eachForged('issue_grant', 'issue_grant_with_evm_k256', withHint, 20, [
     ['op', ['grantee', 'key'], BYTE], ['op', ['grantee', 'key2'], BYTE], ['op', ['grantee', 'origin'], ORIGIN], ['op', ['grantee', 'label'], BYTE],
@@ -260,8 +260,8 @@ await section('the grantee and scope hints of issue_grant and revoke_grant', asy
   // a second grantee to revoke
   const g2 = await EvmK256Grantee.enrol(SoftwareEvmWallet.generate(), 'undeployed', address, grantLabel('shop.example'), 2n);
   const gin2 = g2.descriptor();
-  await call('issue_grant_with_evm_k256', [gin2, ...solArgs(gin2), ...evmK256IssueArgs(s), await honest((f) => evmK256Messages.issueGrant(f, gin2, s))]);
-  const rv = async () => [gin2, ...solArgs(gin2), await honest((f) => evmK256Messages.revokeGrant(f, gin2)), evmK256GranteeHint(gin2)];
+  await call('issue_grant_with_evm_k256', [gin2, ...ed25519Args(gin2), ...evmK256IssueArgs(s), await honest((f) => evmK256Messages.issueGrant(f, gin2, s))]);
+  const rv = async () => [gin2, ...ed25519Args(gin2), await honest((f) => evmK256Messages.revokeGrant(f, gin2)), evmK256GranteeHint(gin2)];
   await eachForged('revoke_grant', 'revoke_grant_with_evm_k256', rv, 4, [['op', ['key'], BYTE], ['op', ['key2'], BYTE], ['op', ['origin'], ORIGIN], ['op', ['label'], BYTE],
     [2, [], SOL_Y], [3, [], SOL_X], ['op', ['b58', 'digits'], B58]]);
   await lands('revoke_grant', 'revoke_grant_with_evm_k256', await rv(), 4);
@@ -300,15 +300,15 @@ await section('the exported pure oracles refuse a flipped hint', async () => {
   await refused('evm_k256_site_label_hash: the label hint flipped', async () => pc.evm_k256_site_label_hash(label, f(bytesHint(label))), BYTE);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: E.pk.x, y: E.pk.y, envelope: 0 });
   const dh = evmK256DescriptorHint(kIn);
-  await refused('evm_k256_device_descriptor_hash: hint.key flipped', async () => pc.evm_k256_device_descriptor_hash(kIn, solKeyOf(kIn), { ...dh, key: f(dh.key) }), BYTE);
+  await refused('evm_k256_device_descriptor_hash: hint.key flipped', async () => pc.evm_k256_device_descriptor_hash(kIn, ed25519KeyOf(kIn), { ...dh, key: f(dh.key) }), BYTE);
   const gin = G!.g.descriptor();
   const gh = evmK256GranteeHint(gin);
   const solIn = evmK256DescriptorInput({ scheme: 'sol_ed25519', key: ed25519.getPublicKey(rnd()), blind: rnd() });
-  const [sPt, sBytes, sX] = solArgs(solIn);
-  ok(hex(pc.evm_k256_sol_device_target({ bytes: address }, solIn, sPt, sBytes, sX, 0n, 0n)[0]) === hex(solIn.key), 'evm_k256_sol_device_target with the exact inputs shows the key');
-  await refused('evm_k256_sol_device_target: the key bytes flipped', async () => pc.evm_k256_sol_device_target({ bytes: address }, solIn, sPt, f(sBytes), sX, 0n, 0n), SOL_Y);
-  await refused('evm_k256_sol_device_target: the x bytes flipped', async () => pc.evm_k256_sol_device_target({ bytes: address }, solIn, sPt, sBytes, f(sX), 0n, 0n), SOL_X);
-  await refused('evm_k256_grantee_descriptor_hash: hint.label flipped', async () => pc.evm_k256_grantee_descriptor_hash(gin, solKeyOf(gin), { ...gh, label: f(gh.label) }), BYTE);
+  const [sPt, sBytes, sX] = ed25519Args(solIn);
+  ok(hex(pc.evm_k256_ed25519_device_target({ bytes: address }, solIn, sPt, sBytes, sX, 0n, 0n)[0]) === hex(solIn.key), 'evm_k256_ed25519_device_target with the exact inputs shows the key');
+  await refused('evm_k256_ed25519_device_target: the key bytes flipped', async () => pc.evm_k256_ed25519_device_target({ bytes: address }, solIn, sPt, f(sBytes), sX, 0n, 0n), SOL_Y);
+  await refused('evm_k256_ed25519_device_target: the x bytes flipped', async () => pc.evm_k256_ed25519_device_target({ bytes: address }, solIn, sPt, sBytes, f(sX), 0n, 0n), SOL_X);
+  await refused('evm_k256_grantee_descriptor_hash: hint.label flipped', async () => pc.evm_k256_grantee_descriptor_hash(gin, ed25519KeyOf(gin), { ...gh, label: f(gh.label) }), BYTE);
   await refused('evm_k256_struct_withdraw_unshielded: the nonce hint flipped', async () =>
     pc.evm_k256_struct_withdraw_unshielded(address, E.address, 7n, f(leHint(7n, 8), 0), U_COLOR, 10n, RCPT, evmK256AmountHint(10n, TEST_SITE)), WORD);
   await refused('evm_k256_struct_withdraw_unshielded: the amount hint flipped', async () =>

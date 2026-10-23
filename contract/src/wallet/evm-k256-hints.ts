@@ -14,8 +14,8 @@
 
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import type { EvmK256DescriptorInput, EvmK256GranteeInput, IssueScope, SiteAmount } from './evm-k256-codec.js';
-import { DESCRIPTOR_TAGS, solanaKeyInputs } from './descriptors.js';
+import { evmK256KindOf, type EvmK256DescriptorInput, type EvmK256GranteeInput, type IssueScope, type SiteAmount } from './evm-k256-codec.js';
+import { ed25519KeyInputs } from './descriptors.js';
 import { base58Inputs, siteAmountLabelBytes, utcDateTimeInputs } from './rendering.js';
 
 /** A `Uint<8>` vector as the generated contract takes it. */
@@ -72,33 +72,35 @@ export function evmK256GrantSeamHint(
   };
 }
 
-// ── Solana keys ─────────────────────────────────────────────────────────────
+// ── Ed25519 keys ────────────────────────────────────────────────────────────
 
 /** The three arguments the four descriptor circuits take beside a
- *  descriptor: a Solana target's key as its Curve25519Point, the key's 32
- *  encoded bytes and the point's x-coordinate as 32 little-endian bytes
- *  (solanaKeyInputs; the circuit checks both against the point). */
-export type EvmK256SolArgs = [point: { x: bigint; y: bigint }, pkBytes: bigint[], pkX: bigint[]];
-const solArgsOf = (k: ReturnType<typeof solanaKeyInputs>): EvmK256SolArgs => [k.point, k.pkBytes, k.pkX];
-/** A circuit computes every descriptor class, so for any other target the
- *  client passes a fixed non-identity key (the Ed25519 base point) with its
- *  inputs; the circuit discards its results. */
-export const EVM_K256_SOL_FILLER_ARGS: EvmK256SolArgs = (() => {
+ *  descriptor: an ed25519_base58 target's key as its Curve25519Point, the
+ *  key's 32 encoded bytes and the point's x-coordinate as 32 little-endian
+ *  bytes (ed25519KeyInputs; the circuit checks both against the point). */
+export type EvmK256Ed25519Args = [point: { x: bigint; y: bigint }, pkBytes: bigint[], pkX: bigint[]];
+const ed25519ArgsOf = (k: ReturnType<typeof ed25519KeyInputs>): EvmK256Ed25519Args => [k.point, k.pkBytes, k.pkX];
+/** A circuit computes every payload form, so for a target of any other form
+ *  the client passes a fixed non-identity key (the Ed25519 base point) with
+ *  its inputs; the circuit discards its results. */
+export const EVM_K256_ED25519_FILLER_ARGS: EvmK256Ed25519Args = (() => {
   const { x, y } = ed25519.Point.BASE.toAffine();
-  return solArgsOf(solanaKeyInputs({ x, y }));
+  return ed25519ArgsOf(ed25519KeyInputs({ x, y }));
 })();
-const SOL_TAGS = new Set([DESCRIPTOR_TAGS.device.sol_ed25519, DESCRIPTOR_TAGS['grant-id'].sol_ed25519]);
-const tagTextOf = (tag: Uint8Array) => new TextDecoder().decode(tag.subarray(0, tag.indexOf(0) < 0 ? 32 : tag.indexOf(0)));
-const isSol = (input: { tag: Uint8Array }) => SOL_TAGS.has(tagTextOf(input.tag));
-/** The Solana arguments for a descriptor input: a Solana target's key (its
- *  32-byte encoding in `key`), the filler key otherwise. */
-export function solArgs(input: EvmK256DescriptorInput | EvmK256GranteeInput): EvmK256SolArgs {
-  return isSol(input) ? solArgsOf(solanaKeyInputs(new Uint8Array(input.key))) : EVM_K256_SOL_FILLER_ARGS;
+/** Whether a descriptor input (a device's or a grantee's) names a kind of
+ *  the ed25519_base58 form by its tag. */
+const isEd25519Base58 = (input: { tag: Uint8Array }): boolean =>
+  (evmK256KindOf('device', input.tag) ?? evmK256KindOf('grant-id', input.tag))?.payload === 'ed25519_base58';
+/** The Ed25519 arguments for a descriptor input: an ed25519_base58 target's
+ *  key (its 32-byte encoding in `key`), the filler key otherwise. */
+export function ed25519Args(input: EvmK256DescriptorInput | EvmK256GranteeInput): EvmK256Ed25519Args {
+  return isEd25519Base58(input) ? ed25519ArgsOf(ed25519KeyInputs(new Uint8Array(input.key))) : EVM_K256_ED25519_FILLER_ARGS;
 }
-/** The key bytes the descriptor circuits show under the Solana type (the
- *  checked `sol_bytes` they are passed): the target's key, or the filler
- *  key's for any other target (shown nowhere: that branch is not selected). */
-export const solKeyOf = (input: EvmK256DescriptorInput | EvmK256GranteeInput): ByteHint => solArgs(input)[1];
+/** The key bytes the descriptor circuits show for an ed25519_base58 kind (the
+ *  checked `ed_bytes` they are passed): the target's key, or the filler
+ *  key's for a target of any other form (shown nowhere: that form is not
+ *  selected). */
+export const ed25519KeyOf = (input: EvmK256DescriptorInput | EvmK256GranteeInput): ByteHint => ed25519Args(input)[1];
 const bytesOfHint = (h: ByteHint): Uint8Array => Uint8Array.from(h, (x) => Number(x));
 
 /** The base58 inputs of a 32-byte key (`EvmK256Base58Hint`). */
@@ -125,9 +127,9 @@ export function evmK256CoinHint(amount: bigint, coinValue: bigint, coinMtIndex: 
 // ── Descriptors ─────────────────────────────────────────────────────────────
 
 /** A device descriptor (`EvmK256DescriptorHint`): its bytes and the base58
- *  inputs of the key shown under the Solana type (solKeyOf). */
+ *  inputs of the key an ed25519_base58 kind shows (ed25519KeyOf). */
 export const evmK256DescriptorHint = (d: EvmK256DescriptorInput) =>
-  ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: evmK256Base58Hint(bytesOfHint(solKeyOf(d))) });
+  ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: evmK256Base58Hint(bytesOfHint(ed25519KeyOf(d))) });
 
 /** A removal (`EvmK256RemoveHint`): the target's descriptor, epoch and counter. */
 export const evmK256RemoveHint = (d: EvmK256DescriptorInput, targetEpoch: bigint, targetCounter: bigint) =>
@@ -135,7 +137,7 @@ export const evmK256RemoveHint = (d: EvmK256DescriptorInput, targetEpoch: bigint
 
 /** A grantee descriptor (`EvmK256GranteeHint`). */
 export const evmK256GranteeHint = (g: EvmK256GranteeInput) =>
-  ({ key: bytesHint(g.key), key2: bytesHint(g.key2), origin: bytesHint(g.origin), label: bytesHint(g.label), b58: evmK256Base58Hint(bytesOfHint(solKeyOf(g))) });
+  ({ key: bytesHint(g.key), key2: bytesHint(g.key2), origin: bytesHint(g.origin), label: bytesHint(g.label), b58: evmK256Base58Hint(bytesOfHint(ed25519KeyOf(g))) });
 
 /** A grant (`EvmK256IssueHint`): the grantee, the scope's numbers, and the
  *  expiry's date inputs (utcDateTimeInputs: the date text, 29 bytes, and the

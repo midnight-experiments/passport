@@ -99,7 +99,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { CONFIG } from '../node/wallet.js';
 import { JubjubDevice, K256Device, k256Challenges, jubjubChallenges, authArgs } from '../wallet/signer.js';
 import { recoveryKey, signRecoverSubmit, recoverSubmitArgs, recoverSubmitChallenge, JUBJUB_IDENTITY, JUBJUB_ORDER_TWO } from '../wallet/recovery-gate.js';
-import { SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, highSTwin, parseEvmSignature, serialiseEvmSignature, evmK256DescriptorInput, evmDeviceDescriptor, EVM_K256_UNUSED_DESCRIPTOR, evmK256GranteeInput, evmK256IssueArgs, evmK256GrantScopeSalt, solArgs, EVM_K256_SOL_FILLER_ARGS, SECP256K1_ORDER } from '../wallet/signer-evm-k256.js';
+import { SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, highSTwin, parseEvmSignature, serialiseEvmSignature, evmK256DescriptorInput, evmDeviceDescriptor, EVM_K256_UNUSED_DESCRIPTOR, evmK256GranteeInput, evmK256IssueArgs, evmK256GrantScopeSalt, ed25519Args, EVM_K256_ED25519_FILLER_ARGS, SECP256K1_ORDER } from '../wallet/signer-evm-k256.js';
 import { grantLabel, grantOriginHash } from '../wallet/descriptors.js';
 import { K256Grantee, originHash as upstreamOriginHash, grantAuthArgs, RECIPIENT_USER_ADDRESS, scopeArgs, scopeDigest, type GrantOpening, type PlainScope } from '../wallet/signer.js';
 import type { IssueScope } from '../wallet/evm-k256-codec.js';
@@ -109,7 +109,7 @@ import { TEST_SITE, KEEP_HINTS } from './evm-k256-hint-fill.js';
 import { evmK256SeamHint, evmK256GrantSeamHint, evmK256IssueHint, evmK256DescriptorHint, evmK256RemoveHint, evmK256AmountHint, evmK256CoinHint,
   evmK256KeyHint, evmK256GranteeHint, leHint } from '../wallet/evm-k256-hints.js';
 import { base58Inputs, base58Text32, utcDateTimeInputs } from '../wallet/rendering.js';
-import { EVM_K256_AMOUNT_LABEL_PREFIX, solanaKeyText } from '../wallet/evm-k256-codec.js';
+import { EVM_K256_AMOUNT_LABEL_PREFIX, ed25519Base58Text } from '../wallet/evm-k256-codec.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { evmK256Messages, typedDataDigest, EVM_K256_PASSKEY_RP_POINTER, EVM_K256_WINDOW_POINTER, amountLabelText, type Eip712TypedData } from '../wallet/evm-k256-codec.js';
@@ -778,7 +778,7 @@ if (SECTIONS.includes('hints')) {
   // descriptors
   const K = new K256Device(0x41n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
-  const add = [kIn, ...solArgs(kIn), authFor(evmK256Messages.addDevice(frameOf(A0), kIn))];
+  const add = [kIn, ...ed25519Args(kIn), authFor(evmK256Messages.addDevice(frameOf(A0), kIn))];
   honestCall('add_device_with_evm_k256', A0, add);
   await negative('hints', "add_device: a byte of the target's x coordinate", A0, 'add_device_with_evm_k256', F(A0, 'add_device_with_evm_k256', add, 4, 'op', ['key'], 3),
     BYTE_H, [BYTE_H, DIGEST_H]);
@@ -789,7 +789,7 @@ if (SECTIONS.includes('hints')) {
   await negative('hints', "add_device: a byte of the filler key's encoding (k256 target)", A0, 'add_device_with_evm_k256',
     F(A0, 'add_device_with_evm_k256', add, 4, 2, [], 5), SOL_Y, [SOL_Y]);
   const solIn = evmK256DescriptorInput({ scheme: 'sol_ed25519', key: ed25519.getPublicKey(fill(32, 0x53)), blind: fill(32, 0x54) });
-  const addS = [solIn, ...solArgs(solIn), authFor(evmK256Messages.addDevice(frameOf(A0), solIn))];
+  const addS = [solIn, ...ed25519Args(solIn), authFor(evmK256Messages.addDevice(frameOf(A0), solIn))];
   await negative('hints', "add_device: a byte of a Solana target's x coordinate", A0, 'add_device_with_evm_k256',
     F(A0, 'add_device_with_evm_k256', addS, 4, 3, [], 5), SOL_X, [SOL_X]);
   await negative('hints', "add_device: a byte of a Solana target's encoding (the key shown)", A0, 'add_device_with_evm_k256',
@@ -800,7 +800,7 @@ if (SECTIONS.includes('hints')) {
     F(A0, 'add_device_with_evm_k256', addS, 4, 'op', ['b58', 'digits'], 5), B58_H, [B58_H, DIGEST_H]);
   const pk = softwarePasskey();
   const pIn = evmK256DescriptorInput({ scheme: 'p256', x: pk.pk.x, y: pk.pk.y, policy: { rpIdHash: fill(32, 0x52), origin: new TextEncoder().encode('https://ab.example.co') } } as Descriptor);
-  const addP = [pIn, ...solArgs(pIn), authFor(evmK256Messages.addDevice(frameOf(A0), pIn))];
+  const addP = [pIn, ...ed25519Args(pIn), authFor(evmK256Messages.addDevice(frameOf(A0), pIn))];
   await negative('hints', "add_device: a byte of a passkey target's origin", A0, 'add_device_with_evm_k256', F(A0, 'add_device_with_evm_k256', addP, 4, 'op', ['origin'], 3),
     ORIGIN_H, [ORIGIN_H]);
   // a grantee and its twin
@@ -810,7 +810,7 @@ if (SECTIONS.includes('hints')) {
   const sc: IssueScope = { opWithdrawUnshielded: true, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: false, color: COL_U,
     recipientKind: RECIPIENT_USER_ADDRESS, recipient: RECIPIENT_U, maxCoinValue: 300n, perCallCap: 300n, cap: 1000n, expiresAt: 0n,
     rpIdHash: new Uint8Array(32), readPk: new Uint8Array(32), windowLen: 0n, windowCap: 0n, caller: null };
-  const issue = (a: LocalAccount) => [egIn, ...solArgs(egIn), ...evmK256IssueArgs(sc), authFor(evmK256Messages.issueGrant(frameOf(a), egIn, sc))];
+  const issue = (a: LocalAccount) => [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(sc), authFor(evmK256Messages.issueGrant(frameOf(a), egIn, sc))];
   const ISSUE_H = 'issue_grant_with_evm_k256';
   honestCall(ISSUE_H, AU, issue(AU));
   await negative('hints', "issue_grant: a byte of the grantee's site label", AU, ISSUE_H, F(AU, ISSUE_H, issue(AU), 20, 'op', ['grantee', 'label'], 0), BYTE_H, [BYTE_H, DIGEST_H]);
@@ -818,7 +818,7 @@ if (SECTIONS.includes('hints')) {
   // the expiry's date with its seconds changed (2030-01-01 00:00:00 UTC shown as 00:00:01)
   const DATE_H = 'display: the date and time do not match the value';
   const scE: IssueScope = { ...sc, expiresAt: 1893456000n };
-  const issueE = (a: LocalAccount) => [egIn, ...solArgs(egIn), ...evmK256IssueArgs(scE), authFor(evmK256Messages.issueGrant(frameOf(a), egIn, scE))];
+  const issueE = (a: LocalAccount) => [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(scE), authFor(evmK256Messages.issueGrant(frameOf(a), egIn, scE))];
   await negative('hints', "issue_grant: a digit of the expiry's UTC date", AU, ISSUE_H, F(AU, ISSUE_H, issueE(AU), 20, 'op', ['expiry_text'], 18), DATE_H, [DATE_H, DIGEST_H]);
   const AG = (await execute(Original.Contract, AU, ISSUE_H, issue(AU))).after;
   const rec = ledgerOf(AG).grants.lookup(eg.grantId(AG.addressBytes));
@@ -924,6 +924,7 @@ if (SECTIONS.includes('devices')) {
   const REMOVE = 'remove_device_with_evm_k256';
   const NOT_DEVICE_TAG = 'evm_k256: not a registered device tag';
   const W117 = 'descriptor: not a 117-byte device tag';
+  const W52 = 'descriptor: not a 52-byte device tag';
   const LAST = 'cannot remove last device';
   const SELF = 'cannot remove the authorising device';
   const NONCANON = 'noncanonical absent entry';
@@ -955,12 +956,12 @@ if (SECTIONS.includes('devices')) {
   for (const [scheme, d, upstreamEntry] of targets) {
     const input = evmK256DescriptorInput(d);
     const td = evmK256Messages.addDevice(frame(A0), input);
-    const args = [input, ...solArgs(input), signAs(td, 0n)];
+    const args = [input, ...ed25519Args(input), signAs(td, 0n)];
     await positive('devices', `add_device: a ${scheme} target (patched path)`, posPath, A0, ADD, args);
     const after = (await execute(Original.Contract, A0, ADD, args)).after;
     const l = ledgerOf(after);
     const expected = scheme === 'sol_ed25519'
-      ? pc.derive_descriptor_entry_ed25519(padTag(DESCRIPTOR_TAGS.device.sol_ed25519), { bytes: A0.addressBytes }, ...solArgs(input), input.key2, 0n, 0n)[1]
+      ? pc.derive_descriptor_entry_ed25519(padTag(DESCRIPTOR_TAGS.device.sol_ed25519), { bytes: A0.addressBytes }, ...ed25519Args(input), input.key2, 0n, 0n)[1]
       : upstreamEntry(A0, 0n);
     const ok = l.devices.member(expected) && l.device_count === 2n && !l.devices.member(scheme === 'sol_ed25519' ? new Uint8Array(32) : upstreamEntry(A0, 1n));
     const r: Result = { section: 'devices', circuit: ADD, case: `add_device: the ${scheme} entry equals ${scheme === 'sol_ed25519' ? 'the ed25519 class recipe (from the point)' : `upstream's derive_device_entry_with_${scheme}`} at epoch 0, counter 0; nothing at epoch 1`, kind: 'positive' };
@@ -971,30 +972,33 @@ if (SECTIONS.includes('devices')) {
   const kIn = evmK256DescriptorInput(targets[1][1]);
   const kTd = evmK256Messages.addDevice(frame(A0), kIn);
   const flip = (b: Uint8Array) => { const c = new Uint8Array(b); c[0] ^= 1; return c; };
-  await negative('devices', 'add_device binding: k256 x changed after signing', A0, ADD, [{ ...kIn, key: flip(kIn.key) }, ...solArgs({ ...kIn, key: flip(kIn.key) }), signAs(kTd, 0n)], INVALID, [INVALID]);
-  await negative('devices', 'add_device binding: k256 envelope changed after signing', A0, ADD, [{ ...kIn, envelope: 1n }, ...solArgs({ ...kIn, envelope: 1n }), signAs(kTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: k256 x changed after signing', A0, ADD, [{ ...kIn, key: flip(kIn.key) }, ...ed25519Args({ ...kIn, key: flip(kIn.key) }), signAs(kTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: k256 envelope changed after signing', A0, ADD, [{ ...kIn, envelope: 1n }, ...ed25519Args({ ...kIn, envelope: 1n }), signAs(kTd, 0n)], INVALID, [INVALID]);
   const pIn = evmK256DescriptorInput(targets[2][1]);
   const pTd = evmK256Messages.addDevice(frame(A0), pIn);
   const o2 = new Uint8Array(pIn.origin); o2[20] = 0x39;
-  await negative('devices', 'add_device binding: passkey origin changed after signing', A0, ADD, [{ ...pIn, origin: o2 }, ...solArgs({ ...pIn, origin: o2 }), signAs(pTd, 0n)], INVALID, [INVALID]);
-  await negative('devices', 'add_device binding: passkey RP hash changed after signing', A0, ADD, [{ ...pIn, rp_id_hash: flip(pIn.rp_id_hash) }, ...solArgs({ ...pIn, rp_id_hash: flip(pIn.rp_id_hash) }), signAs(pTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: passkey origin changed after signing', A0, ADD, [{ ...pIn, origin: o2 }, ...ed25519Args({ ...pIn, origin: o2 }), signAs(pTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: passkey RP hash changed after signing', A0, ADD, [{ ...pIn, rp_id_hash: flip(pIn.rp_id_hash) }, ...ed25519Args({ ...pIn, rp_id_hash: flip(pIn.rp_id_hash) }), signAs(pTd, 0n)], INVALID, [INVALID]);
   const eIn = evmK256DescriptorInput(targets[3][1]);
   const eTd = evmK256Messages.addDevice(frame(A0), eIn);
-  await negative('devices', 'add_device binding: EVM target privacy salt changed after signing', A0, ADD, [{ ...eIn, key2: flip(eIn.key2) }, ...solArgs({ ...eIn, key2: flip(eIn.key2) }), signAs(eTd, 0n)], INVALID, [INVALID]);
-  await negative('devices', 'add_device binding: EVM target address changed after signing', A0, ADD, [{ ...eIn, address: flip(eIn.address) }, ...solArgs({ ...eIn, address: flip(eIn.address) }), signAs(eTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: EVM target privacy salt changed after signing', A0, ADD, [{ ...eIn, key2: flip(eIn.key2) }, ...ed25519Args({ ...eIn, key2: flip(eIn.key2) }), signAs(eTd, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device binding: EVM target address changed after signing', A0, ADD, [{ ...eIn, address: flip(eIn.address) }, ...ed25519Args({ ...eIn, address: flip(eIn.address) }), signAs(eTd, 0n)], INVALID, [INVALID]);
   // the circuit-fixed consequence line: a message whose effect line
   // says something else is not this circuit's message
   const softer = JSON.parse(JSON.stringify(kTd)); softer.message.effect = 'Adds a helper key';
-  await negative('devices', 'add_device: the effect line changed in the signed message', A0, ADD, [kIn, ...solArgs(kIn), signAs(softer, 0n)], INVALID, [INVALID]);
+  await negative('devices', 'add_device: the effect line changed in the signed message', A0, ADD, [kIn, ...ed25519Args(kIn), signAs(softer, 0n)], INVALID, [INVALID]);
   const jIn = evmK256DescriptorInput(targets[0][1]);
   await negative('devices', 'add_device binding: a JubjubDevice signature executed under the Solana tag (same 64 payload bytes)', A0, ADD,
-    [{ ...jIn, tag: padTag(DESCRIPTOR_TAGS.device.sol_ed25519) }, ...EVM_K256_SOL_FILLER_ARGS, signAs(evmK256Messages.addDevice(frame(A0), jIn), 0n)], INVALID, [INVALID]);
-  // unregistered tag under a VALID signature: the passkey branch's struct hash
-  // names the scheme by its constant, not by the tag bytes, so a signature
-  // over a PasskeyDevice message verifies; only the tag checks refuse
+    [{ ...jIn, tag: padTag(DESCRIPTOR_TAGS.device.sol_ed25519) }, ...EVM_K256_ED25519_FILLER_ARGS, signAs(evmK256Messages.addDevice(frame(A0), jIn), 0n)], INVALID, [INVALID]);
+  // unregistered tag under a VALID signature: with the kind lookup's assert
+  // bypassed, a tag of no kind leaves the list's first kind (an address)
+  // selected, whose struct hash names its type and scheme by the entry's
+  // constants, not by the tag bytes, so a signature over an EvmDevice message
+  // verifies; only the tag checks refuse (the lookup, and the 52-byte class
+  // assert the address form's derivation applies to the same tag)
   for (const [label, tag] of [['an unregistered tag', padTag('midnight:account:device:zz:v9')], ["another recipe's tag (k256 boot)", padTag('midnight:account:boot:k1:v2')]] as const) {
-    await negative('devices', `add_device: ${label}, valid signature over the passkey fields (the 117-byte class assert refuses the same tag)`, A0, ADD,
-      [{ ...pIn, tag }, ...solArgs({ ...pIn, tag }), signAs(pTd, 0n)], NOT_DEVICE_TAG, [NOT_DEVICE_TAG, W117], '', { control: { a: A0, args: [pIn, ...solArgs(pIn), signAs(pTd, 0n)] } });
+    await negative('devices', `add_device: ${label}, valid signature over the EVM target's fields (the 52-byte class assert refuses the same tag)`, A0, ADD,
+      [{ ...eIn, tag }, ...ed25519Args({ ...eIn, tag }), signAs(eTd, 0n)], NOT_DEVICE_TAG, [NOT_DEVICE_TAG, W52], '', { control: { a: A0, args: [eIn, ...ed25519Args(eIn), signAs(eTd, 0n)] } });
   }
   // a passkey origin that is not visible ASCII (a space): the approval shows
   // the executed origin (the codec refuses it, so its message is patched and
@@ -1004,7 +1008,7 @@ if (SECTIONS.includes('devices')) {
   const pSpaceIn = { ...pIn, origin: oSpace };
   const pSpaceTd = JSON.parse(JSON.stringify(pTd)); pSpaceTd.message.newDevice.origin = String.fromCharCode(...oSpace);
   await negative('devices', 'add_device: a passkey target whose origin holds a space, honestly signed', A0, ADD,
-    [pSpaceIn, ...solArgs(pSpaceIn), signAs(pSpaceTd, 0n)], NOT_ORIGIN, [NOT_ORIGIN], '', { control: { a: A0, args: [pIn, ...solArgs(pIn), signAs(pTd, 0n)] } });
+    [pSpaceIn, ...ed25519Args(pSpaceIn), signAs(pSpaceTd, 0n)], NOT_ORIGIN, [NOT_ORIGIN], '', { control: { a: A0, args: [pIn, ...ed25519Args(pIn), signAs(pTd, 0n)] } });
   // a Solana target at the identity point: the descriptor module's ed25519
   // class refuses it (A != O); the approval shows the key the circuit derives,
   // the identity's encoding 01 00…00; positive control: the Solana target
@@ -1014,16 +1018,16 @@ if (SECTIONS.includes('devices')) {
   const solIdIn = { ...solIn, key: idEncoding };
   await negative('devices', 'add_device: a Solana target at the identity point, honestly signed (the approval shows its encoding 01 00…00)', A0, ADD,
     [solIdIn, { x: 0n, y: 1n }, [...idEncoding].map(BigInt), new Array(32).fill(0n), signAs(evmK256Messages.addDevice(frame(A0), solIdIn), 0n)], NOT_IDENTITY, [NOT_IDENTITY], '',
-    { control: { a: A0, args: [solIn, ...solArgs(solIn), signAs(evmK256Messages.addDevice(frame(A0), solIn), 0n)] } });
+    { control: { a: A0, args: [solIn, ...ed25519Args(solIn), signAs(evmK256Messages.addDevice(frame(A0), solIn), 0n)] } });
   // a k256 target with envelope 2: the approval shows the envelope-1 label,
   // which the circuit selects for any non-zero envelope
   const NOT_ENVELOPE = 'evm_k256: not a k256 envelope';
   const kEnv2In = { ...kIn, envelope: 2n };
   await negative('devices', 'add_device: a k256 target with envelope 2, shown with the envelope-1 label the circuit selects, honestly signed', A0, ADD,
-    [kEnv2In, ...solArgs(kEnv2In), signAs(evmK256Messages.addDevice(frame(A0), { ...kIn, envelope: 1n }), 0n)], NOT_ENVELOPE, [NOT_ENVELOPE], '',
-    { control: { a: A0, args: [kIn, ...solArgs(kIn), signAs(kTd, 0n)] } });
+    [kEnv2In, ...ed25519Args(kEnv2In), signAs(evmK256Messages.addDevice(frame(A0), { ...kIn, envelope: 1n }), 0n)], NOT_ENVELOPE, [NOT_ENVELOPE], '',
+    { control: { a: A0, args: [kIn, ...ed25519Args(kIn), signAs(kTd, 0n)] } });
   // remove_device: an account with the device D and a k256 device K
-  const AK = (await execute(Original.Contract, A0, ADD, [kIn, ...solArgs(kIn), signAs(kTd, 0n)])).after; // D now at counter 1
+  const AK = (await execute(Original.Contract, A0, ADD, [kIn, ...ed25519Args(kIn), signAs(kTd, 0n)])).after; // D now at counter 1
   const kEntry = k1.entryAt(AK.addressBytes, 0n, 0n);
   // A passkey's own RP pin is never zero. add_device: under an approval
   // honestly covering the zero hash (the codec refuses it, so its message is
@@ -1032,7 +1036,7 @@ if (SECTIONS.includes('devices')) {
   const pZeroIn = { ...pIn, rp_id_hash: new Uint8Array(32) };
   const pZeroTd = JSON.parse(JSON.stringify(pTd)); pZeroTd.message.newDevice.passkeyRpHash = hx(new Uint8Array(32));
   await negative('devices', 'add_device: a passkey target with a zero RP hash, honestly signed', A0, ADD,
-    [pZeroIn, ...solArgs(pZeroIn), signAs(pZeroTd, 0n)], RP_ZERO, [RP_ZERO], '', { control: { a: A0, args: [pIn, ...solArgs(pIn), signAs(pTd, 0n)] } });
+    [pZeroIn, ...ed25519Args(pZeroIn), signAs(pZeroTd, 0n)], RP_ZERO, [RP_ZERO], '', { control: { a: A0, args: [pIn, ...ed25519Args(pIn), signAs(pTd, 0n)] } });
   // remove_device by descriptor: K (an upstream arm) plants the zero-RP
   // passkey entry raw, so that the entry exists and only that rule refuses its
   // removal by descriptor; positive control: the same entry removed by the
@@ -1042,8 +1046,8 @@ if (SECTIONS.includes('devices')) {
   const APZ = (await execute(Original.Contract, AK, 'add_device_with_k256', [zEntry, kz.pk, 0n, kz.sig, 0n])).after;
   const pzRemTd = JSON.parse(JSON.stringify(evmK256Messages.removeDevice(frame(APZ), pIn, 0n, 0n))); pzRemTd.message.target.passkeyRpHash = hx(new Uint8Array(32));
   await negative('devices', 'remove_device (descriptor form): a passkey target with a zero RP hash, honestly signed', APZ, REMOVE,
-    [pZeroIn, ...solArgs(pZeroIn), 0n, 0n, NONE, signAs(pzRemTd, 1n)], RP_ZERO, [RP_ZERO], '',
-    { control: { a: APZ, args: [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: zEntry }, signAs(evmK256Messages.removeUnknownDevice(frame(APZ), zEntry), 1n)] } });
+    [pZeroIn, ...ed25519Args(pZeroIn), 0n, 0n, NONE, signAs(pzRemTd, 1n)], RP_ZERO, [RP_ZERO], '',
+    { control: { a: APZ, args: [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: zEntry }, signAs(evmK256Messages.removeUnknownDevice(frame(APZ), zEntry), 1n)] } });
   const remTd = (a: LocalAccount, input: typeof kIn, ep: bigint, ctr: bigint) => evmK256Messages.removeDevice(frame(a), input, ep, ctr);
   // remove_device by descriptor of a passkey whose origin holds a space: K
   // plants that entry raw, so the entry exists and only the origin rule
@@ -1053,46 +1057,46 @@ if (SECTIONS.includes('devices')) {
   const APO = (await execute(Original.Contract, AK, 'add_device_with_k256', [oEntry, ko.pk, 0n, ko.sig, 0n])).after;
   const poRemTd = JSON.parse(JSON.stringify(remTd(APO, pIn, 0n, 0n))); poRemTd.message.target.origin = String.fromCharCode(...oSpace);
   await negative('devices', 'remove_device (descriptor form): a passkey target whose origin holds a space, honestly signed', APO, REMOVE,
-    [pSpaceIn, ...solArgs(pSpaceIn), 0n, 0n, NONE, signAs(poRemTd, 1n)], NOT_ORIGIN, [NOT_ORIGIN], '',
-    { control: { a: APO, args: [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: oEntry }, signAs(evmK256Messages.removeUnknownDevice(frame(APO), oEntry), 1n)] } });
+    [pSpaceIn, ...ed25519Args(pSpaceIn), 0n, 0n, NONE, signAs(poRemTd, 1n)], NOT_ORIGIN, [NOT_ORIGIN], '',
+    { control: { a: APO, args: [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: oEntry }, signAs(evmK256Messages.removeUnknownDevice(frame(APO), oEntry), 1n)] } });
   // remove_device by descriptor of a k256 entry with envelope 2, planted raw
   // by K; positive control: the same entry removed by the literal form
   const e2Entry = pc.evm_k256_descriptor_entry({ bytes: AK.addressBytes }, kEnv2In, new Uint8Array(32), 0n, 0n);
   const ke = k1.sign(k256Challenges.addDevice({ contractAddress: AK.addressBytes, authNonce: ledgerOf(AK).auth_nonce }, k1.pk, e2Entry), 0n);
   const APE = (await execute(Original.Contract, AK, 'add_device_with_k256', [e2Entry, ke.pk, 0n, ke.sig, 0n])).after;
   await negative('devices', 'remove_device (descriptor form): a k256 target with envelope 2, shown with the envelope-1 label, honestly signed', APE, REMOVE,
-    [kEnv2In, ...solArgs(kEnv2In), 0n, 0n, NONE, signAs(remTd(APE, { ...kIn, envelope: 1n }, 0n, 0n), 1n)], NOT_ENVELOPE, [NOT_ENVELOPE], '',
-    { control: { a: APE, args: [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: e2Entry }, signAs(evmK256Messages.removeUnknownDevice(frame(APE), e2Entry), 1n)] } });
+    [kEnv2In, ...ed25519Args(kEnv2In), 0n, 0n, NONE, signAs(remTd(APE, { ...kIn, envelope: 1n }, 0n, 0n), 1n)], NOT_ENVELOPE, [NOT_ENVELOPE], '',
+    { control: { a: APE, args: [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: e2Entry }, signAs(evmK256Messages.removeUnknownDevice(frame(APE), e2Entry), 1n)] } });
   // the zero-scalar assert through the two-form body, isolated in the copy
   await negative('devices', 'remove_device: (r, s) = (0, 0), which verifies against the identity point when inverses of 0 are taken as 0', AK, REMOVE,
-    [kIn, ...solArgs(kIn), 0n, 0n, NONE, { ...signAs(remTd(AK, kIn, 0n, 0n), 1n), sig: { r: 0n, s: 0n } }], ZERO, [ZERO], ZERO_INV_OVERRIDES,
-    { control: { a: AK, args: [kIn, ...solArgs(kIn), 0n, 0n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)] } });
+    [kIn, ...ed25519Args(kIn), 0n, 0n, NONE, { ...signAs(remTd(AK, kIn, 0n, 0n), 1n), sig: { r: 0n, s: 0n } }], ZERO, [ZERO], ZERO_INV_OVERRIDES,
+    { control: { a: AK, args: [kIn, ...ed25519Args(kIn), 0n, 0n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)] } });
   await positive('devices', 'remove_device: the k256 device by descriptor (epoch 0, counter 0)', posPath, AK, REMOVE,
-    [kIn, ...solArgs(kIn), 0n, 0n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)]);
+    [kIn, ...ed25519Args(kIn), 0n, 0n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)]);
   await positive('devices', 'remove_device: the k256 entry by the literal form', posPath, AK, REMOVE,
-    [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, signAs(evmK256Messages.removeUnknownDevice(frame(AK), kEntry), 1n)]);
-  await negative('devices', 'remove_device binding: targetCounter signed 0, executed 1', AK, REMOVE, [kIn, ...solArgs(kIn), 0n, 1n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)], INVALID, [INVALID, UNKNOWN]);
+    [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, signAs(evmK256Messages.removeUnknownDevice(frame(AK), kEntry), 1n)]);
+  await negative('devices', 'remove_device binding: targetCounter signed 0, executed 1', AK, REMOVE, [kIn, ...ed25519Args(kIn), 0n, 1n, NONE, signAs(remTd(AK, kIn, 0n, 0n), 1n)], INVALID, [INVALID, UNKNOWN]);
   await negative('devices', 'remove_device binding: the literal entry changed after signing', AK, REMOVE,
-    [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: flip(kEntry) }, signAs(evmK256Messages.removeUnknownDevice(frame(AK), kEntry), 1n)], INVALID, [INVALID, UNKNOWN]);
+    [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: flip(kEntry) }, signAs(evmK256Messages.removeUnknownDevice(frame(AK), kEntry), 1n)], INVALID, [INVALID, UNKNOWN]);
   await negative('devices', 'remove_device form swap: a RemoveUnknownDevice signature executed in the descriptor form', AK, REMOVE,
-    [kIn, ...solArgs(kIn), 0n, 0n, NONE, signAs(evmK256Messages.removeUnknownDevice(frame(AK), kEntry), 1n)], INVALID, [INVALID]);
+    [kIn, ...ed25519Args(kIn), 0n, 0n, NONE, signAs(evmK256Messages.removeUnknownDevice(frame(AK), kEntry), 1n)], INVALID, [INVALID]);
   await negative('devices', 'remove_device form swap: a RemoveDevice signature executed in the literal form', AK, REMOVE,
-    [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, signAs(remTd(AK, kIn, 0n, 0n), 1n)], INVALID, [INVALID]);
+    [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, signAs(remTd(AK, kIn, 0n, 0n), 1n)], INVALID, [INVALID]);
   const unkTd = JSON.parse(JSON.stringify(evmK256Messages.removeUnknownDevice(frame(AK), kEntry))); unkTd.message.effect = 'Removes a device';
   await negative('devices', 'remove_device (literal form): the fixed revocation line changed in the signed message', AK, REMOVE,
-    [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, signAs(unkTd, 1n)], INVALID, [INVALID]);
+    [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, signAs(unkTd, 1n)], INVALID, [INVALID]);
   await negative('devices', 'remove_device: a non-canonical absent literal entry', AK, REMOVE,
-    [kIn, ...solArgs(kIn), 0n, 0n, { is_some: false, value: kEntry }, signAs(remTd(AK, kIn, 0n, 0n), 1n)], NONCANON, [NONCANON]);
+    [kIn, ...ed25519Args(kIn), 0n, 0n, { is_some: false, value: kEntry }, signAs(remTd(AK, kIn, 0n, 0n), 1n)], NONCANON, [NONCANON]);
   // S13: the caller's own post-roll entry (D at counter 1 rolls to 2)
   const self = evmK256DescriptorInput(evmDeviceDescriptor(device));
   const selfPost = device.entryAt(AK.addressBytes, 0n, 2n);
   await negative('devices', 'S13: the device removes its own post-roll entry by descriptor', AK, REMOVE,
-    [self, ...solArgs(self), 0n, 2n, NONE, signAs(remTd(AK, self, 0n, 2n), 1n)], SELF, [SELF]);
+    [self, ...ed25519Args(self), 0n, 2n, NONE, signAs(remTd(AK, self, 0n, 2n), 1n)], SELF, [SELF]);
   await negative('devices', 'S13: the device removes its own post-roll entry by the literal form', AK, REMOVE,
-    [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: selfPost }, signAs(evmK256Messages.removeUnknownDevice(frame(AK), selfPost), 1n)], SELF, [SELF]);
+    [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: selfPost }, signAs(evmK256Messages.removeUnknownDevice(frame(AK), selfPost), 1n)], SELF, [SELF]);
   // the last device: only D (A0); a literal entry of nothing
   await negative('devices', 'the last device cannot be removed (account with one device)', A0, REMOVE,
-    [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: device.entryAt(A0.addressBytes, 0n, 1n) },
+    [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: device.entryAt(A0.addressBytes, 0n, 1n) },
      signAs(evmK256Messages.removeUnknownDevice(frame(A0), device.entryAt(A0.addressBytes, 0n, 1n)), 0n)], LAST, [LAST, SELF]);
   // the future-epoch plant (README erratum 7): K (an upstream arm) enrols a
   // raw entry derived at device_epoch + 1; D evicts it by descriptor at
@@ -1107,7 +1111,7 @@ if (SECTIONS.includes('devices')) {
   tally(planted.positive); results.push(planted); line(planted);
   const wIn = evmK256DescriptorInput(evmDeviceDescriptor(W));
   await positive('devices', 'remove_device: the planted entry evicted by descriptor at target epoch 1 (= device_epoch + 1)', posPath, AP, REMOVE,
-    [wIn, ...solArgs(wIn), 1n, 0n, NONE, signAs(remTd(AP, wIn, 1n, 0n), counterOf(AP))]);
+    [wIn, ...ed25519Args(wIn), 1n, 0n, NONE, signAs(remTd(AP, wIn, 1n, 0n), counterOf(AP))]);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1135,7 +1139,7 @@ if (SECTIONS.includes('grants')) {
   const issueArgs = (a: LocalAccount, gin: any, sc: IssueScope, signed: IssueScope = sc, rawReadPk?: Uint8Array) => {
     const args = evmK256IssueArgs(sc);
     if (rawReadPk) args[12] = rawReadPk;
-    return [gin, ...solArgs(gin), ...args, signAs(evmK256Messages.issueGrant(frame(a), gin, signed), counterOf(a))];
+    return [gin, ...ed25519Args(gin), ...args, signAs(evmK256Messages.issueGrant(frame(a), gin, signed), counterOf(a))];
   };
   // grantees
   const label = grantLabel('bank.example');
@@ -1163,15 +1167,15 @@ if (SECTIONS.includes('grants')) {
     issueArgs(A0, pgIn, scopeOf({ read: true, readPk: rd })));
   // binding: a scope field, the caller pin, the grantee descriptor, the labelled origin hash
   const signedUnsh = issueArgs(A0, egIn, unsh);
-  await negative('grants', 'issue_grant binding: cap signed 450, executed 451', A0, ISSUE, [egIn, ...solArgs(egIn), ...evmK256IssueArgs({ ...unsh, cap: 451n }), signedUnsh.at(-1)], INVALID, [INVALID]);
-  await negative('grants', 'issue_grant binding: a caller pin added after signing', A0, ISSUE, [egIn, ...solArgs(egIn), ...evmK256IssueArgs({ ...unsh, caller: fill(32, 0xca) }), signedUnsh.at(-1)], INVALID, [INVALID]);
-  await negative('grants', 'issue_grant binding: the grantee\'s site label changed after signing', A0, ISSUE, [{ ...egIn, label: grantLabel('evil.example') }, ...solArgs({ ...egIn, label: grantLabel('evil.example') }), ...evmK256IssueArgs(unsh), signedUnsh.at(-1)], INVALID, [INVALID]);
-  await negative('grants', 'issue_grant binding: the grantee slot changed after signing', A0, ISSUE, [{ ...egIn, slot: 1n }, ...solArgs({ ...egIn, slot: 1n }), ...evmK256IssueArgs(unsh), signedUnsh.at(-1)], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant binding: cap signed 450, executed 451', A0, ISSUE, [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs({ ...unsh, cap: 451n }), signedUnsh.at(-1)], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant binding: a caller pin added after signing', A0, ISSUE, [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs({ ...unsh, caller: fill(32, 0xca) }), signedUnsh.at(-1)], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant binding: the grantee\'s site label changed after signing', A0, ISSUE, [{ ...egIn, label: grantLabel('evil.example') }, ...ed25519Args({ ...egIn, label: grantLabel('evil.example') }), ...evmK256IssueArgs(unsh), signedUnsh.at(-1)], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant binding: the grantee slot changed after signing', A0, ISSUE, [{ ...egIn, slot: 1n }, ...ed25519Args({ ...egIn, slot: 1n }), ...evmK256IssueArgs(unsh), signedUnsh.at(-1)], INVALID, [INVALID]);
   const signedK = issueArgs(A0, kgIn, unsh);
   await negative('grants', 'issue_grant binding: a k256 grantee\'s labelled origin hash changed after signing', A0, ISSUE,
-    [{ ...kgIn, origin_hash: upstreamOriginHash('https://evil.example') }, ...solArgs({ ...kgIn, origin_hash: upstreamOriginHash('https://evil.example') }), ...evmK256IssueArgs(unsh), signedK.at(-1)], INVALID, [INVALID]);
+    [{ ...kgIn, origin_hash: upstreamOriginHash('https://evil.example') }, ...ed25519Args({ ...kgIn, origin_hash: upstreamOriginHash('https://evil.example') }), ...evmK256IssueArgs(unsh), signedK.at(-1)], INVALID, [INVALID]);
   const issueSoft = JSON.parse(JSON.stringify(evmK256Messages.issueGrant(frame(A0), egIn, unsh))); issueSoft.message.effect = 'Lets this site read your balance';
-  await negative('grants', 'issue_grant: the effect line changed in the signed message', A0, ISSUE, [egIn, ...solArgs(egIn), ...evmK256IssueArgs(unsh), signAs(issueSoft, counterOf(A0))], INVALID, [INVALID]);
+  await negative('grants', 'issue_grant: the effect line changed in the signed message', A0, ISSUE, [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(unsh), signAs(issueSoft, counterOf(A0))], INVALID, [INVALID]);
   // the arm's issue rules under a VALID signature
   await negative('grants', 'issue_grant: a read key without read (signed with readKey zero, executed with a key)', A0, ISSUE,
     issueArgs(A0, egIn, unsh, unsh, fill(32, 0x11)), READ_KEY, [READ_KEY], '', { control: { a: A0, args: issueArgs(A0, egIn, unsh) } });
@@ -1187,61 +1191,61 @@ if (SECTIONS.includes('grants')) {
   const unshCtl = { a: A0, args: issueArgs(A0, egIn, unsh) };
   const rpX = fill(32, 0x3f);
   await negative('grants', 'issue_grant: an RP hash for a non-passkey grantee, honestly signed', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs({ ...unsh, rpIdHash: rpX }), signedPatched(A0, egIn, unsh, (m) => { m.passkeyRpHash = hx(rpX); m.passkeyRp = EVM_K256_PASSKEY_RP_POINTER; })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs({ ...unsh, rpIdHash: rpX }), signedPatched(A0, egIn, unsh, (m) => { m.passkeyRpHash = hx(rpX); m.passkeyRp = EVM_K256_PASSKEY_RP_POINTER; })],
     RP_ONLY, [RP_ONLY], '', { control: unshCtl });
   const pScope = { ...unsh, rpIdHash: pass.policy.rp_id_hash }; // a spending passkey grant: its RP pin is checked
   const pCtl = { a: A0, args: issueArgs(A0, pgIn, pScope) };
   const pRead = scopeOf({ read: true, readPk: rd }); // a read-only passkey grant: zero
   await negative('grants', 'issue_grant: a read-only passkey grant with its RP hash, honestly signed', A0, ISSUE,
-    [pgIn, ...solArgs(pgIn), ...evmK256IssueArgs({ ...pRead, rpIdHash: pass.policy.rp_id_hash }),
+    [pgIn, ...ed25519Args(pgIn), ...evmK256IssueArgs({ ...pRead, rpIdHash: pass.policy.rp_id_hash }),
      signedPatched(A0, pgIn, pRead, (m) => { m.passkeyRpHash = hx(pass.policy.rp_id_hash); m.passkeyRp = EVM_K256_PASSKEY_RP_POINTER; })],
     RP_ONLY, [RP_ONLY], '', { control: { a: A0, args: issueArgs(A0, pgIn, pRead) } });
   await negative('grants', "issue_grant: a spending passkey grant with a zero RP hash, honestly signed", A0, ISSUE,
-    [pgIn, ...solArgs(pgIn), ...evmK256IssueArgs({ ...pScope, rpIdHash: new Uint8Array(32) }),
+    [pgIn, ...ed25519Args(pgIn), ...evmK256IssueArgs({ ...pScope, rpIdHash: new Uint8Array(32) }),
      signedPatched(A0, pgIn, pScope, (m) => { m.passkeyRpHash = hx(new Uint8Array(32)); m.passkeyRp = NOT_APPLICABLE_TEXT; })],
     RP_ZERO_G, [RP_ZERO_G], '', { control: pCtl });
   const any0 = { ...unsh, recipientKind: 0n, recipient: new Uint8Array(32) };
   await negative('grants', 'issue_grant: "any recipient" with a recipient, honestly signed', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs({ ...any0, recipient: RCPT }), signedPatched(A0, egIn, any0, (m) => { m.recipient = hx(RCPT); })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs({ ...any0, recipient: RCPT }), signedPatched(A0, egIn, any0, (m) => { m.recipient = hx(RCPT); })],
     ANY_R, [ANY_R], '', { control: { a: A0, args: issueArgs(A0, egIn, any0) } });
   // a forged exact word (the approval shows the other text than the one the circuit selects)
   const expScope = { ...unsh, expiresAt: 1893456000n };
   await negative('grants', 'issue_grant: the expiry word "never" signed for a non-zero expiresAt (forged word)', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = NEVER_TEXT; })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = NEVER_TEXT; })],
     INVALID, [INVALID], '', { control: { a: A0, args: issueArgs(A0, egIn, expScope) } });
   await negative('grants', 'issue_grant: the date of 0 signed for expiresAt 0 in place of "never" (forged text)', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.expiry = '1970-01-01 00:00:00 UTC'; })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.expiry = '1970-01-01 00:00:00 UTC'; })],
     INVALID, [INVALID], '', { control: unshCtl });
   // the expiry's UTC date: another second, the words above the range, the date padded
   await negative('grants', 'issue_grant: the date one second later signed for expiresAt 1893456000 (forged text)', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = '2030-01-01 00:00:01 UTC'; })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = '2030-01-01 00:00:01 UTC'; })],
     INVALID, [INVALID], '', { control: { a: A0, args: issueArgs(A0, egIn, expScope) } });
   await negative('grants', 'issue_grant: the words "after 9999-12-31 23:59:59 UTC" signed for an expiry in range (forged text)', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = 'after 9999-12-31 23:59:59 UTC'; })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = 'after 9999-12-31 23:59:59 UTC'; })],
     INVALID, [INVALID], '', { control: { a: A0, args: issueArgs(A0, egIn, expScope) } });
   await negative('grants', 'issue_grant: the expiry date space-padded to 29 bytes (the exact text is signed)', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = '2030-01-01 00:00:00 UTC'.padEnd(29, ' '); })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(expScope), signedPatched(A0, egIn, expScope, (m) => { m.expiry = '2030-01-01 00:00:00 UTC'.padEnd(29, ' '); })],
     INVALID, [INVALID], '', { control: { a: A0, args: issueArgs(A0, egIn, expScope) } });
   // the window word: the pointer signed for a zero window
   await negative('grants', 'issue_grant: the window pointer signed for a zero window in place of "no window" (forged word)', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.window = EVM_K256_WINDOW_POINTER; })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.window = EVM_K256_WINDOW_POINTER; })],
     INVALID, [INVALID], '', { control: unshCtl });
   await negative('grants', 'issue_grant: the passkeyRp word "not applicable" signed for a passkey grantee\'s RP hash (forged word)', A0, ISSUE,
-    [pgIn, ...solArgs(pgIn), ...evmK256IssueArgs(pScope), signedPatched(A0, pgIn, pScope, (m) => { m.passkeyRp = NOT_APPLICABLE_TEXT; })],
+    [pgIn, ...ed25519Args(pgIn), ...evmK256IssueArgs(pScope), signedPatched(A0, pgIn, pScope, (m) => { m.passkeyRp = NOT_APPLICABLE_TEXT; })],
     INVALID, [INVALID], '', { control: pCtl });
   await negative('grants', 'issue_grant: the passkeyRp pointer signed for a non-passkey grant (forged word)', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.passkeyRp = EVM_K256_PASSKEY_RP_POINTER; })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.passkeyRp = EVM_K256_PASSKEY_RP_POINTER; })],
     INVALID, [INVALID], '', { control: unshCtl });
   // read on with no read key: the approval shows the zero key
   const READ_NO_KEY = 'evm_k256: read without a read key';
   const rdScope = scopeOf({ read: true, readPk: rd });
   await negative('grants', 'issue_grant: read on with a zero read key, honestly signed', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs(scopeOf({ read: true })), signedPatched(A0, egIn, rdScope, (m) => { m.readKey = hx(new Uint8Array(32)); })],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(scopeOf({ read: true })), signedPatched(A0, egIn, rdScope, (m) => { m.readKey = hx(new Uint8Array(32)); })],
     READ_NO_KEY, [READ_NO_KEY], '', { control: { a: A0, args: issueArgs(A0, egIn, rdScope) } });
   // The grantee descriptor and label rules: each executed descriptor breaks
   // one rule, and its approval shows what the circuit shows for it (the
   // codec's message for the admissible descriptor, patched, then signed).
-  const NOT_GRANT_TAG = 'evm_k256: not a registered grant-id tag', W64_GRANT = 'descriptor: not a 64-byte grant-id tag';
+  const NOT_GRANT_TAG = 'evm_k256: not a registered grant-id tag', W52_GRANT = 'descriptor: not a 52-byte grant-id tag';
   const NOT_LABEL = 'evm_k256: not a site label', NOT_ORIGIN = 'evm_k256: the passkey origin is not visible ASCII';
   const NOT_ENVELOPE = 'evm_k256: not a k256 envelope', NOT_KIND = 'evm_k256: not a recipient kind';
   const ascii = (b: Uint8Array) => String.fromCharCode(...b);
@@ -1253,28 +1257,34 @@ if (SECTIONS.includes('grants')) {
   const kg1 = { ...kgIn, envelope: 1n }, kg2 = { ...kgIn, envelope: 2n };
   const unregistered = padTag('midnight:account:grant:zz:v9'), otherRecipe = padTag(DESCRIPTOR_TAGS.device.p256);
   const pReadCtl = { a: A0, args: issueArgs(A0, pgIn, pRead) };
-  const tagCopy = await loadPatched([NOT_GRANT_TAG, W64_GRANT]);
+  // A tag of no kind under a VALID signature: with the kind lookup's assert
+  // bypassed, the list's first kind (an address) stays selected, whose
+  // struct hash names its type and scheme by the entry's constants, so a
+  // signature over an EvmGrantee message verifies; only the tag checks
+  // refuse (the lookup, and the 52-byte grant-id class assert the address
+  // form's derivation applies to the same tag).
+  const tagCopy = await loadPatched([NOT_GRANT_TAG, W52_GRANT]);
   for (const [what, tag] of [['an unregistered grant-id tag', unregistered], ["another recipe's tag (the passkey device tag)", otherRecipe]] as const) {
-    const pgTag = { ...pgIn, tag };
-    await negative('grants', `issue_grant: ${what} on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)`, A0, ISSUE,
-      [pgTag, ...solArgs(pgTag), ...evmK256IssueArgs(pRead), signAs(evmK256Messages.issueGrant(frame(A0), pgIn, pRead), counterOf(A0))],
-      NOT_GRANT_TAG, [NOT_GRANT_TAG, W64_GRANT], '', { module: tagCopy, control: pReadCtl });
+    const egTag = { ...egIn, tag };
+    await negative('grants', `issue_grant: ${what} on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)`, A0, ISSUE,
+      [egTag, ...ed25519Args(egTag), ...evmK256IssueArgs(unsh), signAs(evmK256Messages.issueGrant(frame(A0), egIn, unsh), counterOf(A0))],
+      NOT_GRANT_TAG, [NOT_GRANT_TAG, W52_GRANT], '', { module: tagCopy, control: unshCtl });
   }
   await negative('grants', 'issue_grant: an evm_k256 grantee whose site label has two spaces in a row, honestly signed', A0, ISSUE,
-    [egBad, ...solArgs(egBad), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.grantee.siteLabel = badLabelText; })],
+    [egBad, ...ed25519Args(egBad), ...evmK256IssueArgs(unsh), signedPatched(A0, egIn, unsh, (m) => { m.grantee.siteLabel = badLabelText; })],
     NOT_LABEL, [NOT_LABEL], '', { control: unshCtl });
   await negative('grants', 'issue_grant: a passkey grantee whose origin holds a space, honestly signed', A0, ISSUE,
-    [pgBad, ...solArgs(pgBad), ...evmK256IssueArgs(pRead), signedPatched(A0, pgIn, pRead, (m) => { m.grantee.origin = ascii(badOrigin); })],
+    [pgBad, ...ed25519Args(pgBad), ...evmK256IssueArgs(pRead), signedPatched(A0, pgIn, pRead, (m) => { m.grantee.origin = ascii(badOrigin); })],
     NOT_ORIGIN, [NOT_ORIGIN], '', { control: pReadCtl });
   await negative('grants', 'issue_grant: a k256 grantee with envelope 2, shown with the envelope-1 label the circuit selects, honestly signed', A0, ISSUE,
-    [kg2, ...solArgs(kg2), ...evmK256IssueArgs(unsh), signAs(evmK256Messages.issueGrant(frame(A0), kg1, unsh), counterOf(A0))],
+    [kg2, ...ed25519Args(kg2), ...evmK256IssueArgs(unsh), signAs(evmK256Messages.issueGrant(frame(A0), kg1, unsh), counterOf(A0))],
     NOT_ENVELOPE, [NOT_ENVELOPE], '', { control: { a: A0, args: issueArgs(A0, kgIn, unsh) } });
   await negative('grants', 'issue_grant: recipient kind 4, shown with the kind-3 label the circuit selects, honestly signed', A0, ISSUE,
-    [egIn, ...solArgs(egIn), ...evmK256IssueArgs({ ...unsh, recipientKind: 4n }), signAs(evmK256Messages.issueGrant(frame(A0), egIn, { ...unsh, recipientKind: 3n }), counterOf(A0))],
+    [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs({ ...unsh, recipientKind: 4n }), signAs(evmK256Messages.issueGrant(frame(A0), egIn, { ...unsh, recipientKind: 3n }), counterOf(A0))],
     NOT_KIND, [NOT_KIND], '', { control: unshCtl });
   // revoke_grant / revoke_all over an account holding the evm grant
   const AG = (await execute(Original.Contract, A0, ISSUE, issueArgs(A0, egIn, unsh))).after;
-  await positive('grants', 'revoke_grant: the evm_k256 grantee by descriptor', posPath, AG, REVOKE, [egIn, ...solArgs(egIn), signAs(evmK256Messages.revokeGrant(frame(AG), egIn), counterOf(AG))]);
+  await positive('grants', 'revoke_grant: the evm_k256 grantee by descriptor', posPath, AG, REVOKE, [egIn, ...ed25519Args(egIn), signAs(evmK256Messages.revokeGrant(frame(AG), egIn), counterOf(AG))]);
   // revoke_grant reaches the same descriptor rules. Each refused descriptor
   // names a grant that a k256 device of the account planted (upstream's
   // issue_grant_with_k256 takes the grant id raw), so the grant exists and
@@ -1282,7 +1292,7 @@ if (SECTIONS.includes('grants')) {
   // grantee revoked through the same copy.
   const kIssuer = new K256Device(0x5eed2n);
   const kIssuerIn = evmK256DescriptorInput({ scheme: 'k256', x: kIssuer.pk.x, y: kIssuer.pk.y, envelope: 0 });
-  let AKP = (await execute(Original.Contract, AG, 'add_device_with_evm_k256', [kIssuerIn, ...solArgs(kIssuerIn), signAs(evmK256Messages.addDevice(frame(AG), kIssuerIn), counterOf(AG))])).after;
+  let AKP = (await execute(Original.Contract, AG, 'add_device_with_evm_k256', [kIssuerIn, ...ed25519Args(kIssuerIn), signAs(evmK256Messages.addDevice(frame(AG), kIssuerIn), counterOf(AG))])).after;
   const plantScope: PlainScope = { opWithdrawUnshielded: false, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: true,
     color: new Uint8Array(32), recipientKind: 0n, recipient: new Uint8Array(32), maxCoinValue: 0n, perCallCap: 0n, cap: 0n, expiresAt: 0n,
     rpIdHash: new Uint8Array(32), readPkHash: fill(32, 0x1d), windowLen: 0n, windowCap: 0n, caller: undefined };
@@ -1291,35 +1301,35 @@ if (SECTIONS.includes('grants')) {
   const plantFor = async (gin: any, mod: BypassedContractModule) => {
     const self = { bytes: AKP.addressBytes };
     const oh = mod.pureCircuits.evm_k256_grantee_origin_hash(gin);
-    const si = mod.pureCircuits.evm_k256_sol_grantee_target(self, gin, oh, ...solArgs(gin))[1];
+    const si = mod.pureCircuits.evm_k256_ed25519_grantee_target(self, gin, oh, ...ed25519Args(gin))[1];
     const gid = mod.pureCircuits.evm_k256_grantee_grant_id(self, gin, oh, si);
     const k = kIssuer.sign(k256Challenges.issueGrant({ contractAddress: AKP.addressBytes, authNonce: ledgerOf(AKP).auth_nonce }, kIssuer.pk, gid, scopeDigest(plantSalt, plantScope)), kCounter);
     AKP = (await execute(Original.Contract, AKP, 'issue_grant_with_k256', [gid, ...scopeArgs(plantScope), plantSalt, k.pk, kCounter, k.sig, 0n])).after;
     kCounter++;
     if (!ledgerOf(AKP).grants.member(gid)) throw new Error('setup: the planted grant is not in the map');
   };
-  const pgUnreg = { ...pgIn, tag: unregistered };
-  await plantFor(pgUnreg, tagCopy);
+  const egUnreg = { ...egIn, tag: unregistered };
+  await plantFor(egUnreg, tagCopy);
   await plantFor(egBad, posPath);
   await plantFor(pgBad, posPath);
   await plantFor(kg2, posPath);
   const revokeSigned = (gin: any, patch?: (m: any) => void) => {
     const t = JSON.parse(JSON.stringify(evmK256Messages.revokeGrant(frame(AKP), gin))); patch?.(t.message); return signAs(t, counterOf(AKP));
   };
-  const revokeCtl = { a: AKP, args: [egIn, ...solArgs(egIn), revokeSigned(egIn)] };
-  await negative('grants', "revoke_grant: a planted grant named with an unregistered grant-id tag on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)", AKP, REVOKE,
-    [pgUnreg, ...solArgs(pgUnreg), revokeSigned(pgIn)], NOT_GRANT_TAG, [NOT_GRANT_TAG, W64_GRANT], '', { module: tagCopy, control: revokeCtl });
+  const revokeCtl = { a: AKP, args: [egIn, ...ed25519Args(egIn), revokeSigned(egIn)] };
+  await negative('grants', "revoke_grant: a planted grant named with an unregistered grant-id tag on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)", AKP, REVOKE,
+    [egUnreg, ...ed25519Args(egUnreg), revokeSigned(egIn)], NOT_GRANT_TAG, [NOT_GRANT_TAG, W52_GRANT], '', { module: tagCopy, control: revokeCtl });
   await negative('grants', 'revoke_grant: a planted grant named by an evm_k256 grantee whose site label has two spaces in a row, honestly signed', AKP, REVOKE,
-    [egBad, ...solArgs(egBad), revokeSigned(egIn, (m) => { m.grantee.siteLabel = badLabelText; })], NOT_LABEL, [NOT_LABEL], '', { control: revokeCtl });
+    [egBad, ...ed25519Args(egBad), revokeSigned(egIn, (m) => { m.grantee.siteLabel = badLabelText; })], NOT_LABEL, [NOT_LABEL], '', { control: revokeCtl });
   await negative('grants', 'revoke_grant: a planted grant named by a passkey grantee whose origin holds a space, honestly signed', AKP, REVOKE,
-    [pgBad, ...solArgs(pgBad), revokeSigned(pgIn, (m) => { m.grantee.origin = ascii(badOrigin); })], NOT_ORIGIN, [NOT_ORIGIN], '', { control: revokeCtl });
+    [pgBad, ...ed25519Args(pgBad), revokeSigned(pgIn, (m) => { m.grantee.origin = ascii(badOrigin); })], NOT_ORIGIN, [NOT_ORIGIN], '', { control: revokeCtl });
   await negative('grants', 'revoke_grant: a planted grant named by a k256 grantee with envelope 2, shown with the envelope-1 label, honestly signed', AKP, REVOKE,
-    [kg2, ...solArgs(kg2), revokeSigned(kg1)], NOT_ENVELOPE, [NOT_ENVELOPE], '', { control: revokeCtl });
+    [kg2, ...ed25519Args(kg2), revokeSigned(kg1)], NOT_ENVELOPE, [NOT_ENVELOPE], '', { control: revokeCtl });
   // a second live grant (slot 1): the signed slot 0, the executed slot 1
   const eg1In = { ...egIn, slot: 1n };
   const AG2 = (await execute(Original.Contract, AG, ISSUE, issueArgs(AG, eg1In, unsh))).after;
   await negative('grants', 'revoke_grant binding: signed for slot 0, executed for the live slot-1 grant', AG2, REVOKE,
-    [eg1In, ...solArgs(eg1In), signAs(evmK256Messages.revokeGrant(frame(AG2), egIn), counterOf(AG2))], INVALID, [INVALID]);
+    [eg1In, ...ed25519Args(eg1In), signAs(evmK256Messages.revokeGrant(frame(AG2), egIn), counterOf(AG2))], INVALID, [INVALID]);
   await positive('grants', 'revoke_all_grants', posPath, AG, REVOKE_ALL, [signAs(evmK256Messages.revokeAllGrants(frame(AG)), counterOf(AG))]);
   await negative('grants', 'revoke_all_grants replay/operation: a CancelRecovery signature (same bare frame)', AG, REVOKE_ALL,
     [signAs(evmK256Messages.cancelRecovery(frame(AG)), counterOf(AG))], INVALID, [INVALID]);
@@ -1426,7 +1436,7 @@ if (SECTIONS.includes('grant-matrix')) {
     rpIdHash: new Uint8Array(32), readPk: new Uint8Array(32), windowLen: 0n, windowCap: 0n, caller: null, ...o });
   const sSalt = fill(32, 0x5b);
   const issue = async (a: LocalAccount, gin: any, sc: IssueScope) =>
-    (await execute(Original.Contract, a, ISSUE, [gin, ...solArgs(gin), ...evmK256IssueArgs(sc), signAs(evmK256Messages.issueGrant(frame(a), gin, sc), a)])).after;
+    (await execute(Original.Contract, a, ISSUE, [gin, ...ed25519Args(gin), ...evmK256IssueArgs(sc), signAs(evmK256Messages.issueGrant(frame(a), gin, sc), a)])).after;
   const label = grantLabel('bank.example');
   const gWallet = new SoftwareEvmWallet(0x6a17een);
   const G = await Promise.all([0n, 1n, 2n, 3n, 4n, 5n, 6n, 7n].map((slot) => EvmK256Grantee.enrol(gWallet, 'undeployed', A0.addressBytes, label, slot)));
@@ -1593,7 +1603,7 @@ if (SECTIONS.includes('grant-matrix')) {
     }
 
     // ── the record's liveness (the grant seam's four asserts) ──
-    const AR = (await execute(Original.Contract, AT, REVOKE, [G[0].descriptor(), ...solArgs(G[0].descriptor()), signAs(evmK256Messages.revokeGrant(frame(AT), G[0].descriptor()), AT)])).after;
+    const AR = (await execute(Original.Contract, AT, REVOKE, [G[0].descriptor(), ...ed25519Args(G[0].descriptor()), signAs(evmK256Messages.revokeGrant(frame(AT), G[0].descriptor()), AT)])).after;
     await neg('a revoked grant (tombstone), valid approval over its record', AR, call(t, AR, honest), REVOKED, [REVOKED]);
     await neg('an expired grant (expires_at 1), valid approval', AT, call(t, AT, { ...honest, slot: 3n }), EXPIRED, [EXPIRED]);
     const AE = await finalised(AT);
@@ -1622,11 +1632,11 @@ if (SECTIONS.includes('grant-matrix')) {
       const badLabelText = String.fromCharCode(...badLabel.map((c) => (c === 0 ? 32 : c)));
       const kd = new K256Device(0x5eed3n);
       const kdIn = evmK256DescriptorInput({ scheme: 'k256', x: kd.pk.x, y: kd.pk.y, envelope: 0 });
-      let AL = (await execute(Original.Contract, bare, 'add_device_with_evm_k256', [kdIn, ...solArgs(kdIn), signAs(evmK256Messages.addDevice(frame(bare), kdIn), bare)])).after;
+      let AL = (await execute(Original.Contract, bare, 'add_device_with_evm_k256', [kdIn, ...ed25519Args(kdIn), signAs(evmK256Messages.addDevice(frame(bare), kdIn), bare)])).after;
       const gBad = { ...G[0].descriptor(), label: badLabel };
       const self = { bytes: AL.addressBytes };
       const ohBad = pc.derive_grant_origin_hash_label(badLabel);
-      const gid = pc.evm_k256_grantee_grant_id(self, gBad, ohBad, pc.evm_k256_sol_grantee_target(self, gBad, ohBad, ...solArgs(gBad))[1]);
+      const gid = pc.evm_k256_grantee_grant_id(self, gBad, ohBad, pc.evm_k256_ed25519_grantee_target(self, gBad, ohBad, ...ed25519Args(gBad))[1]);
       const sc = mainScope(t);
       const plain: PlainScope = { opWithdrawUnshielded: sc.opWithdrawUnshielded, opWithdrawShielded: sc.opWithdrawShielded, opWithdrawShieldedToContract: sc.opWithdrawShieldedToContract,
         read: sc.read, color: sc.color, recipientKind: sc.recipientKind, recipient: sc.recipient, maxCoinValue: sc.maxCoinValue, perCallCap: sc.perCallCap, cap: sc.cap,
@@ -1738,14 +1748,14 @@ if (SECTIONS.includes('frame-lifecycle')) {
   // add_device (a k256 target)
   const k1 = new K256Device(0x5eed2n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: k1.pk.x, y: k1.pk.y, envelope: 0 });
-  await mutantDevice('add_device', A0, ADD, evmK256Messages.addDevice(frame(A0), kIn), (au) => [kIn, ...solArgs(kIn), au]);
+  await mutantDevice('add_device', A0, ADD, evmK256Messages.addDevice(frame(A0), kIn), (au) => [kIn, ...ed25519Args(kIn), au]);
   // remove_device, both forms, on an account holding the k256 device
-  const AK = (await execute(Original.Contract, A0, ADD, [kIn, ...solArgs(kIn), honestAuth(evmK256Messages.addDevice(frame(A0), kIn), A0)])).after;
+  const AK = (await execute(Original.Contract, A0, ADD, [kIn, ...ed25519Args(kIn), honestAuth(evmK256Messages.addDevice(frame(A0), kIn), A0)])).after;
   const kEntry = k1.entryAt(AK.addressBytes, 0n, 0n);
   const NONE = { is_some: false, value: new Uint8Array(32) };
-  await mutantDevice('remove_device (descriptor form)', AK, REMOVE, evmK256Messages.removeDevice(frame(AK), kIn, 0n, 0n), (au) => [kIn, ...solArgs(kIn), 0n, 0n, NONE, au]);
+  await mutantDevice('remove_device (descriptor form)', AK, REMOVE, evmK256Messages.removeDevice(frame(AK), kIn, 0n, 0n), (au) => [kIn, ...ed25519Args(kIn), 0n, 0n, NONE, au]);
   await mutantDevice('remove_device (literal form)', AK, REMOVE, evmK256Messages.removeUnknownDevice(frame(AK), kEntry),
-    (au) => [EVM_K256_UNUSED_DESCRIPTOR, ...EVM_K256_SOL_FILLER_ARGS, 0n, 0n, { is_some: true, value: kEntry }, au]);
+    (au) => [EVM_K256_UNUSED_DESCRIPTOR, ...EVM_K256_ED25519_FILLER_ARGS, 0n, 0n, { is_some: true, value: kEntry }, au]);
   // issue_grant / revoke_grant / revoke_all_grants
   const label = grantLabel('bank.example');
   const gWallet = new SoftwareEvmWallet(0x6a17een);
@@ -1754,7 +1764,7 @@ if (SECTIONS.includes('frame-lifecycle')) {
   const shScope: IssueScope = { opWithdrawUnshielded: false, opWithdrawShielded: true, opWithdrawShieldedToContract: true, read: true,
     color: COL_A, recipientKind: 0n, recipient: new Uint8Array(32), maxCoinValue: 1000n, perCallCap: 1000n, cap: 2000n, expiresAt: 0n,
     rpIdHash: new Uint8Array(32), readPk: fill(32, 0x77), windowLen: 0n, windowCap: 0n, caller: null };
-  await mutantDevice('issue_grant', A0, ISSUE, evmK256Messages.issueGrant(frame(A0), egIn, shScope), (au) => [egIn, ...solArgs(egIn), ...evmK256IssueArgs(shScope), au]);
+  await mutantDevice('issue_grant', A0, ISSUE, evmK256Messages.issueGrant(frame(A0), egIn, shScope), (au) => [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(shScope), au]);
   // The grant's scope salt chosen by the prover: the circuit derives it from
   // the device's blind, the account and auth_nonce, and takes no salt, so the
   // generated JavaScript cannot be given one. A copy whose salt derivation
@@ -1766,7 +1776,7 @@ if (SECTIONS.includes('frame-lifecycle')) {
   // tag, so no input of this circuit reaches that check.
   {
     const choosing = await loadPatched([], CHOSEN_SALT_OVERRIDES);
-    const issueArgs = [egIn, ...solArgs(egIn), ...evmK256IssueArgs(shScope), honestAuth(evmK256Messages.issueGrant(frame(A0), egIn, shScope), A0)];
+    const issueArgs = [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(shScope), honestAuth(evmK256Messages.issueGrant(frame(A0), egIn, shScope), A0)];
     const derived = evmK256GrantScopeSalt(device.blind, A0.addressBytes, ledgerOf(A0).auth_nonce as bigint);
     const chosen = fill(32, 0x5a);
     const tag = pc.salt_tag_evm_k256();
@@ -1783,8 +1793,8 @@ if (SECTIONS.includes('frame-lifecycle')) {
         return undefined;
       });
   }
-  const AG = (await execute(Original.Contract, A0, ISSUE, [egIn, ...solArgs(egIn), ...evmK256IssueArgs(shScope), honestAuth(evmK256Messages.issueGrant(frame(A0), egIn, shScope), A0)])).after;
-  await mutantDevice('revoke_grant', AG, REVOKE, evmK256Messages.revokeGrant(frame(AG), egIn), (au) => [egIn, ...solArgs(egIn), au]);
+  const AG = (await execute(Original.Contract, A0, ISSUE, [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(shScope), honestAuth(evmK256Messages.issueGrant(frame(A0), egIn, shScope), A0)])).after;
+  await mutantDevice('revoke_grant', AG, REVOKE, evmK256Messages.revokeGrant(frame(AG), egIn), (au) => [egIn, ...ed25519Args(egIn), au]);
   await mutantDevice('revoke_all_grants', AG, REVOKE_ALL, evmK256Messages.revokeAllGrants(frame(AG)), (au) => [au]);
   // the two shielded grantee twins: the grant seam derives the grantee's
   // address from the presented point; the attacker presents its own point
@@ -1803,7 +1813,7 @@ if (SECTIONS.includes('frame-lifecycle')) {
   // all 15 gated exports): a grant with the unshielded operation and a mirror
   const GWU = 'withdraw_unshielded_with_grant_evm_k256';
   const uScope: IssueScope = { ...shScope, opWithdrawUnshielded: true, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: false, readPk: new Uint8Array(32), color: fill(32, 0xc7), maxCoinValue: 300n, perCallCap: 300n, cap: 450n };
-  const AU0 = (await execute(Original.Contract, A0, ISSUE, [egIn, ...solArgs(egIn), ...evmK256IssueArgs(uScope), honestAuth(evmK256Messages.issueGrant(frame(A0), egIn, uScope), A0)])).after;
+  const AU0 = (await execute(Original.Contract, A0, ISSUE, [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(uScope), honestAuth(evmK256Messages.issueGrant(frame(A0), egIn, uScope), A0)])).after;
   const AU = (await execute(Original.Contract, AU0, 'deposit_unshielded', [fill(32, 0xc7), 1000n])).after;
   const recU = ledgerOf(AU).grants.lookup(eg.grantId(AU.addressBytes));
   const gfU = { account: AU.addressBytes, grantee: eg.address, label, slot: 0n, issuedAt: recU.issued_at as bigint, grantNonce: recU.nonce as bigint };
@@ -1991,10 +2001,10 @@ if (SECTIONS.includes('recovery')) {
   // J plants an evm_k256 entry for W at device_epoch + 1 (erratum 7)
   const jub = JubjubDevice.generate();
   const jIn = evmK256DescriptorInput({ scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y });
-  const AJ = (await execute(Original.Contract, A1, 'add_device_with_evm_k256', [jIn, ...solArgs(jIn), await signBy(device, evmK256Messages.addDevice(frame(A1), jIn), 1n)])).after;
+  const AJ = (await execute(Original.Contract, A1, 'add_device_with_evm_k256', [jIn, ...ed25519Args(jIn), await signBy(device, evmK256Messages.addDevice(frame(A1), jIn), 1n)])).after;
   const e2 = await EvmK256Device.enrol(new SoftwareEvmWallet(0xe2e2n), 'undeployed', 0);
   const e2In = evmK256DescriptorInput(evmDeviceDescriptor(e2));
-  const AE = (await execute(Original.Contract, AJ, 'add_device_with_evm_k256', [e2In, ...solArgs(e2In), await signBy(device, evmK256Messages.addDevice(frame(AJ), e2In), 2n)])).after;
+  const AE = (await execute(Original.Contract, AJ, 'add_device_with_evm_k256', [e2In, ...ed25519Args(e2In), await signBy(device, evmK256Messages.addDevice(frame(AJ), e2In), 2n)])).after;
   const W = await EvmK256Device.enrol(new SoftwareEvmWallet(0x3a38n), 'undeployed', 0);
   const plant = W.entryAt(AE.addressBytes, 1n, 0n);
   const jPlant = jub.sign(jubjubChallenges.addDevice({ contractAddress: AE.addressBytes, authNonce: ledgerOf(AE).auth_nonce }, jub.pk, plant), 0n);
@@ -2117,9 +2127,9 @@ if (SECTIONS.includes('texts')) {
     const td = evmK256Messages.issueGrant(frameOf(A0), egIn, scope);
     const t = showDate ? patch(td, (m) => { m.expiry = ascii(expiryText).slice(0, 23); }) : td;
     const op = keep({ ...evmK256IssueHint(egIn, scope), expiry_text: expiryText, year_split: yearSplit });
-    return [egIn, ...solArgs(egIn), ...evmK256IssueArgs(scope), signed(A0, t), op];
+    return [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(scope), signed(A0, t), op];
   };
-  const honestIssue = (scope: IssueScope) => [egIn, ...solArgs(egIn), ...evmK256IssueArgs(scope), authFor(evmK256Messages.issueGrant(frameOf(A0), egIn, scope))];
+  const honestIssue = (scope: IssueScope) => [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(scope), authFor(evmK256Messages.issueGrant(frameOf(A0), egIn, scope))];
   const dateCase = async (name: string, v: bigint, text: string, split: bigint[], expect: string, showDate = true) => {
     const scope = { ...sc, expiresAt: v };
     await negative('texts', `issue_grant: ${name}`, A0, ISSUE_T, issueCall(scope, t29(text), split, showDate), expect, [expect], '', { control: { a: A0, args: honestIssue(scope) } });
@@ -2144,10 +2154,10 @@ if (SECTIONS.includes('texts')) {
   const K = new K256Device(0x7e57n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
   const kTd = evmK256Messages.addDevice(frameOf(A0), kIn);
-  const kCtl = { a: A0, args: [kIn, ...solArgs(kIn), authFor(kTd)] };
+  const kCtl = { a: A0, args: [kIn, ...ed25519Args(kIn), authFor(kTd)] };
   // a k256 target: the filler key's base58 text is checked but not shown, so
   // the approval is the honest one
-  const [fPt, fBytes, fX] = EVM_K256_SOL_FILLER_ARGS as unknown as [unknown, bigint[], bigint[]];
+  const [fPt, fBytes, fX] = EVM_K256_ED25519_FILLER_ARGS as unknown as [unknown, bigint[], bigint[]];
   const fillerCall = (b58: unknown, bytes: bigint[] = fBytes) =>
     [kIn, fPt, bytes, fX, signed(A0, kTd), keep({ ...evmK256DescriptorHint(kIn), b58 })];
   const fDigits = base58Inputs(Uint8Array.from(fBytes.map(Number))).digits;
@@ -2178,9 +2188,9 @@ if (SECTIONS.includes('texts')) {
   const lead = [0n, ...base58Inputs(solKey).digits.slice(0, 43)];
   const sTdShown = patch(sTd, (m) => { m.newDevice.publicKey = shown(lead); });
   await negative('texts', 'add_device (Solana target): its key shown with a leading "1" too many (signed as shown)', A0, ADD_T,
-    [sIn, ...solArgs(sIn), signed(A0, sTdShown), keep({ ...evmK256DescriptorHint(sIn), b58: b58hints(lead) })],
+    [sIn, ...ed25519Args(sIn), signed(A0, sTdShown), keep({ ...evmK256DescriptorHint(sIn), b58: b58hints(lead) })],
     'display: the leading base58 ones do not match the leading zero bytes', ['display: the leading base58 ones do not match the leading zero bytes'], '',
-    { control: { a: A0, args: [sIn, ...solArgs(sIn), authFor(sTd)] } });
+    { control: { a: A0, args: [sIn, ...ed25519Args(sIn), authFor(sTd)] } });
 
   // ── the site's amount label (withdraw_unshielded) ──
   const AU = await depositedU();
@@ -2278,12 +2288,12 @@ if (SECTIONS.includes('isolate')) {
   const K = new K256Device(0x15a7en);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
   const kTd = evmK256Messages.addDevice(frameOf(A0), kIn);
-  const kCtl = { a: A0, args: [kIn, ...solArgs(kIn), authFor(kTd)] };
+  const kCtl = { a: A0, args: [kIn, ...ed25519Args(kIn), authFor(kTd)] };
   const dh = evmK256DescriptorHint(kIn);
   const forgedKey = [...dh.key]; forgedKey[3] ^= 1n;
   const shownX = Uint8Array.from(forgedKey.map(Number)).reverse();
   await negative('isolate', 'add_device: the k256 target\'s x hint with a byte changed, the shown x signed, the real x executed', A0, ADD,
-    [kIn, ...solArgs(kIn), deviceAuth(A0, patch(kTd, (m) => { m.newDevice.x = hex(shownX); })), keep({ ...dh, key: forgedKey })], BYTE_H, [BYTE_H],
+    [kIn, ...ed25519Args(kIn), deviceAuth(A0, patch(kTd, (m) => { m.newDevice.x = hex(shownX); })), keep({ ...dh, key: forgedKey })], BYTE_H, [BYTE_H],
     '', { control: kCtl });
 
   // ── the removal's epoch (be4) and counter (be8), each shown and signed other than executed ──
@@ -2291,7 +2301,7 @@ if (SECTIONS.includes('isolate')) {
   const ep = ledgerOf(AK).device_epoch as bigint;
   const rmTd = (epoch: bigint, counter: bigint) => evmK256Messages.removeDevice(frameOf(AK), kIn, epoch, counter);
   const NONE = { is_some: false, value: new Uint8Array(32) };
-  const rmArgs = (auth: unknown, hint?: unknown) => [kIn, ...solArgs(kIn), ep, 0n, NONE, auth, ...(hint ? [hint] : [])];
+  const rmArgs = (auth: unknown, hint?: unknown) => [kIn, ...ed25519Args(kIn), ep, 0n, NONE, auth, ...(hint ? [hint] : [])];
   const rmCtl = { a: AK, args: rmArgs(authFor(rmTd(ep, 0n), counterOf(AK))) };
   await negative('isolate', `remove_device: targetEpoch ${ep + 1n} shown and signed, ${ep} executed (the epoch hint of ${ep + 1n})`, AK, REMOVE,
     rmArgs(deviceAuth(AK, rmTd(ep + 1n, 0n)), keep(evmK256RemoveHint(kIn, ep + 1n, 0n))), WORD_H, [WORD_H], '', { control: rmCtl });
@@ -2313,7 +2323,7 @@ if (SECTIONS.includes('isolate')) {
     recipientKind: RECIPIENT_USER_ADDRESS, recipient: RECIPIENT_U, maxCoinValue: 300n, perCallCap: 300n, cap: 1000n, expiresAt: 0n,
     rpIdHash: new Uint8Array(32), readPk: new Uint8Array(32), windowLen: 0n, windowCap: 0n, caller: null };
   const iTd = evmK256Messages.issueGrant(frameOf(AU), egIn, sc);
-  const issueArgs = (auth: unknown, hint?: unknown) => [egIn, ...solArgs(egIn), ...evmK256IssueArgs(sc), auth, ...(hint ? [hint] : [])];
+  const issueArgs = (auth: unknown, hint?: unknown) => [egIn, ...ed25519Args(egIn), ...evmK256IssueArgs(sc), auth, ...(hint ? [hint] : [])];
   const iCtl = { a: AU, args: issueArgs(authFor(iTd)) };
   await negative('isolate', 'issue_grant: the cap hint of 1001, shown and signed, 1000 executed', AU, ISSUE,
     issueArgs(deviceAuth(AU, patch(iTd, (m) => { m.cap = '1001'; })), keep({ ...evmK256IssueHint(egIn, sc), cap: leHint(1001n, 16) })), WORD_H, [WORD_H], '', { control: iCtl });
@@ -2405,7 +2415,7 @@ if (SECTIONS.includes('places')) {
   // one byte of x changed (byte 5; x's parity is bit 0 of byte 0, kept)
   const solKey = ed25519.getPublicKey(fill(32, 0x9a));
   const sIn = evmK256DescriptorInput({ scheme: 'sol_ed25519', key: solKey, blind: fill(32, 0x9b) });
-  const [solPt, solBytes, solX] = solArgs(sIn) as unknown as [unknown, bigint[], bigint[]];
+  const [solPt, solBytes, solX] = ed25519Args(sIn) as unknown as [unknown, bigint[], bigint[]];
   const yForged = [...solBytes]; yForged[5] ^= 1n;
   const signForged = [...solBytes]; signForged[31] ^= 0x80n;
   const xForged = [...solX]; xForged[5] ^= 1n;
@@ -2414,10 +2424,10 @@ if (SECTIONS.includes('places')) {
 
   // ── a Solana target of add_device ──
   const addTd = evmK256Messages.addDevice(frameOf(A0), sIn);
-  const addCtl = { a: A0, args: [sIn, ...solArgs(sIn), authFor(addTd)] };
+  const addCtl = { a: A0, args: [sIn, ...ed25519Args(sIn), authFor(addTd)] };
   for (const [what, bytes, expect] of bytesOf) {
     await negative('places', `add_device: the Solana target's encoding with ${what}, shown in base58 and signed as shown`, A0, ADD,
-      [sIn, solPt, bytes, solX, deviceAuth(A0, patch(addTd, (m) => { m.newDevice.publicKey = solanaKeyText(u8(bytes)); })),
+      [sIn, solPt, bytes, solX, deviceAuth(A0, patch(addTd, (m) => { m.newDevice.publicKey = ed25519Base58Text(u8(bytes)); })),
         keep({ ...evmK256DescriptorHint(sIn), b58: base58Inputs(u8(bytes)) })], expect, [expect], '', { control: addCtl });
   }
 
@@ -2429,11 +2439,11 @@ if (SECTIONS.includes('places')) {
   const issueTd = (a: LocalAccount, scope = sc) => evmK256Messages.issueGrant(frameOf(a), sgIn, scope);
   const issueCall = (a: LocalAccount, bytes: bigint[], x: bigint[], auth: unknown, hint?: unknown, scope = sc) =>
     [sgIn, solPt, bytes, x, ...evmK256IssueArgs(scope), auth, ...(hint ? [hint] : [])];
-  const issueCtl = (scope = sc) => ({ a: A0, args: [sgIn, ...solArgs(sgIn), ...evmK256IssueArgs(scope), authFor(issueTd(A0, scope))] });
+  const issueCtl = (scope = sc) => ({ a: A0, args: [sgIn, ...ed25519Args(sgIn), ...evmK256IssueArgs(scope), authFor(issueTd(A0, scope))] });
   const ih = evmK256IssueHint(sgIn, sc);
   for (const [what, bytes, expect] of bytesOf) {
     await negative('places', `issue_grant: the Solana grantee's encoding with ${what}, shown in base58 and signed as shown`, A0, ISSUE,
-      issueCall(A0, bytes, solX, deviceAuth(A0, patch(issueTd(A0), (m) => { m.grantee.publicKey = solanaKeyText(u8(bytes)); })),
+      issueCall(A0, bytes, solX, deviceAuth(A0, patch(issueTd(A0), (m) => { m.grantee.publicKey = ed25519Base58Text(u8(bytes)); })),
         keep({ ...ih, grantee: { ...ih.grantee, b58: base58Inputs(u8(bytes)) } })), expect, [expect], '', { control: issueCtl() });
   }
   await negative('places', "issue_grant: the Solana grantee's x bytes with one byte changed (x's parity kept), under the honest approval", A0, ISSUE,
@@ -2444,13 +2454,13 @@ if (SECTIONS.includes('places')) {
   // K plants raw the entries the two forged encodings name
   const K = new K256Device(0x9e57n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
-  const AK = (await execute(Original.Contract, A0, ADD, [kIn, ...solArgs(kIn), authFor(evmK256Messages.addDevice(frameOf(A0), kIn), counterOf(A0))])).after;
-  const AS = (await execute(Original.Contract, AK, ADD, [sIn, ...solArgs(sIn), authFor(evmK256Messages.addDevice(frameOf(AK), sIn), counterOf(AK))])).after;
+  const AK = (await execute(Original.Contract, A0, ADD, [kIn, ...ed25519Args(kIn), authFor(evmK256Messages.addDevice(frameOf(A0), kIn), counterOf(A0))])).after;
+  const AS = (await execute(Original.Contract, AK, ADD, [sIn, ...ed25519Args(sIn), authFor(evmK256Messages.addDevice(frameOf(AK), sIn), counterOf(AK))])).after;
   const ep = ledgerOf(AS).device_epoch as bigint;
   let AP = AS, kUse = 0n;
   for (const [, bytes, expect] of bytesOf) {
     const copy = await loadPatched([expect]);
-    const se = copy.pureCircuits.evm_k256_sol_device_target(self(AP), sIn, solPt, bytes, solX, ep, 0n)[1];
+    const se = copy.pureCircuits.evm_k256_ed25519_device_target(self(AP), sIn, solPt, bytes, solX, ep, 0n)[1];
     const entry = pc.evm_k256_descriptor_entry(self(AP), sIn, se, ep, 0n);
     const kz = K.sign(k256Challenges.addDevice({ contractAddress: AP.addressBytes, authNonce: ledgerOf(AP).auth_nonce }, K.pk, entry), kUse);
     AP = (await execute(Original.Contract, AP, 'add_device_with_k256', [entry, kz.pk, kUse, kz.sig, 0n])).after;
@@ -2460,10 +2470,10 @@ if (SECTIONS.includes('places')) {
   const NONE = { is_some: false, value: new Uint8Array(32) };
   const rmTd = evmK256Messages.removeDevice(frameOf(AP), sIn, ep, 0n);
   const rh = evmK256RemoveHint(sIn, ep, 0n);
-  const rmCtl = { a: AP, args: [sIn, ...solArgs(sIn), ep, 0n, NONE, authFor(rmTd, counterOf(AP))] };
+  const rmCtl = { a: AP, args: [sIn, ...ed25519Args(sIn), ep, 0n, NONE, authFor(rmTd, counterOf(AP))] };
   for (const [what, bytes, expect] of bytesOf) {
     await negative('places', `remove_device: the Solana target's encoding with ${what} (its entry planted), shown in base58 and signed as shown`, AP, REMOVE,
-      [sIn, solPt, bytes, solX, ep, 0n, NONE, deviceAuth(AP, patch(rmTd, (m) => { m.target.publicKey = solanaKeyText(u8(bytes)); })),
+      [sIn, solPt, bytes, solX, ep, 0n, NONE, deviceAuth(AP, patch(rmTd, (m) => { m.target.publicKey = ed25519Base58Text(u8(bytes)); })),
         keep({ ...rh, target: { ...rh.target, b58: base58Inputs(u8(bytes)) } })], expect, [expect], '', { control: rmCtl });
   }
   await negative('places', "remove_device: the Solana target's x bytes with one byte changed (x's parity kept), under the honest approval", AP, REMOVE,
@@ -2473,7 +2483,7 @@ if (SECTIONS.includes('places')) {
   // the account holds the Solana grant; K plants raw the grants the two
   // forged encodings name
   const AG = (await execute(Original.Contract, AS, ISSUE,
-    [sgIn, ...solArgs(sgIn), ...evmK256IssueArgs(sc), authFor(issueTd(AS), counterOf(AS))])).after;
+    [sgIn, ...ed25519Args(sgIn), ...evmK256IssueArgs(sc), authFor(issueTd(AS), counterOf(AS))])).after;
   const plantScope: PlainScope = { opWithdrawUnshielded: false, opWithdrawShielded: false, opWithdrawShieldedToContract: false, read: true,
     color: new Uint8Array(32), recipientKind: 0n, recipient: new Uint8Array(32), maxCoinValue: 0n, perCallCap: 0n, cap: 0n, expiresAt: 0n,
     rpIdHash: new Uint8Array(32), readPkHash: fill(32, 0x1e), windowLen: 0n, windowCap: 0n, caller: undefined };
@@ -2482,7 +2492,7 @@ if (SECTIONS.includes('places')) {
   for (const [, bytes, expect] of bytesOf) {
     const copy = await loadPatched([expect]);
     const oh = copy.pureCircuits.evm_k256_grantee_origin_hash(sgIn);
-    const si = copy.pureCircuits.evm_k256_sol_grantee_target(self(AGP), sgIn, oh, solPt, bytes, solX)[1];
+    const si = copy.pureCircuits.evm_k256_ed25519_grantee_target(self(AGP), sgIn, oh, solPt, bytes, solX)[1];
     const gid = copy.pureCircuits.evm_k256_grantee_grant_id(self(AGP), sgIn, oh, si);
     const k = K.sign(k256Challenges.issueGrant({ contractAddress: AGP.addressBytes, authNonce: ledgerOf(AGP).auth_nonce }, K.pk, gid, scopeDigest(plantSalt, plantScope)), gUse);
     AGP = (await execute(Original.Contract, AGP, 'issue_grant_with_k256', [gid, ...scopeArgs(plantScope), plantSalt, k.pk, gUse, k.sig, 0n])).after;
@@ -2491,10 +2501,10 @@ if (SECTIONS.includes('places')) {
   }
   const rvTd = evmK256Messages.revokeGrant(frameOf(AGP), sgIn);
   const gh = evmK256GranteeHint(sgIn);
-  const rvCtl = { a: AGP, args: [sgIn, ...solArgs(sgIn), authFor(rvTd, counterOf(AGP))] };
+  const rvCtl = { a: AGP, args: [sgIn, ...ed25519Args(sgIn), authFor(rvTd, counterOf(AGP))] };
   for (const [what, bytes, expect] of bytesOf) {
     await negative('places', `revoke_grant: the Solana grantee's encoding with ${what} (its grant planted), shown in base58 and signed as shown`, AGP, REVOKE,
-      [sgIn, solPt, bytes, solX, deviceAuth(AGP, patch(rvTd, (m) => { m.grantee.publicKey = solanaKeyText(u8(bytes)); })),
+      [sgIn, solPt, bytes, solX, deviceAuth(AGP, patch(rvTd, (m) => { m.grantee.publicKey = ed25519Base58Text(u8(bytes)); })),
         keep({ ...gh, b58: base58Inputs(u8(bytes)) })], expect, [expect], '', { control: rvCtl });
   }
   await negative('places', "revoke_grant: the Solana grantee's x bytes with one byte changed (x's parity kept), under the honest approval", AGP, REVOKE,
@@ -2574,10 +2584,10 @@ if (SECTIONS.includes('core') || SECTIONS.includes('domain')) {
   // unshielded; slot 1: both shielded operations)
   let A = (await execute(Original.Contract, await dormant(device.bootCommitment(salt), recoveryKey(BIRTH).pk, 0n), ACTIVATE, device.activationArgs(salt))).after;
   const oIn = evmK256DescriptorInput({ scheme: 'evm_k256', address: O_ADDRESS, blind: O_BLIND });
-  A = (await execute(Original.Contract, A, 'add_device_with_evm_k256', [oIn, ...solArgs(oIn), D.auth(evmK256Messages.addDevice(frameBy(A, D), oIn), A)])).after;
+  A = (await execute(Original.Contract, A, 'add_device_with_evm_k256', [oIn, ...ed25519Args(oIn), D.auth(evmK256Messages.addDevice(frameBy(A, D), oIn), A)])).after;
   const K = new K256Device(0xc04e5n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
-  A = (await execute(Original.Contract, A, 'add_device_with_evm_k256', [kIn, ...solArgs(kIn), D.auth(evmK256Messages.addDevice(frameBy(A, D), kIn), A)])).after;
+  A = (await execute(Original.Contract, A, 'add_device_with_evm_k256', [kIn, ...ed25519Args(kIn), D.auth(evmK256Messages.addDevice(frameBy(A, D), kIn), A)])).after;
   const oEntry = pc.derive_device_entry_with_evm_k256({ bytes: A.addressBytes }, O_ADDRESS, O_BLIND, ledgerOf(A).device_epoch, 0n);
   if (!ledgerOf(A).devices.member(oEntry)) throw new Error('setup: the entry of the key at infinity is not in the device set');
   const COLG = fill(32, 0xc7), RU = fill(32, 0x7e);
@@ -2598,7 +2608,7 @@ if (SECTIONS.includes('core') || SECTIONS.includes('domain')) {
     input: (slot) => evmK256GranteeInput({ scheme: 'evm_k256', address: O_ADDRESS, blind: O_GBLIND }, { label }, slot), sign: (t) => forgeAtInfinity(typedDataDigest(t)) };
   for (const g of [G, GO]) for (const [slot, sc] of [[0n, uScope], [1n, sScope]] as [bigint, IssueScope][]) {
     const gin = g.input(slot);
-    A = (await execute(Original.Contract, A, ISSUE_K, [gin, ...solArgs(gin), ...evmK256IssueArgs(sc), D.auth(evmK256Messages.issueGrant(frameBy(A, D), gin, sc), A)])).after;
+    A = (await execute(Original.Contract, A, ISSUE_K, [gin, ...ed25519Args(gin), ...evmK256IssueArgs(sc), D.auth(evmK256Messages.issueGrant(frameBy(A, D), gin, sc), A)])).after;
   }
   const grantIdOf = (a: LocalAccount, g: Grantee, slot: bigint) => pc.derive_grant_id_with_evm_k256({ bytes: a.addressBytes }, g.address, g.blind, grantOriginHash(label), slot);
   for (const g of [G, GO]) for (const slot of [0n, 1n]) if (!ledgerOf(A).grants.member(grantIdOf(A, g, slot))) throw new Error('setup: a grant is missing');
@@ -2632,10 +2642,10 @@ if (SECTIONS.includes('core') || SECTIONS.includes('domain')) {
     [WU, A, (f) => evmK256Messages.withdrawUnshielded(f, COL_U, 10n, RECIPIENT_U, TEST_SITE), (au) => [COL_U, 10n, { bytes: RECIPIENT_U }, au]],
     [WS, AS, (f) => evmK256Messages.withdrawShielded(f, COL_A, 300n, localCoinPublicKeyBytes(), coin, TEST_SITE), (au) => shieldedArgs(WS, 300n, au)],
     [WSC, AS, (f) => evmK256Messages.withdrawShieldedToContract(f, COL_A, 300n, RECIPIENT_CONTRACT, coin, TEST_SITE), (au) => shieldedArgs(WSC, 300n, au)],
-    ['add_device_with_evm_k256', A, (f) => evmK256Messages.addDevice(f, k2In), (au) => [k2In, ...solArgs(k2In), au]],
-    ['remove_device_with_evm_k256', A, (f) => evmK256Messages.removeDevice(f, kIn, ep, 0n), (au) => [kIn, ...solArgs(kIn), ep, 0n, NONE, au]],
-    [ISSUE_K, A, (f) => evmK256Messages.issueGrant(f, ngIn, uScope), (au) => [ngIn, ...solArgs(ngIn), ...evmK256IssueArgs(uScope), au]],
-    ['revoke_grant_with_evm_k256', A, (f) => evmK256Messages.revokeGrant(f, G.input(0n)), (au) => [G.input(0n), ...solArgs(G.input(0n)), au]],
+    ['add_device_with_evm_k256', A, (f) => evmK256Messages.addDevice(f, k2In), (au) => [k2In, ...ed25519Args(k2In), au]],
+    ['remove_device_with_evm_k256', A, (f) => evmK256Messages.removeDevice(f, kIn, ep, 0n), (au) => [kIn, ...ed25519Args(kIn), ep, 0n, NONE, au]],
+    [ISSUE_K, A, (f) => evmK256Messages.issueGrant(f, ngIn, uScope), (au) => [ngIn, ...ed25519Args(ngIn), ...evmK256IssueArgs(uScope), au]],
+    ['revoke_grant_with_evm_k256', A, (f) => evmK256Messages.revokeGrant(f, G.input(0n)), (au) => [G.input(0n), ...ed25519Args(G.input(0n)), au]],
     ['revoke_all_grants_with_evm_k256', A, (f) => evmK256Messages.revokeAllGrants(f), (au) => [au]],
     ['publish_recovery_session_with_evm_k256', A, (f) => evmK256Messages.publishRecoverySession(f, session),
       (au) => [session.recoveryPk, session.sessionNonce, ...session.phi, session.phiLen, session.wrap, au]],

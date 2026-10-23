@@ -44,7 +44,7 @@ import { hexToBytes } from '../wallet/hex.js';
 import { makeWitnesses, emptyCoinStore, type CoinStorePrivateState } from '../wallet/witnesses.js';
 import { JubjubDevice, K256Device, jubjubChallenges, authArgs, grantAuthArgs, RECIPIENT_USER_ADDRESS, type GrantOpening } from '../wallet/signer.js';
 import {
-  SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmDeviceDescriptor, evmK256RecoverySession, evmK256IssueArgs, evmK256GrantScopeSalt, solArgs, EVM_K256_UNUSED_DESCRIPTOR } from '../wallet/signer-evm-k256.js';
+  SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmDeviceDescriptor, evmK256RecoverySession, evmK256IssueArgs, evmK256GrantScopeSalt, ed25519Args, EVM_K256_UNUSED_DESCRIPTOR } from '../wallet/signer-evm-k256.js';
 import { evmK256Messages, typedDataDigest, typeString, fieldLE, type Eip712TypedData, type IssueScope, type RecoverySession } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
 import { leHint } from '../wallet/evm-k256-hints.js';
@@ -309,9 +309,9 @@ await section('unauthorised keys', async () => {
 
 await section('more devices: a second evm device and a JubJub device, and the upstream plant at device_epoch + 1', async () => {
   const e2In = evmK256DescriptorInput(evmDeviceDescriptor(E2));
-  await call('add_device_with_evm_k256', [e2In, ...solArgs(e2In), await authOf(E, evmK256Messages.addDevice(frame(E), e2In))]);
+  await call('add_device_with_evm_k256', [e2In, ...ed25519Args(e2In), await authOf(E, evmK256Messages.addDevice(frame(E), e2In))]);
   const jIn = evmK256DescriptorInput({ scheme: 'jubjub', x: J.pk.x, y: J.pk.y });
-  await call('add_device_with_evm_k256', [jIn, ...solArgs(jIn), await authOf(E, evmK256Messages.addDevice(frame(E), jIn))]);
+  await call('add_device_with_evm_k256', [jIn, ...ed25519Args(jIn), await authOf(E, evmK256Messages.addDevice(frame(E), jIn))]);
   ok(counterOf(E2) === 0n && jCounter(J) === 0n && L().device_count === 3n, 'E2 (evm_k256) and J (jubjub) enrolled at epoch 0, counter 0');
   // README erratum 7: an upstream arm's raw add_device takes any entry; J
   // enrols W's evm_k256 entry at device_epoch + 1, counter 0
@@ -339,7 +339,7 @@ async function issueTo(d: EvmK256Device, slot: bigint): Promise<Held> {
   const gin = g.descriptor();
   // the salt the circuit derives from the issuing device's blind, the account and auth_nonce
   const s = evmK256GrantScopeSalt(d.blind, address, frame(d).authNonce);
-  await call('issue_grant_with_evm_k256', [gin, ...solArgs(gin), ...evmK256IssueArgs(grantScope), await authOf(d, evmK256Messages.issueGrant(frame(d), gin, grantScope))]);
+  await call('issue_grant_with_evm_k256', [gin, ...ed25519Args(gin), ...evmK256IssueArgs(grantScope), await authOf(d, evmK256Messages.issueGrant(frame(d), gin, grantScope))]);
   return { g, salt: s, spent: 0n };
 }
 async function grantWithdraw(h: Held, amount: bigint) {
@@ -462,15 +462,15 @@ await section('remove_device in both forms (descriptor; literal entry) by the ev
   const F = fDevice!;
   const K = new K256Device(0x5eed7n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
-  await call('add_device_with_evm_k256', [kIn, ...solArgs(kIn), await authOf(F, evmK256Messages.addDevice(frame(F), kIn))]);
+  await call('add_device_with_evm_k256', [kIn, ...ed25519Args(kIn), await authOf(F, evmK256Messages.addDevice(frame(F), kIn))]);
   const kEntry = K.entryAt(address, L().device_epoch, 0n);
   ok(L().devices.member(kEntry), 'F enrols a k256 device K by descriptor');
-  await call('remove_device_with_evm_k256', [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry },
+  await call('remove_device_with_evm_k256', [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry },
     await authOf(F, evmK256Messages.removeUnknownDevice(frame(F), kEntry))]);
   ok(!L().devices.member(kEntry), 'F removes K by the literal form ("Removes a device this wallet cannot identify")');
-  await call('add_device_with_evm_k256', [kIn, ...solArgs(kIn), await authOf(F, evmK256Messages.addDevice(frame(F), kIn))]);
+  await call('add_device_with_evm_k256', [kIn, ...ed25519Args(kIn), await authOf(F, evmK256Messages.addDevice(frame(F), kIn))]);
   const ep = L().device_epoch as bigint;
-  await call('remove_device_with_evm_k256', [kIn, ...solArgs(kIn), ep, 0n, { is_some: false, value: new Uint8Array(32) },
+  await call('remove_device_with_evm_k256', [kIn, ...ed25519Args(kIn), ep, 0n, { is_some: false, value: new Uint8Array(32) },
     await authOf(F, evmK256Messages.removeDevice(frame(F), kIn, ep, 0n))]);
   ok(!L().devices.member(K.entryAt(address, ep, 0n)), 'F removes K by descriptor (epoch, counter 0)');
 });

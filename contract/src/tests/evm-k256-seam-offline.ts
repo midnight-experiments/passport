@@ -47,7 +47,7 @@ import {
 } from '../wallet/signer.js';
 import {
   SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmK256IssueArgs, evmK256GrantScopeSalt, evmK256RecoverySession,
-  parseEvmSignature, solArgs, evmDeviceDescriptor, EVM_K256_UNUSED_DESCRIPTOR,
+  parseEvmSignature, ed25519Args, evmDeviceDescriptor, EVM_K256_UNUSED_DESCRIPTOR,
 } from '../wallet/signer-evm-k256.js';
 import { evmK256Messages, type Eip712TypedData, type IssueScope } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
@@ -181,7 +181,7 @@ async function issue(slot: bigint, s: IssueScope): Promise<Granted> {
   const gin = g.descriptor();
   // the salt the circuit derives from the issuing device's blind, the account and auth_nonce
   const sSalt = evmK256GrantScopeSalt(E.blind, address, L().auth_nonce as bigint);
-  await call('issue_grant_with_evm_k256', [gin, ...solArgs(gin), ...evmK256IssueArgs(s), await deviceAuth('honest', (f) => evmK256Messages.issueGrant(f, gin, s))]);
+  await call('issue_grant_with_evm_k256', [gin, ...ed25519Args(gin), ...evmK256IssueArgs(s), await deviceAuth('honest', (f) => evmK256Messages.issueGrant(f, gin, s))]);
   return { g, wallet, s, salt: sSalt, spent: 0n };
 }
 const openingOf = (x: Granted): GrantOpening => ({ originHash: x.g.originHash, slot: x.g.slot, scopeSalt: x.salt, recipientKind: x.s.recipientKind,
@@ -240,23 +240,23 @@ await section('every device-gated export refuses an approval it did not get (the
   const K = new K256Device(0x5eed7n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
   const ep = L().device_epoch as bigint;
-  await deviceGated('add_device', 'add_device_with_evm_k256', (f) => evmK256Messages.addDevice(f, kIn), (a) => [kIn, ...solArgs(kIn), a], 'one', 'positive',
+  await deviceGated('add_device', 'add_device_with_evm_k256', (f) => evmK256Messages.addDevice(f, kIn), (a) => [kIn, ...ed25519Args(kIn), a], 'one', 'positive',
     ['the k256 device is enrolled', () => L().devices.member(K.entryAt(address, ep, 0n)) && L().device_count === 2n]);
   const NONE = { is_some: false, value: new Uint8Array(32) };
   await deviceGated('remove_device (descriptor form)', 'remove_device_with_evm_k256', (f) => evmK256Messages.removeDevice(f, kIn, ep, 0n),
-    (a) => [kIn, ...solArgs(kIn), ep, 0n, NONE, a], 'either', 'positive', ['the k256 device is removed by descriptor', () => !L().devices.member(K.entryAt(address, ep, 0n)) && L().device_count === 1n]);
-  await call('add_device_with_evm_k256', [kIn, ...solArgs(kIn), await deviceAuth('honest', (f) => evmK256Messages.addDevice(f, kIn))]);
+    (a) => [kIn, ...ed25519Args(kIn), ep, 0n, NONE, a], 'either', 'positive', ['the k256 device is removed by descriptor', () => !L().devices.member(K.entryAt(address, ep, 0n)) && L().device_count === 1n]);
+  await call('add_device_with_evm_k256', [kIn, ...ed25519Args(kIn), await deviceAuth('honest', (f) => evmK256Messages.addDevice(f, kIn))]);
   const kEntry = K.entryAt(address, L().device_epoch, 0n);
   await deviceGated('remove_device (literal form)', 'remove_device_with_evm_k256', (f) => evmK256Messages.removeUnknownDevice(f, kEntry),
-    (a) => [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, a], 'either', 'positive',
+    (a) => [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: kEntry }, a], 'either', 'positive',
     ['the k256 device is removed by the literal form', () => !L().devices.member(kEntry) && L().device_count === 1n]);
   const wallet = SoftwareEvmWallet.generate();
   const gi = await EvmK256Grantee.enrol(wallet, 'undeployed', address, grantLabel('bank.example'), 0n);
   const gin = gi.descriptor();
   const sI = scope({ opWithdrawUnshielded: true, color: U_COLOR, recipientKind: RECIPIENT_USER_ADDRESS, recipient: RCPT, maxCoinValue: 100n, perCallCap: 100n, cap: 500n });
-  await deviceGated('issue_grant', 'issue_grant_with_evm_k256', (f) => evmK256Messages.issueGrant(f, gin, sI), (a) => [gin, ...solArgs(gin), ...evmK256IssueArgs(sI), a], 'one', 'positive',
+  await deviceGated('issue_grant', 'issue_grant_with_evm_k256', (f) => evmK256Messages.issueGrant(f, gin, sI), (a) => [gin, ...ed25519Args(gin), ...evmK256IssueArgs(sI), a], 'one', 'positive',
     ['the grant is recorded, active', () => L().grants.member(gi.grantId(address)) && L().grants.lookup(gi.grantId(address)).active === true]);
-  await deviceGated('revoke_grant', 'revoke_grant_with_evm_k256', (f) => evmK256Messages.revokeGrant(f, gin), (a) => [gin, ...solArgs(gin), a], 'one', 'positive',
+  await deviceGated('revoke_grant', 'revoke_grant_with_evm_k256', (f) => evmK256Messages.revokeGrant(f, gin), (a) => [gin, ...ed25519Args(gin), a], 'one', 'positive',
     ['the grant is a tombstone', () => L().grants.lookup(gi.grantId(address)).active === false]);
   // a guardian session (recovery-sim's shape)
   const guardians = [0, 1, 2].map(() => guardianSecretFromPrf(rnd()));
@@ -378,19 +378,19 @@ await section('remove_device refuses the authorising device\'s own post-roll ent
   const SELF = 'cannot remove the authorising device';
   const K = new K256Device(0x5eed8n);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: K.pk.x, y: K.pk.y, envelope: 0 });
-  await call('add_device_with_evm_k256', [kIn, ...solArgs(kIn), await deviceAuth('honest', (f) => evmK256Messages.addDevice(f, kIn))]);
+  await call('add_device_with_evm_k256', [kIn, ...ed25519Args(kIn), await deviceAuth('honest', (f) => evmK256Messages.addDevice(f, kIn))]);
   ok(L().device_count === 2n, 'a second device, so the last-device rule cannot refuse first');
   const ep = L().device_epoch as bigint, c = counterOf(E);
   const selfIn = evmK256DescriptorInput(evmDeviceDescriptor(E));
   const NONE = { is_some: false, value: new Uint8Array(32) };
   // the device signs with its entry at counter c, which rolls to c + 1
   await refused('remove_device (descriptor form): the device names its own post-roll entry', async () =>
-    call('remove_device_with_evm_k256', [selfIn, ...solArgs(selfIn), ep, c + 1n, NONE, await deviceAuth('honest', (f) => evmK256Messages.removeDevice(f, selfIn, ep, c + 1n))]), SELF);
+    call('remove_device_with_evm_k256', [selfIn, ...ed25519Args(selfIn), ep, c + 1n, NONE, await deviceAuth('honest', (f) => evmK256Messages.removeDevice(f, selfIn, ep, c + 1n))]), SELF);
   const selfPost = E.entryAt(address, ep, c + 1n);
   await refused('remove_device (literal form): the device names its own post-roll entry', async () =>
-    call('remove_device_with_evm_k256', [EVM_K256_UNUSED_DESCRIPTOR, ...solArgs(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: selfPost },
+    call('remove_device_with_evm_k256', [EVM_K256_UNUSED_DESCRIPTOR, ...ed25519Args(EVM_K256_UNUSED_DESCRIPTOR), 0n, 0n, { is_some: true, value: selfPost },
       await deviceAuth('honest', (f) => evmK256Messages.removeUnknownDevice(f, selfPost))]), SELF);
-  await honestDevice('remove_device (descriptor form) of the k256 device', 'remove_device_with_evm_k256', [kIn, ...solArgs(kIn), ep, 0n, NONE],
+  await honestDevice('remove_device (descriptor form) of the k256 device', 'remove_device_with_evm_k256', [kIn, ...ed25519Args(kIn), ep, 0n, NONE],
     (f) => evmK256Messages.removeDevice(f, kIn, ep, 0n));
   ok(!L().devices.member(K.entryAt(address, ep, 0n)) && L().device_count === 1n, 'remove_device: the k256 device is removed and the device itself kept');
 });
