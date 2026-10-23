@@ -49,28 +49,25 @@ export function evmK256KeyHint(pk: { x: bigint; y: bigint }): EvmAddressHint {
   return { x: bytesHint(le32(pk.x)), y: bytesHint(le32(pk.y)), key_hash: bytesHint(keccak_256(pre)) };
 }
 
-/** The bytes of keccak256 of an account's 32-byte address (the domain's
- *  verifyingContract is their low 20 bytes). */
-export const accountHashHint = (account: Uint8Array): ByteHint => bytesHint(keccak_256(account));
-
-/** The device seam's hint (`EvmK256SeamHint`). */
-export interface EvmK256SeamHint { key: EvmAddressHint; account_hash: ByteHint; digest: ByteHint; nonce: ByteHint }
+/** The device seam's hint (`EvmK256SeamHint`): the key's, the digest's and
+ *  auth_nonce's. */
+export interface EvmK256SeamHint { key: EvmAddressHint; digest: ByteHint; nonce: ByteHint }
 export function evmK256SeamHint(
-  pk: { x: bigint; y: bigint }, account: Uint8Array, digest: Uint8Array, authNonce: bigint,
+  pk: { x: bigint; y: bigint }, digest: Uint8Array, authNonce: bigint,
 ): EvmK256SeamHint {
-  return { key: evmK256KeyHint(pk), account_hash: accountHashHint(account), digest: bytesHint(digest), nonce: leHint(authNonce, 8) };
+  return { key: evmK256KeyHint(pk), digest: bytesHint(digest), nonce: leHint(authNonce, 8) };
 }
 
-/** The grant seam's hint (`EvmK256GrantSeamHint`): the key's, the account
- *  hash's and the digest's, and the frame's label, issuedAt and nonce. */
+/** The grant seam's hint (`EvmK256GrantSeamHint`): the key's and the
+ *  digest's, and the frame's label, issuedAt and nonce. */
 export interface EvmK256GrantSeamHint {
-  key: EvmAddressHint; account_hash: ByteHint; digest: ByteHint; label: ByteHint; issued_at: ByteHint; grant_nonce: ByteHint;
+  key: EvmAddressHint; digest: ByteHint; label: ByteHint; issued_at: ByteHint; grant_nonce: ByteHint;
 }
 export function evmK256GrantSeamHint(
-  pk: { x: bigint; y: bigint }, account: Uint8Array, digest: Uint8Array, label: Uint8Array, issuedAt: bigint, grantNonce: bigint,
+  pk: { x: bigint; y: bigint }, digest: Uint8Array, label: Uint8Array, issuedAt: bigint, grantNonce: bigint,
 ): EvmK256GrantSeamHint {
   return {
-    key: evmK256KeyHint(pk), account_hash: accountHashHint(account), digest: bytesHint(digest),
+    key: evmK256KeyHint(pk), digest: bytesHint(digest),
     label: bytesHint(label), issued_at: leHint(issuedAt, 8), grant_nonce: leHint(grantNonce, 8),
   };
 }

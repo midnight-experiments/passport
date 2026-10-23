@@ -11,6 +11,11 @@
 //              byte (both RFC 6979, low S); viem recovers the address and the
 //              public point; viem's sha256 of the blind preimage == the blind
 //              (enrolment and the contract's derive_blind)
+//   domain     the frozen file's fixed V1 domain: viem's keccak256 of the
+//              type string, the name, the version and P's text, and viem's
+//              hashDomain, equal the pinned type hash, string hashes, P and
+//              separator, and so do the contract's oracles; viem's keccak256
+//              of every frozen type string equals its pinned type hash
 //   frozen     every vector of the frozen file: viem's encodeType, domain
 //              hash, struct hash and digest of the frozen typed data equal the
 //              frozen values (which the generator took from viem); the
@@ -104,8 +109,33 @@ for (const [k, network, index] of [[1n, 'undeployed', 0], [1n, 'undeployed', 1],
 }
 console.log(`  ✓ blind: EIP-191 digest, personal_sign bytes, recovery, canonical form and blind == viem (${checks.blind} checks)`);
 
-// ── Frozen EIP-712 vectors ───────────────────────────────────────────────────
+// ── The fixed V1 domain ──────────────────────────────────────────────────────
 const FROZEN = JSON.parse(fs.readFileSync(new URL(`./vectors/${VECTOR_FILE}`, import.meta.url), 'utf8'));
+{
+  const D = FROZEN.domain;
+  const k = (t: string) => viem.keccak256(viem.stringToHex(t));
+  const domain = { name: D.name, version: D.version, verifyingContract: D.verifyingContract };
+  const fields = [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'verifyingContract', type: 'address' }];
+  assert.equal(typed.encodeType({ primaryType: 'EIP712Domain', types: { EIP712Domain: fields } }), D.typeString, 'domain: viem encodeType');
+  assert.equal(k(D.typeString), D.typeHash, 'domain: viem keccak256 of the type string');
+  assert.equal(k(D.name), D.nameHash, 'domain: viem keccak256 of the name');
+  assert.equal(k(D.version), D.versionHash, 'domain: viem keccak256 of the version');
+  assert.equal(viem.getAddress(viem.slice(k(D.verifyingContractText), 12)), D.verifyingContract, "domain: P from viem's keccak256 of its text");
+  assert.equal(viem.hashDomain({ domain, types: { EIP712Domain: fields } }), D.separator, 'domain: viem hashDomain');
+  assert.equal(bytesHex(pc.eip712_v1_domain_type_hash()), D.typeHash, 'domain: the contract type hash');
+  assert.equal(bytesHex(pc.eip712_v1_name_hash()), D.nameHash, 'domain: the contract name hash');
+  assert.equal(bytesHex(pc.eip712_v1_version_hash()), D.versionHash, 'domain: the contract version hash');
+  assert.equal(viem.getAddress(bytesHex(pc.eip712_v1_verifying_contract())), D.verifyingContract, 'domain: the contract P');
+  assert.equal(bytesHex(pc.eip712_v1_domain_separator()), D.separator, 'domain: the contract separator');
+  ok('domain', 11);
+  for (const [key, str] of Object.entries(FROZEN.typeStrings as Record<string, string>)) {
+    assert.equal(k(str), FROZEN.typeHashes[key], `${key}: viem keccak256 of the type string == the pinned type hash`);
+    ok('domain');
+  }
+}
+console.log(`  ✓ domain: the pinned type hash, name and version hashes, P and separator == viem and == the contract's oracles; ${Object.keys(FROZEN.typeHashes).length} type hashes == viem (${checks.domain} checks)`);
+
+// ── Frozen EIP-712 vectors ───────────────────────────────────────────────────
 {
   const signer = accounts.privateKeyToAccount(sk32(0x5eedn));
   const ours = new SoftwareEvmWallet(0x5eedn);

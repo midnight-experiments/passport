@@ -60,7 +60,13 @@
 //                    a key: r = 0, s = 0 and the point at infinity (an entry
 //                    or a grant planted for its address, a signature that
 //                    verifies against it) at each of the 15 gated exports,
-//                    and the point at infinity at activation.
+//                    and the point at infinity at activation;
+//   domain           the fixed EIP-712 domain at each of the 15 gated
+//                    exports: the signer's own key signs the honest message
+//                    under the per-account domain, and under the V1 domain
+//                    with a chainId (evm-k256-domains.ts); both are refused
+//                    by the signature check, after the honest V1 call proved
+//                    through the same copy.
 //
 // Every prover-level negative records the refusing request's circuit (it must
 // be the circuit under test) and the refusal's kind: `constraint` (the
@@ -109,6 +115,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { evmK256Messages, typedDataDigest, EVM_K256_PASSKEY_RP_POINTER, EVM_K256_WINDOW_POINTER, amountLabelText, type Eip712TypedData } from '../wallet/evm-k256-codec.js';
 import { NEVER_TEXT, NOT_APPLICABLE_TEXT } from '../wallet/rendering.js';
 import { expectRefusal, expectSuccess, type NegativeResult, type PositiveResult } from './constraint-negative.js';
+import { FOREIGN_DOMAINS } from './evm-k256-domains.js';
 import {
   Original, loadPatched, dormant, execute, prove, ledgerOf, proofLog, forgery, withLocalCoins, coinStoreAnswering,
   localCoinPublicKeyBytes, transportRetries, FORGE_ADDRESS_OVERRIDES, POINT_AT_INFINITY_OVERRIDES, NON_CANONICAL_COORDINATE_OVERRIDES, type LocalAccount, type LocalCoin,
@@ -116,7 +123,7 @@ import {
 } from './evm-k256-negative.js';
 import type { BypassedContractModule } from './constraint-negative.js';
 
-const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness', 'devices', 'grants', 'grant-matrix', 'frame-lifecycle', 'qa-s3', 'recovery', 'hints', 'texts', 'isolate', 'places', 'core'];
+const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ['activation', 'reactivation', 'qa1', 'seam', 'frame', 'custody', 'witness', 'devices', 'grants', 'grant-matrix', 'frame-lifecycle', 'qa-s3', 'recovery', 'hints', 'texts', 'isolate', 'places', 'core', 'domain'];
 // EVM_K256_DRY=1: the JavaScript layer only, with no proof server and never
 // a verdict of record: a positive executes, not
 // proved, through its module with no bypassed assert firing; a negative's
@@ -569,9 +576,10 @@ if (SECTIONS.includes('seam')) {
     ['device member: another address', mutate((t) => { t.message.device = '0x' + Buffer.from(other.addressBytes).toString('hex'); })],
     ['authNonce: n + 1', mutate((t) => { t.message.authNonce = '1'; })],
     ['effect line: another text', mutate((t) => { t.message.effect = 'Sets nothing'; })],
-    ['domain name', mutate((t) => { t.domain.name = 'Midnight Passport Accounts'; })],
+    ['domain name ("Midnight Passport Account", not "Midnight Passport")', mutate((t) => { t.domain.name = 'Midnight Passport Account'; })],
     ['domain version ("2", not the frozen "1")', mutate((t) => { t.domain.version = '2'; })],
     ['domain verifyingContract', mutate((t) => { t.domain.verifyingContract = '0x' + Buffer.from(rnd(20)).toString('hex'); })],
+    ['domain verifyingContract: P with its last byte changed', mutate((t) => { t.domain.verifyingContract = t.domain.verifyingContract.slice(0, -2) + (parseInt(t.domain.verifyingContract.slice(-2), 16) ^ 1).toString(16).padStart(2, '0'); })],
     ['primary type name', mutate((t) => rename(t, 'RotateEncKey', 'RotateEncryptionKey'))],
     ['a member renamed (newKey -> key)', mutate((t) => { t.types.RotateEncKey = t.types.RotateEncKey.map((f: any) => (f.name === 'newKey' ? { ...f, name: 'key' } : f)); t.message.key = t.message.newKey; delete t.message.newKey; })],
   ];
@@ -744,7 +752,6 @@ if (SECTIONS.includes('hints')) {
   // the device seam (one-type body)
   await negative('hints', "device seam: a byte of the key's x coordinate", A0, ROTATE, F(A0, ROTATE, rot, 1, 'auth', ['key', 'x'], 3), BYTE_H, [BYTE_H, HASH_H]);
   await negative('hints', 'device seam: a byte of the key hash outside the address', A0, ROTATE, F(A0, ROTATE, rot, 1, 'auth', ['key', 'key_hash'], 5), HASH_H, [HASH_H]);
-  await negative('hints', 'device seam: a byte of the account hash outside the verifying contract', A0, ROTATE, F(A0, ROTATE, rot, 1, 'auth', ['account_hash'], 5), HASH_H, [HASH_H]);
   await negative('hints', 'device seam: a byte of the digest', A0, ROTATE, F(A0, ROTATE, rot, 1, 'auth', ['digest'], 3), DIGEST_H, [DIGEST_H, INVALID]);
   await negative('hints', 'device seam: a byte of auth_nonce', A0, ROTATE, F(A0, ROTATE, rot, 1, 'auth', ['nonce'], 0), WORD_H, [WORD_H, DIGEST_H]);
   await negative('hints', 'device seam: the carry attack on auth_nonce (byte + 256, next − 1)', A0, ROTATE, F(A0, ROTATE, rot, 1, 'auth', ['nonce'], 0, 'carry'),
@@ -2083,7 +2090,7 @@ if (SECTIONS.includes('texts')) {
   const ascii = (v: bigint[]) => String.fromCharCode(...v.map(Number));
   // the device's authorisation over `t` with the seam hint of that message
   const signed = (a: LocalAccount, t: Eip712TypedData) =>
-    ({ ...authFor(t), hint: evmK256SeamHint(device.pk, a.addressBytes, typedDataDigest(t), ledgerOf(a).auth_nonce as bigint) });
+    ({ ...authFor(t), hint: evmK256SeamHint(device.pk, typedDataDigest(t), ledgerOf(a).auth_nonce as bigint) });
   const patch = (t: Eip712TypedData, f: (m: any) => void): Eip712TypedData => { const c = JSON.parse(JSON.stringify(t)); f(c.message); return c; };
   // the read-back hints of any base58 digits (58 is padding)
   const b58hints = (digits: bigint[]) => {
@@ -2233,7 +2240,7 @@ if (SECTIONS.includes('isolate')) {
   // the nonce hint `nonce`
   const deviceAuth = (a: LocalAccount, signed: Eip712TypedData, nonce = nonceOf(a), digest = typedDataDigest(signed)) => {
     const p = parseEvmSignature(wallet.signDigest(digest));
-    return { pk: device.pk, use_counter: counterOf(a), blind: device.blind, sig: { r: p.r, s: p.s }, hint: evmK256SeamHint(device.pk, a.addressBytes, digest, nonce) };
+    return { pk: device.pk, use_counter: counterOf(a), blind: device.blind, sig: { r: p.r, s: p.s }, hint: evmK256SeamHint(device.pk, digest, nonce) };
   };
   const A0 = S6_A0!;
 
@@ -2325,7 +2332,7 @@ if (SECTIONS.includes('isolate')) {
   const grantAuth = (a: LocalAccount, signed: Eip712TypedData, r: { issued_at: bigint }, grantNonce: bigint, digest = typedDataDigest(signed)) => {
     const p = parseEvmSignature(gWallet.signDigest(digest));
     return { arm: 'evm_k256', pk: eg.pk, blind: eg.blind, label: eg.label, sig: { r: p.r, s: p.s },
-      hint: evmK256GrantSeamHint(eg.pk, a.addressBytes, digest, eg.label, r.issued_at, grantNonce), op: keep(evmK256AmountHint(50n, TEST_SITE)) };
+      hint: evmK256GrantSeamHint(eg.pk, digest, eg.label, r.issued_at, grantNonce), op: keep(evmK256AmountHint(50n, TEST_SITE)) };
   };
   const honestG = (a: LocalAccount, r: any, spent: bigint) => {
     const t = evmK256Messages.withdrawUnshieldedAsGrantee(gFrame(a, r), COL_U, 50n, RECIPIENT_U, TEST_SITE);
@@ -2390,7 +2397,7 @@ if (SECTIONS.includes('places')) {
     const digest = typedDataDigest(signed);
     const p = parseEvmSignature(wallet.signDigest(digest));
     return { pk: device.pk, use_counter: counterOf(a), blind: device.blind, sig: { r: p.r, s: p.s },
-      hint: evmK256SeamHint(device.pk, a.addressBytes, digest, ledgerOf(a).auth_nonce as bigint) };
+      hint: evmK256SeamHint(device.pk, digest, ledgerOf(a).auth_nonce as bigint) };
   };
   const A0 = S6_A0!;
   // the Solana key, its encoding and x bytes, and the three forgeries: one
@@ -2525,7 +2532,9 @@ if (SECTIONS.includes('places')) {
 //     so (x(k·G), z/k) passes for any k. In the copy only the key rule
 //     fires; at the proof server the circuit refuses the identity's
 //     coordinates.
-if (SECTIONS.includes('core')) {
+if (SECTIONS.includes('core') || SECTIONS.includes('domain')) {
+  // the accounts and calls of sections core and domain, drawn from the core
+  // stream whichever of the two runs
   section('core');
   const INFINITY_POINT = { x: 0n, y: 0n, identity: true };
   const O_ADDRESS = keccak_256(new Uint8Array(64)).subarray(12);
@@ -2649,45 +2658,83 @@ if (SECTIONS.includes('core')) {
    *  expected assert is checked). */
   const keyRuleFired = (copy: BypassedContractModule) => () => (copy.fired().some((f) => f.message === INF_K) ? undefined : 'the key rule never fired in the copy');
 
-  // the zero scalars and the key at infinity, at one circuit
-  const threeCases = async (circuit: string, a: LocalAccount, honest: unknown[], authAt: number, invalid: string, atInfinity: unknown[]) => {
-    const control = { a, args: honest };
-    const name = circuit.replace(/(_with)?_evm_k256$/, '');
-    await negative('core', `${name}: signature r = 0 (the zero-scalar assert and the signature check)`, a, circuit, withSig(honest, authAt, { r: 0n }),
-      ZERO_K, [ZERO_K, invalid], '', { control });
-    await negative('core', `${name}: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)`, a, circuit,
-      withSig(honest, authAt, { s: 0n }), ZERO_K, [ZERO_K, invalid], ZERO_INV_OVERRIDES, { control });
-    const copy = await loadPatched([INF_K], POINT_AT_INFINITY_OVERRIDES);
-    await negative('core', `${name}: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)`,
-      a, circuit, atInfinity, 'identity point', [INF_K], POINT_AT_INFINITY_OVERRIDES, { module: copy, control, check: keyRuleFired(copy) });
-  };
-  for (const [circuit, a, msg, args] of device12) {
-    const honest = args(D.auth(msg(frameBy(a, D)), a));
-    const authAt = honest.length - 1;
-    await threeCases(circuit, a, honest, authAt, INVALID, args(O.auth(msg(frameBy(a, O)), a)));
+  if (SECTIONS.includes('core')) {
+    // the zero scalars and the key at infinity, at one circuit
+    const threeCases = async (circuit: string, a: LocalAccount, honest: unknown[], authAt: number, invalid: string, atInfinity: unknown[]) => {
+      const control = { a, args: honest };
+      const name = circuit.replace(/(_with)?_evm_k256$/, '');
+      await negative('core', `${name}: signature r = 0 (the zero-scalar assert and the signature check)`, a, circuit, withSig(honest, authAt, { r: 0n }),
+        ZERO_K, [ZERO_K, invalid], '', { control });
+      await negative('core', `${name}: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)`, a, circuit,
+        withSig(honest, authAt, { s: 0n }), ZERO_K, [ZERO_K, invalid], ZERO_INV_OVERRIDES, { control });
+      const copy = await loadPatched([INF_K], POINT_AT_INFINITY_OVERRIDES);
+      await negative('core', `${name}: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)`,
+        a, circuit, atInfinity, 'identity point', [INF_K], POINT_AT_INFINITY_OVERRIDES, { module: copy, control, check: keyRuleFired(copy) });
+    };
+    for (const [circuit, a, msg, args] of device12) {
+      const honest = args(D.auth(msg(frameBy(a, D)), a));
+      const authAt = honest.length - 1;
+      await threeCases(circuit, a, honest, authAt, INVALID, args(O.auth(msg(frameBy(a, O)), a)));
+    }
+    for (const [circuit, a, slot, msg, args] of grantee3) {
+      const by = (g: Grantee) => {
+        const id = grantIdOf(a, g, slot);
+        const rec = ledgerOf(a).grants.lookup(id);
+        const sc = slot === 0n ? uScope : sScope;
+        const f = { account: a.addressBytes, grantee: g.address, label, slot, issuedAt: rec.issued_at as bigint, grantNonce: rec.nonce as bigint };
+        const op: GrantOpening = { originHash: grantOriginHash(label), slot, scopeSalt: grantSaltOf(a, id), recipientKind: sc.recipientKind,
+          pinnedRecipient: sc.recipient, maxCoinValue: sc.maxCoinValue, spentPrev: 0n };
+        return args(op, { arm: 'evm_k256', pk: g.pk, blind: g.blind, label, sig: g.sign(msg(f, a)) }, a);
+      };
+      const honest = by(G);
+      await threeCases(circuit, a, honest, honest.length - 1, GINVALID, by(GO));
+    }
+    // activation: a boot commitment to the address of the key at infinity
+    {
+      const actSalt = rnd(32);
+      const copy = await loadPatched([INF_K], POINT_AT_INFINITY_OVERRIDES);
+      const D0 = await dormant(device.bootCommitment(actSalt), recoveryPk);
+      const O0 = await dormant(pc.derive_boot_commitment_with_evm_k256(actSalt, O_ADDRESS, O_BLIND), recoveryPk);
+      await negative('core', 'activation: the key at infinity under a boot commitment to its address (only the key rule fires in the copy)', O0, ACTIVATE,
+        [INFINITY_POINT, actSalt, O_BLIND], 'identity point', [INF_K], POINT_AT_INFINITY_OVERRIDES,
+        { module: copy, control: { a: D0, args: device.activationArgs(actSalt) }, check: keyRuleFired(copy) });
+    }
   }
-  for (const [circuit, a, slot, msg, args] of grantee3) {
-    const by = (g: Grantee) => {
-      const id = grantIdOf(a, g, slot);
+
+  // the signer's own key over the honest message under another domain: the
+  // per-account domain and the V1 domain with a chainId, at each of the 15
+  // gated exports; the copy bypasses only the signature check, and the first
+  // case of each circuit proves the honest V1 call through it
+  if (SECTIONS.includes('domain')) {
+    section('domain');
+    const domains = [FOREIGN_DOMAINS.perAccount, FOREIGN_DOMAINS.chainId];
+    const sigUnder = (w: SoftwareEvmWallet, digest: Uint8Array) => { const p = parseEvmSignature(w.signDigest(digest)); return { r: p.r, s: p.s }; };
+    for (const [circuit, a, msg, args] of device12) {
+      const t = msg(frameBy(a, D));
+      const honest = args(D.auth(t, a));
+      const authAt = honest.length - 1;
+      const name = circuit.replace(/(_with)?_evm_k256$/, '');
+      for (const [i, dom] of domains.entries()) {
+        await negative('domain', `${name}: the device's key signs the honest message under ${dom.name}`, a, circuit,
+          withSig(honest, authAt, sigUnder(wallet, dom.digest(t, a.addressBytes))), INVALID, [INVALID], '', i === 0 ? { control: { a, args: honest } } : {});
+      }
+    }
+    for (const [circuit, a, slot, msg, args] of grantee3) {
+      const id = grantIdOf(a, G, slot);
       const rec = ledgerOf(a).grants.lookup(id);
       const sc = slot === 0n ? uScope : sScope;
-      const f = { account: a.addressBytes, grantee: g.address, label, slot, issuedAt: rec.issued_at as bigint, grantNonce: rec.nonce as bigint };
+      const f = { account: a.addressBytes, grantee: G.address, label, slot, issuedAt: rec.issued_at as bigint, grantNonce: rec.nonce as bigint };
       const op: GrantOpening = { originHash: grantOriginHash(label), slot, scopeSalt: grantSaltOf(a, id), recipientKind: sc.recipientKind,
         pinnedRecipient: sc.recipient, maxCoinValue: sc.maxCoinValue, spentPrev: 0n };
-      return args(op, { arm: 'evm_k256', pk: g.pk, blind: g.blind, label, sig: g.sign(msg(f, a)) }, a);
-    };
-    const honest = by(G);
-    await threeCases(circuit, a, honest, honest.length - 1, GINVALID, by(GO));
-  }
-  // activation: a boot commitment to the address of the key at infinity
-  {
-    const actSalt = rnd(32);
-    const copy = await loadPatched([INF_K], POINT_AT_INFINITY_OVERRIDES);
-    const D0 = await dormant(device.bootCommitment(actSalt), recoveryPk);
-    const O0 = await dormant(pc.derive_boot_commitment_with_evm_k256(actSalt, O_ADDRESS, O_BLIND), recoveryPk);
-    await negative('core', 'activation: the key at infinity under a boot commitment to its address (only the key rule fires in the copy)', O0, ACTIVATE,
-      [INFINITY_POINT, actSalt, O_BLIND], 'identity point', [INF_K], POINT_AT_INFINITY_OVERRIDES,
-      { module: copy, control: { a: D0, args: device.activationArgs(actSalt) }, check: keyRuleFired(copy) });
+      const t = msg(f, a);
+      const auth = (sig: { r: bigint; s: bigint }) => args(op, { arm: 'evm_k256', pk: G.pk, blind: G.blind, label, sig }, a);
+      const honest = auth(G.sign(t));
+      const name = circuit.replace(/(_with)?_evm_k256$/, '');
+      for (const [i, dom] of domains.entries()) {
+        await negative('domain', `${name}: the grantee's key signs the honest message under ${dom.name}`, a, circuit,
+          auth(sigUnder(gWallet, dom.digest(t, a.addressBytes))), GINVALID, [GINVALID], '', i === 0 ? { control: { a, args: honest } } : {});
+      }
+    }
   }
 }
 

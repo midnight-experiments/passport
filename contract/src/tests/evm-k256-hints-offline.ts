@@ -36,7 +36,7 @@ import {
 import { evmK256Messages, type Eip712TypedData, type IssueScope } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
 import {
-  evmK256KeyHint, accountHashHint, bytesHint, leHint, evmK256DescriptorHint, evmK256GranteeHint, evmK256AmountHint, evmK256CoinHint,
+  evmK256KeyHint, bytesHint, leHint, evmK256DescriptorHint, evmK256GranteeHint, evmK256AmountHint, evmK256CoinHint,
   evmK256IssueHint,
 } from '../wallet/evm-k256-hints.js';
 import { withExecutedHints, storeCoin, forgeHints, TEST_SITE } from './evm-k256-hint-fill.js';
@@ -192,7 +192,7 @@ await section('the device seam (one-type body): every seam hint, then the honest
   const args = async () => [newKey, await honest((f) => evmK256Messages.rotateEncKey(f, newKey))];
   await eachForged('rotate_enc_key', 'rotate_enc_key_with_evm_k256', args, 1, [
     ['auth', ['nonce'], WORD], ['auth', ['key', 'x'], BYTE], ['auth', ['key', 'y'], BYTE], ['auth', ['key', 'key_hash'], HASH],
-    ['auth', ['account_hash'], HASH], ['auth', ['digest'], DIGEST],
+    ['auth', ['digest'], DIGEST],
   ], true);
   await lands('rotate_enc_key', 'rotate_enc_key_with_evm_k256', await args(), 1);
 });
@@ -225,7 +225,7 @@ await section('the descriptor hints of add_device and remove_device (the two-for
   const rm = async () => [kIn, ...solArgs(kIn), ep, 0n, NONE, await honest((f) => evmK256Messages.removeDevice(f, kIn, ep, 0n)), { target: evmK256DescriptorHint(kIn), epoch: leHint(ep, 4), counter: leHint(0n, 8) }];
   await eachForged('remove_device', 'remove_device_with_evm_k256', rm, 7, [
     ['op', ['target', 'key'], BYTE], ['op', ['target', 'key2'], BYTE], ['op', ['target', 'origin'], ORIGIN], ['op', ['epoch'], WORD], ['op', ['counter'], WORD],
-    ['auth', ['nonce'], WORD], ['auth', ['digest'], DIGEST], ['auth', ['account_hash'], HASH], [2, [], SOL_Y], [3, [], SOL_X],
+    ['auth', ['nonce'], WORD], ['auth', ['digest'], DIGEST], [2, [], SOL_Y], [3, [], SOL_X],
     ['op', ['target', 'b58', 'digits'], B58],
   ]);
   await lands('remove_device', 'remove_device_with_evm_k256', await rm(), 7);
@@ -278,14 +278,14 @@ await section('the grant seam: every seam hint and the operation hints of the gr
   };
   await eachForged('withdraw_unshielded_with_grant', 'withdraw_unshielded_with_grant_evm_k256', tw, 10, [
     ['auth', ['label'], BYTE], ['auth', ['issued_at'], WORD], ['auth', ['grant_nonce'], WORD], ['auth', ['key', 'x'], BYTE], ['auth', ['key', 'key_hash'], HASH],
-    ['auth', ['account_hash'], HASH], ['auth', ['digest'], DIGEST], ['op', ['amount'], WORD], ['op', ['label'], LABEL],
+    ['auth', ['digest'], DIGEST], ['op', ['amount'], WORD], ['op', ['label'], LABEL],
   ], true);
   await lands('withdraw_unshielded_with_grant', 'withdraw_unshielded_with_grant_evm_k256', await tw(), 10);
 });
 
 await section('the bare body (revoke_all_grants): the seam hints, then the honest call', async () => {
   const args = async () => [await honest((f) => evmK256Messages.revokeAllGrants(f))];
-  await eachForged('revoke_all_grants', 'revoke_all_grants_with_evm_k256', args, 0, [['auth', ['nonce'], WORD], ['auth', ['digest'], DIGEST], ['auth', ['account_hash'], HASH], ['auth', ['key', 'y'], BYTE]]);
+  await eachForged('revoke_all_grants', 'revoke_all_grants_with_evm_k256', args, 0, [['auth', ['nonce'], WORD], ['auth', ['digest'], DIGEST], ['auth', ['key', 'y'], BYTE]]);
   await lands('revoke_all_grants', 'revoke_all_grants_with_evm_k256', await args(), 0);
 });
 
@@ -296,11 +296,6 @@ await section('the exported pure oracles refuse a flipped hint', async () => {
   for (const [k, needle] of [['x', BYTE], ['y', BYTE], ['key_hash', HASH]] as const) {
     await refused(`evm_address: hint.${k} flipped`, async () => pc.evm_address(E.pk, { ...kh, [k]: f(kh[k]) }), needle);
   }
-  const ah = accountHashHint(address);
-  for (const name of ['eip712_v1_verifying_contract', 'eip712_v1_domain_separator'] as const) {
-    await refused(`${name}: the account-hash hint flipped`, async () => (pc as any)[name](address, f(ah)), HASH);
-  }
-  await refused('eip712_v1_digest: the account-hash hint flipped', async () => pc.eip712_v1_digest(address, rnd(), f(ah)), HASH);
   const label = grantLabel('bank.example');
   await refused('evm_k256_site_label_hash: the label hint flipped', async () => pc.evm_k256_site_label_hash(label, f(bytesHint(label))), BYTE);
   const kIn = evmK256DescriptorInput({ scheme: 'k256', x: E.pk.x, y: E.pk.y, envelope: 0 });

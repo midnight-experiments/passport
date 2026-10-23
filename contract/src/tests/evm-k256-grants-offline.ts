@@ -577,7 +577,7 @@ async function callerMatrix(ownerArm: OwnerArm) {
       : evmK256Messages.withdrawShieldedToContractAsGrantee(frame, color, 5n, recipient, change, enc, { nonce: coin.nonce, value: 10n, mtIndex: 0n }, TEST_SITE);
     const sig = parseEvmSignature(k.wallet.signDigest(typedDataDigest(td)));
     const a: EvmK256GrantAuthorisation = { arm: 'evm_k256', pk: k.pk, blind: k.blind, label: grantLabel('bank.example'), sig: { r: sig.r, s: sig.s },
-      hint: evmK256GrantSeamHint(k.pk, acc.address, typedDataDigest(td), grantLabel('bank.example'), rec.issued_at, rec.nonce),
+      hint: evmK256GrantSeamHint(k.pk, typedDataDigest(td), grantLabel('bank.example'), rec.issued_at, rec.nonce),
       op: evmK256CoinHint(5n, 10n, 0n, TEST_SITE) };
     await expectAbort(`${tag} ${name}: another contract caller refused by the shared gate`,
       () => acc.call(`${name}_with_grant_evm_k256`, [{ bytes: recipient }, color, 5n, change, enc, ...grantAuthArgs(openingOf(sh, s3, g.origin, 0n), a)], contractCaller(wrong)),
