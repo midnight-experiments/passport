@@ -2,7 +2,10 @@
 // (descriptor encoders and strict decoders) and src/wallet/blind.ts (the blind
 // request message and the canonical signature forms).
 //
-//   tags         the client's tag tables equal the module's constants
+//   tags         the client's tag tables equal the module's constants; every
+//                readable table (tags, blind and salt tags, classes, widths,
+//                boot schemes, blind schemes) is read from the registry of
+//                readable arms, and the registry refuses every other value
 //   parsers      EIP-55 addresses, base58 Solana keys with RFC 8032 strict
 //                decoding (identity, small-order, mixed-order, non-canonical
 //                and off-curve points refused) and their Curve25519Point
@@ -65,12 +68,13 @@ import {
   parseSolanaPublicKey, parseK256Descriptor, parseP256Descriptor, parseJubjubPoint, evmDescriptor,
   solDescriptor, checkDescriptor, payloadParts, entryCall, bootCall, grantIdCall, derive, decodeDescriptor,
   describeDescriptor, privacySaltLabel, grantOriginHash, grantLabel, COORDINATE_DISPLAY_ORDER, coordinateHex,
+  READABLE_ARMS, READABLE_SCHEMES, LEGACY_SCHEMES, SALT_TAGS, readableArm, readableDescriptor,
   type Descriptor, type DescriptorRecipe, type DescriptorScheme,
 } from '../wallet/descriptors.js';
 import {
   blindMessage, blindMessageBytes, canonicalEvmSignature, canonicalEd25519Signature,
   sameCanonicalSignature, deriveBlind, blindCall, granteeBlindMessage, granteeBlindMessageBytes,
-  canonicalSignature, type GranteeBlindRequest, type BlindScheme,
+  canonicalSignature, BLIND_SCHEMES, type GranteeBlindRequest, type BlindScheme,
 } from '../wallet/blind.js';
 
 const SEED = 'wallet-arms-base/v1/wallet-arms-client-offline';
@@ -130,7 +134,31 @@ refused('tags', () => padTag('midnight:account:grant:id:evm:v10'), /exceeds 32 b
 for (const t of ['midnight:account:boot:v1', 'midnight:account:boot:k1:v2', 'midnight:account:boot:r1:v2']) {
   refused('tags', () => tagOf(padTag(t)), /unregistered tag/, `upstream's boot tag ${t}`);
 }
-console.log(`  ✓ tags: client tables equal the module's constants (${tally.tags.pass}); ${tally.tags.refused} malformed tags refused`);
+// The registry of readable arms: every readable table and list follows from
+// it, in registry order, and it refuses every other value.
+assert.deepEqual([...DESCRIPTOR_SCHEMES], [...LEGACY_SCHEMES, ...READABLE_SCHEMES]);
+assert.deepEqual([...BOOT_SCHEMES], [...READABLE_SCHEMES]);
+assert.deepEqual([...BLIND_SCHEMES], [...READABLE_SCHEMES]);
+for (const scheme of READABLE_SCHEMES) {
+  const arm = READABLE_ARMS[scheme];
+  assert.equal(readableArm(scheme), arm);
+  assert.equal(DESCRIPTOR_TAGS.device[scheme], arm.tags.device);
+  assert.equal(DESCRIPTOR_TAGS.boot[scheme], arm.tags.boot);
+  assert.equal(DESCRIPTOR_TAGS['grant-id'][scheme], arm.tags['grant-id']);
+  assert.equal(BLIND_TAGS[scheme], arm.tags.blind);
+  assert.equal(SALT_TAGS[scheme], arm.tags.salt);
+  for (const r of RECIPES) {
+    assert.equal(DESCRIPTOR_CLASS[r][scheme], arm.payloadClass, `${scheme}/${r} class`);
+    assert.equal(PAYLOAD_WIDTH[r][scheme], arm.payloadClass === 'w52' ? 52 : 64, `${scheme}/${r} width`);
+  }
+  for (const text of Object.values(arm.tags)) assert.ok(text.endsWith(`:${arm.code}:v1`), `${scheme}: ${text} carries the code ${arm.code}`);
+  ok('tags');
+}
+for (const v of [...LEGACY_SCHEMES, 'zz', 'EVM_K256', 'sol_ed25519 ', 'constructor', '__proto__', 'toString', 'hasOwnProperty', 1, undefined, null]) {
+  assert.equal(readableArm(v), undefined, `readableArm refuses ${String(v)}`);
+  refused('tags', () => readableDescriptor(v as any, new Uint8Array(20).fill(1), new Uint8Array(32).fill(2)), /descriptor: unknown scheme .* in readableDescriptor/, `a readable descriptor of ${String(v)}`);
+}
+console.log(`  ✓ tags: client tables equal the module's constants (${tally.tags.pass}); ${tally.tags.refused} malformed tags and non-readable schemes refused`);
 
 // ── Parsers ──────────────────────────────────────────────────────────────────
 

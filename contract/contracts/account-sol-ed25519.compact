@@ -224,8 +224,8 @@ circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
   frame: SolFrame,
   auth:  SolEd25519Auth,
 ): Bytes<32> {
-  const [key, current, successor] = derive_signer_entries_ed25519(kernel.self(), auth.pk, auth.pk_bytes, auth.pk_x, auth.blind,
-    device_epoch, auth.use_counter);
+  const [key, current, successor] = derive_signer_entries_ed25519(device_tag_sol_ed25519(), kernel.self(), auth.pk, auth.pk_bytes,
+    auth.pk_x, auth.blind, device_epoch, auth.use_counter);
   const text = sol_device_message<t, b, n>(kernel.self(), auth.pk_bytes, auth_nonce, title, body, show, frame);
   const entry = disclose(current);
   assert(devices.member(entry), "unknown device entry");
