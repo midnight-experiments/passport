@@ -632,7 +632,7 @@ module EvmK256 {
   // stored little-endian and shown big-endian), from a checked hint of its bytes.
   // compact row optimization | reversed 32-byte coordinate from a checked hint | -79% rows
   circuit rev32(b: Bytes<32>, h: Vector<32, Uint<8>>): Bytes<32> {
-    const v = evm_k256_reversed(evm_k256_bytes_of(b, h));
+    const v = evm_reversed(evm_bytes_of(b, h));
     return Bytes[...v];
   }
   circuit u8b(v: Uint<8>): Bytes<1> { return v as Bytes<1>; }
@@ -648,8 +648,8 @@ module EvmK256 {
   // bits as a circuit argument, each limb has at most 31 bytes (below the
   // field size, so no wrap-around), and base-256 digits are unique, so no
   // other vector passes. A hint is bound once and the checked vector is the
-  // one used. The 32-byte helpers (evm_k256_bytes_of, evm_k256_reversed,
-  // evm_k256_low20) are the EVM identity module's, which the address needs.
+  // one used. The 32-byte helpers (evm_bytes_of, evm_reversed, evm_low20)
+  // are the EVM identity module's, which the address needs.
 
   // ── Text ──────────────────────────────────────────────────────────────────
 
@@ -669,7 +669,7 @@ module EvmK256 {
   // label's bytes.
   // compact row optimization | site label bytes from a checked hint | -66% rows
   circuit label_text(label: Bytes<32>, h: Vector<32, Uint<8>>): [Bytes<32>, Boolean] {
-    const v = evm_k256_bytes_of(label, h);
+    const v = evm_bytes_of(label, h);
     // [the previous byte was a space (true before the first byte),
     //  the padding has begun, every byte fits]
     const r = fold((s: [Boolean, Boolean, Boolean], c: Uint<8>): [Boolean, Boolean, Boolean] => {
@@ -770,7 +770,7 @@ module EvmK256 {
   // The low 20 bytes of keccak256(account); `account_hash` is a checked hint
   // of the hash's bytes.
   export pure circuit eip712_v1_verifying_contract(account: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<20> {
-    return evm_k256_low20(keccak256<Bytes<32>>(account), account_hash);
+    return evm_low20(keccak256<Bytes<32>>(account), account_hash);
   }
 
   export pure circuit eip712_v1_domain_separator(account: Bytes<32>, account_hash: Vector<32, Uint<8>>): Bytes<32> {

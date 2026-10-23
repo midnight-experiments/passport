@@ -722,9 +722,12 @@ if (SECTIONS.includes('frame')) {
 // the hint refuses it.
 if (SECTIONS.includes('hints')) {
   section('hints');
-  const BYTE_H = 'evm_k256: byte hint does not match its value';
-  const HASH_H = 'evm_k256: hash hint does not match the hash';
-  const DIGEST_H = 'evm_k256: digest hint does not match the digest';
+  // the EVM identity module's 32-byte check (key coordinates, key hash, site
+  // labels) and the codec's own check of a passkey origin's 21 bytes
+  const BYTE_H = 'evm_identity: byte hint does not match its value';
+  const ORIGIN_H = 'evm_k256: byte hint does not match its value';
+  const HASH_H = 'evm_identity: hash hint does not match the hash';
+  const DIGEST_H = 'k256: digest hint does not match the digest';
   const WORD_H = 'evm_k256: word hint does not match its value';
   const A0 = S6_A0!;
   const k = fill(32, 0x48);
@@ -786,7 +789,7 @@ if (SECTIONS.includes('hints')) {
   const pIn = evmK256DescriptorInput({ scheme: 'p256', x: pk.pk.x, y: pk.pk.y, policy: { rpIdHash: fill(32, 0x52), origin: new TextEncoder().encode('https://ab.example.co') } } as Descriptor);
   const addP = [pIn, ...solArgs(pIn), authFor(evmK256Messages.addDevice(frameOf(A0), pIn))];
   await negative('hints', "add_device: a byte of a passkey target's origin", A0, 'add_device_with_evm_k256', F(A0, 'add_device_with_evm_k256', addP, 4, 'op', ['origin'], 3),
-    BYTE_H, [BYTE_H]);
+    ORIGIN_H, [ORIGIN_H]);
   // a grantee and its twin
   const gWallet = new SoftwareEvmWallet(0x4a17en);
   const eg = await EvmK256Grantee.enrol(gWallet, 'undeployed', A0.addressBytes, grantLabel('bank.example'), 0n);
@@ -2210,8 +2213,8 @@ if (SECTIONS.includes('texts')) {
 // recorded as refused through a declared read.
 if (SECTIONS.includes('isolate')) {
   section('isolate');
-  const BYTE_H = 'evm_k256: byte hint does not match its value';
-  const DIGEST_H = 'evm_k256: digest hint does not match the digest';
+  const BYTE_H = 'evm_identity: byte hint does not match its value';
+  const DIGEST_H = 'k256: digest hint does not match the digest';
   const WORD_H = 'evm_k256: word hint does not match its value';
   const ADD = 'add_device_with_evm_k256', REMOVE = 'remove_device_with_evm_k256', ISSUE = 'issue_grant_with_evm_k256', GWU = 'withdraw_unshielded_with_grant_evm_k256';
   const keep = <T extends object>(h: T): T => Object.assign(h, { [KEEP_HINTS]: true });

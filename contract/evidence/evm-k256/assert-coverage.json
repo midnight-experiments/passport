@@ -2040,7 +2040,7 @@
   {
    "file": "contracts/modules/EvmK256.compact",
    "line": 655,
-   "helper": "evm_k256_bytes_of",
+   "helper": "evm_bytes_of",
    "message": "evm_k256: byte hint does not match its value",
    "group": "arm",
    "reachable": true,
@@ -2112,7 +2112,7 @@
   {
    "file": "contracts/modules/EvmK256.compact",
    "line": 669,
-   "helper": "evm_k256_low20",
+   "helper": "evm_low20",
    "message": "evm_k256: hash hint does not match the hash",
    "group": "arm",
    "reachable": true,
