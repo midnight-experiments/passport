@@ -191,6 +191,12 @@ export interface SolSigner {
   /** Keys other connected wallets report: when a signature does not come
    *  from `publicKey`, the refusal names the one it verifies under, if any. */
   others?: () => readonly Uint8Array[];
+  /** Set for a wallet whose formats are judged by what it advertises (a
+   *  wallet-standard wallet outside the named families, which may advertise
+   *  a format it does not honour): a restore without a stored record moves
+   *  past a format the wallet refuses or signs wrongly, instead of stopping
+   *  there. */
+  searchesPastRefusals?: boolean;
 }
 
 /** The formats a signer lists, checked: a non-empty list of distinct formats
@@ -317,24 +323,52 @@ export async function deriveSolBlind(signer: SolSigner, req: SolBlindRequest): P
   return { scheme: 'sol_ed25519', network: req.network, accountIndex: BigInt(req.accountIndex), key, format, blind };
 }
 
+/** A restore's result: the shared rule's, and, for a signer that searches
+ *  past refusals, the formats the wallet refused or signed wrongly. */
+export type SolBlindRestore = BlindRestore & { skipped?: { format: SolFormat; reason: string }[] };
+
+/** blind.ts `restoreBlind` over a signer. For a signer that searches past
+ *  refusals, and only when no record is stored, a format whose derivation
+ *  fails (the wallet refuses, throws, or returns a signature the signer
+ *  check refuses) counts as tried and not found, and the search goes on with
+ *  the next format: the derivation then returns a placeholder that `finds`
+ *  is never asked about, so it never matches. Otherwise a failure is the
+ *  result, as the shared rule has it. */
+async function restoreThrough(signer: SolSigner, stored: StoredBlind | undefined, role: 'device' | 'grantee',
+  derive: (format: SolFormat) => Promise<Uint8Array>, finds: (blind: Uint8Array, format: string) => Promise<boolean>): Promise<SolBlindRestore> {
+  const searchPast = signer.searchesPastRefusals === true && stored === undefined;
+  const skipped: { format: SolFormat; reason: string }[] = [];
+  const r = await restoreBlind({
+    scheme: 'sol_ed25519', role, stored, walletFormats: solSignerFormats(signer),
+    derive: async (format) => {
+      try { return await derive(format as SolFormat); } catch (e: any) {
+        if (!searchPast) throw e;
+        skipped.push({ format: format as SolFormat, reason: String(e?.message ?? e) });
+        return new Uint8Array(32);
+      }
+    },
+    finds: async (blind, format) => (skipped.some((x) => x.format === format) ? false : finds(blind, format)),
+  });
+  return skipped.length > 0 ? { ...r, skipped } : r;
+}
+
 /**
  * Finds a device's blind again (blind.ts `restoreBlind`): the cached blind
  * of `stored`; else the blind derived in the stored format, if this wallet
  * can sign it; else, without a record, the blind derived in every format the
  * wallet can sign, each tested with `finds` (for example solDeviceFinds).
  * Never a format the wallet cannot sign, never another format than the
- * stored one. A failure carries the message to show.
+ * stored one. A failure carries the message to show. A wallet judged by
+ * what it advertises moves past a refused format when nothing is stored
+ * (`skipped`).
  */
-export function restoreSolBlind(signer: SolSigner, req: {
+export async function restoreSolBlind(signer: SolSigner, req: {
   network: string; accountIndex: bigint | number; stored?: StoredBlind; finds: (blind: Uint8Array, format: string) => Promise<boolean>;
-}): Promise<BlindRestore> {
+}): Promise<SolBlindRestore> {
   const key = parseSolanaPublicKey(signer.publicKey);
   solBlindMessage(key, req);
-  return restoreBlind({
-    scheme: 'sol_ed25519', role: 'device', stored: req.stored, walletFormats: solSignerFormats(signer),
-    derive: async (format) => (await deriveSolBlind(signer, { network: req.network, accountIndex: req.accountIndex, format: format as SolFormat })).blind,
-    finds: req.finds,
-  });
+  return restoreThrough(signer, req.stored, 'device',
+    async (format) => (await deriveSolBlind(signer, { network: req.network, accountIndex: req.accountIndex, format })).blind, req.finds);
 }
 
 // ── The device ──────────────────────────────────────────────────────────────
@@ -1054,15 +1088,12 @@ export async function deriveSolGranteeBlind(signer: SolSigner, req: SolGranteeBl
 /** Finds a grantee blind again, as restoreSolBlind does for a device: the
  *  cache, the stored format, or every format the wallet can sign, tested
  *  with `finds` (for example whether the grant id is live). */
-export function restoreSolGranteeBlind(signer: SolSigner, req: {
+export async function restoreSolGranteeBlind(signer: SolSigner, req: {
   network: string; issuingAccount: Uint8Array; stored?: StoredBlind; finds: (blind: Uint8Array, format: string) => Promise<boolean>;
-}): Promise<BlindRestore> {
+}): Promise<SolBlindRestore> {
   solGranteeBlindMessage(signer.publicKey, req);
-  return restoreBlind({
-    scheme: 'sol_ed25519', role: 'grantee', stored: req.stored, walletFormats: solSignerFormats(signer),
-    derive: async (format) => (await deriveSolGranteeBlind(signer, { network: req.network, issuingAccount: req.issuingAccount, format: format as SolFormat })).blind,
-    finds: req.finds,
-  });
+  return restoreThrough(signer, req.stored, 'grantee',
+    async (format) => (await deriveSolGranteeBlind(signer, { network: req.network, issuingAccount: req.issuingAccount, format })).blind, req.finds);
 }
 
 export class SolEd25519Grantee {

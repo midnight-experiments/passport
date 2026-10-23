@@ -26,6 +26,13 @@
 //   4. Restore: the cache; the stored format; every format the wallet can
 //      sign when nothing is stored, with the messages of a device enrolled
 //      through another format, for both roles.
+//   5. The format probe of a wallet-standard wallet outside the named
+//      families: raw first, then off-chain, each signature checked by the
+//      signer check; the prompts counted; a wallet that passes neither
+//      refused before anything is derived; the named families never probed;
+//      a probe text and its signature refused as an approval and as a blind
+//      request, never stored; a restore without a record moving past a
+//      refused format.
 //
 // Writes $EVIDENCE_DIR/sol-ed25519-client-offline.json when EVIDENCE_DIR is set.
 
@@ -47,9 +54,10 @@ import {
   type SolFormat,
 } from '../wallet/sol-ed25519-message.js';
 import {
-  SOL_SIGN_MESSAGE_FEATURE, SOL_SIGN_OFFCHAIN_MESSAGE_FEATURE, solHardwareSigner, solStandardSigner, solWalletFamily, solWalletFormats,
-  type SolStandardWallet,
+  SOL_FORMAT_PROBE_FIRST_LINE, SOL_SIGN_MESSAGE_FEATURE, SOL_SIGN_OFFCHAIN_MESSAGE_FEATURE, probeSolWalletFormats, solEnrolmentSigner, solFormatProbeBytes,
+  solFormatProbeText, solHardwareSigner, solStandardSigner, solWalletFamily, solWalletFormats, type SolStandardWallet,
 } from '../wallet/sol-ed25519-wallet.js';
+import { SOL_FIRST_LINE, assertSolText, solSignedMessage as solApprovalBytes } from '../wallet/sol-ed25519-message.js';
 import { READABLE_ARMS } from '../wallet/descriptors.js';
 
 // ── tiny harness (fail-closed: every case must PASS) ─────────────────────────
@@ -92,14 +100,25 @@ const NETWORK = 'undeployed';
 
 // ── mocked wallets ──────────────────────────────────────────────────────────
 
-interface Call { method: 'signMessage' | 'signOffchainMessage' | 'device'; bytes: Uint8Array }
+interface Call { method: 'signMessage' | 'signOffchainMessage' | 'device'; bytes: Uint8Array; signature?: Uint8Array }
+/** How a mocked wallet answers a request in one format: honestly; by
+ *  refusing (it throws); with the signature of another key; or with a
+ *  signature over other bytes. */
+type Mode = 'ok' | 'refuse' | 'other-key' | 'other-bytes';
+const FOREIGN = seedOf('a key the wallet does not report');
+const answerOf = (mode: Mode, bytes: Uint8Array, seed: Uint8Array): Uint8Array => {
+  if (mode === 'refuse') throw new Error('mock wallet: the user rejected the request');
+  if (mode === 'other-key') return ed25519.sign(bytes, FOREIGN);
+  if (mode === 'other-bytes') return ed25519.sign(cat(bytes, Uint8Array.of(0x20)), seed);
+  return ed25519.sign(bytes, seed);
+};
 /** A wallet-standard wallet over a software key, recording every request.
  *  `answer` signs instead of the account's key (a wallet that answers with
  *  another key than the one it reports); `offchain` is the advertised
  *  off-chain feature's message versions (absent: no feature); `envelope`
  *  'other' makes the wallet report another off-chain message than the one
  *  asked. */
-function standardWallet(o: { name: string; seed: Uint8Array; offchain?: number[]; signMessage?: boolean; answer?: Uint8Array; envelope?: 'same' | 'other'; signed?: 'same' | 'other' }) {
+function standardWallet(o: { name: string; seed: Uint8Array; offchain?: number[]; signMessage?: boolean; answer?: Uint8Array; envelope?: 'same' | 'other'; signed?: 'same' | 'other'; raw?: Mode; off?: Mode }) {
   const calls: Call[] = [];
   const publicKey = keyOf(o.seed);
   const account = { address: base58Encode(publicKey), publicKey };
@@ -109,9 +128,11 @@ function standardWallet(o: { name: string; seed: Uint8Array; offchain?: number[]
     features[SOL_SIGN_MESSAGE_FEATURE] = {
       version: '1.0.0',
       signMessage: async (...inputs: { account: unknown; message: Uint8Array }[]) => inputs.map(({ message }) => {
-        calls.push({ method: 'signMessage', bytes: new Uint8Array(message) });
+        const call: Call = { method: 'signMessage', bytes: new Uint8Array(message) };
+        calls.push(call);
         const signedMessage = o.signed === 'other' ? cat(message, Uint8Array.of(0x20)) : new Uint8Array(message);
-        return { signedMessage, signature: ed25519.sign(message, signWith) };
+        call.signature = answerOf(o.raw ?? 'ok', message, signWith);
+        return { signedMessage, signature: call.signature };
       }),
     };
   }
@@ -122,8 +143,10 @@ function standardWallet(o: { name: string; seed: Uint8Array; offchain?: number[]
         // the wallet builds the v1 envelope of the text for the required signer
         if (i.messageVersion !== 1 || typeof i.message !== 'string') throw new Error('mock: unsupported request');
         const env = cat(solMessageHead('offchain', i.requiredSigners[0]), enc.encode(i.message));
-        calls.push({ method: 'signOffchainMessage', bytes: env });
-        return { signedOffchainMessage: o.envelope === 'other' ? cat(env, Uint8Array.of(0x20)) : env, signature: ed25519.sign(env, signWith) };
+        const call: Call = { method: 'signOffchainMessage', bytes: env };
+        calls.push(call);
+        call.signature = answerOf(o.off ?? 'ok', env, signWith);
+        return { signedOffchainMessage: o.envelope === 'other' ? cat(env, Uint8Array.of(0x20)) : env, signature: call.signature };
       }),
     };
   }
@@ -190,6 +213,7 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
     ['Solflare whose feature lacks version 1', { family: 'solflare', features: { ...sm, ...off([0]) } }, ['raw']],
     ['another wallet with signMessage only', { family: 'other', features: sm }, ['raw']],
     ['another wallet with the off-chain feature only', { family: 'other', features: off([1]) }, ['offchain']],
+    ['another wallet with both features: what it advertises, raw first (its enrolment format is probed)', { family: 'other', features: { ...sm, ...off([1]) } }, ['raw', 'offchain']],
     ['another wallet with neither', { family: 'other', features: {} }, []],
     ['Ledger', { family: 'ledger' }, ['offchain']],
     ['Trezor', { family: 'trezor' }, ['offchain']],
@@ -458,6 +482,153 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
   const g3 = await restoreSolGranteeBlind(ledger.signer, { network: NETWORK, issuingAccount: issuing, stored: { format: 'raw' }, finds: gfinds });
   ok(G, "grantee on the Ledger with the stored record: the format needed named", g3.ok === false && g3.reason === 'format-unavailable'
     && /^This grant's privacy key was derived in the raw format, which this wallet cannot sign/.test(g3.message));
+}
+
+// ── 5. The format probe of other wallet-standard wallets (Q: raw, then off-chain) ─
+{
+  const G = '5 the format probe';
+  const s = seedOf('probe'), K = keyOf(s);
+  const req = { network: NETWORK, accountIndex: 0 };
+  const other = (o: { raw?: Mode; off?: Mode; offchain?: number[]; signMessage?: boolean }) => standardWallet({ name: 'Some Wallet', seed: s, ...o });
+  const nonces: Uint8Array[] = [];
+  const nonce = () => { const n = rnd(32); nonces.push(n); return n; };
+  // 1. raw works: raw after exactly one prompt
+  {
+    const w = other({ offchain: [1] });
+    const p = await probeSolWalletFormats(w.wallet, w.account, { nonce });
+    ok(G, 'raw works: raw chosen after exactly one prompt (signMessage of the raw head and the probe text)', p.probed && p.format === 'raw' && methods(w.calls) === 'signMessage'
+      && eq(w.calls[0].bytes, solFormatProbeBytes('raw', K, solFormatProbeText(K, nonces[nonces.length - 1]))), methods(w.calls));
+    const signer = await solEnrolmentSigner(w.wallet, w.account, { nonce });
+    const rec = await deriveSolBlind(signer, req);
+    ok(G, '... the enrolment signer lists raw first and the blind is the raw blind, asked afresh (probe, then two blind requests)',
+      JSON.stringify(signer.formats) === '["raw","offchain"]' && rec.format === 'raw' && methods(w.calls.slice(1)) === 'signMessage,signMessage,signMessage'
+      && eq(rec.blind, (await deriveSolBlind(solSoftwareSigner(s), { ...req, format: 'raw' })).blind));
+  }
+  // 2. raw refused, off-chain works: off-chain after two prompts
+  {
+    const w = other({ offchain: [1], raw: 'refuse' });
+    const p = await probeSolWalletFormats(w.wallet, w.account, { nonce });
+    ok(G, 'raw refused, off-chain works: off-chain chosen after two prompts (raw, then the feature)', p.format === 'offchain' && methods(w.calls) === 'signMessage,signOffchainMessage'
+      && p.attempts.map((a) => `${a.format}:${a.outcome}`).join(',') === 'raw:refused,offchain:verified', JSON.stringify(p.attempts));
+    ok(G, '... the same probe text in both formats, the off-chain one through the feature as the v1 head and the text',
+      eq(w.calls[1].bytes, solFormatProbeBytes('offchain', K, w.calls[0].bytes.subarray(SOL_HEAD_LENGTH))));
+    const n = w.calls.length;
+    const signer = await solEnrolmentSigner(w.wallet, w.account, { nonce });
+    const rec = await deriveSolBlind(signer, req);
+    ok(G, '... the enrolment signer drops raw; enrolment is off-chain, never asking raw again after the probe', JSON.stringify(signer.formats) === '["offchain"]' && rec.format === 'offchain'
+      && methods(w.calls.slice(n)) === 'signMessage,signOffchainMessage,signOffchainMessage,signOffchainMessage', methods(w.calls.slice(n)));
+    await refused(G, '... and a raw request through it is refused before the wallet is asked', /cannot sign the raw format/, () => deriveSolBlind(signer, { ...req, format: 'raw' }));
+  }
+  // 3. raw signed by another key, or over other bytes: off-chain
+  for (const mode of ['other-key', 'other-bytes'] as const) {
+    const w = other({ offchain: [1], raw: mode });
+    const named = await probeSolWalletFormats(w.wallet, w.account, { nonce, others: () => [keyOf(FOREIGN)] });
+    const plain = await probeSolWalletFormats(w.wallet, w.account, { nonce });
+    const r0 = named.attempts[0], r1 = plain.attempts[0];
+    const namesForeign = (m?: string) => !!m && m.includes(base58Encode(keyOf(FOREIGN)));
+    ok(G, `raw answered ${mode === 'other-key' ? "with another key's signature" : 'with a signature over other bytes'}: refused by the signer check, off-chain chosen`,
+      named.format === 'offchain' && plain.format === 'offchain' && r0.outcome === 'wrong-signature' && r1.outcome === 'wrong-signature', JSON.stringify(named.attempts));
+    ok(G, `... the refusal names the other key only when the signature verifies under it (${mode === 'other-key' ? 'it does, and it is connected' : 'it does not'})`,
+      mode === 'other-key' ? namesForeign(r0.reason) && /signer is unknown/.test(r1.reason ?? '') && !namesForeign(r1.reason)
+        : /signer is unknown/.test(r0.reason ?? '') && !namesForeign(r0.reason), `${r0.reason} | ${r1.reason}`);
+  }
+  // 4. off-chain only: no raw prompt
+  {
+    const w = other({ offchain: [1], signMessage: false });
+    const p = await probeSolWalletFormats(w.wallet, w.account, { nonce });
+    ok(G, 'a wallet that offers only the off-chain feature: no raw prompt, off-chain chosen', p.format === 'offchain' && methods(w.calls) === 'signOffchainMessage');
+  }
+  // 5. raw only, and raw fails: refused, nothing derived
+  for (const mode of ['refuse', 'other-key', 'other-bytes'] as const) {
+    const w = other({ raw: mode });
+    let err: any;
+    try { await solEnrolmentSigner(w.wallet, w.account, { nonce }); } catch (e) { err = e; }
+    ok(G, `a wallet that offers only raw, raw ${mode}: refused with the probe's outcome after one prompt, nothing derived`,
+      /signed no probe correctly \(raw: (refused|wrong-signature)\); it cannot enrol/.test(String(err?.message)) && methods(w.calls) === 'signMessage', String(err?.message ?? err));
+  }
+  // 6. neither advertised: nothing asked
+  {
+    const w = other({ signMessage: false });
+    const p = await probeSolWalletFormats(w.wallet, w.account, { nonce });
+    let err: any;
+    try { await solEnrolmentSigner(w.wallet, w.account, { nonce }); } catch (e) { err = e; }
+    ok(G, 'a wallet that advertises neither format: nothing asked, refused', p.format === undefined && p.attempts.length === 0 && w.calls.length === 0
+      && /offers neither raw message signing nor the off-chain message v1/.test(String(err?.message)));
+  }
+  // 7. the named families are never probed
+  for (const name of ['Phantom', 'Backpack', 'Solflare']) {
+    const w = standardWallet({ name, seed: s, offchain: [1] });
+    const p = await probeSolWalletFormats(w.wallet, w.account, { nonce });
+    const signer = await solEnrolmentSigner(w.wallet, w.account, { nonce });
+    ok(G, `${name} is never probed: no request, the family's rule (${JSON.stringify(signer.formats)})`, p.probed === false && w.calls.length === 0
+      && JSON.stringify(signer.formats) === JSON.stringify(solWalletFormats({ family: solWalletFamily(name), features: w.wallet.features })) && signer.searchesPastRefusals !== true);
+  }
+  // 8. the probe text: fresh, domain-separated, refused as an approval and as a blind request
+  {
+    const t1 = solFormatProbeText(K, rnd(32)), t2 = solFormatProbeText(K, rnd(32));
+    const first = dec.decode(t1).split('\n')[0];
+    ok(G, 'every probe has a fresh nonce, so its bytes are new', !eq(t1, t2) && dec.decode(t1).split('\n')[0] === dec.decode(t2).split('\n')[0]);
+    const wn = other({});
+    await probeSolWalletFormats(wn.wallet, wn.account); await probeSolWalletFormats(wn.wallet, wn.account);
+    ok(G, 'two probes of one wallet (their own random nonces) ask for different bytes', wn.calls.length === 2 && !eq(wn.calls[0].bytes, wn.calls[1].bytes)
+      && /\nNonce: [0-9a-f]{64}\n/.test(dec.decode(wn.calls[0].bytes)));
+    ok(G, 'its first line differs from the approval\'s and both blind requests\'', first === SOL_FORMAT_PROBE_FIRST_LINE && (SOL_FIRST_LINE as string) !== first
+      && !dec.decode(blindMessageBytes({ scheme: 'sol_ed25519', network: NETWORK, identity: K, accountIndex: 0 })).startsWith(first)
+      && !dec.decode(granteeBlindMessageBytes({ scheme: 'sol_ed25519', network: NETWORK, identity: K, issuingAccount: seedOf('i') })).startsWith(first));
+    const raw = solFormatProbeBytes('raw', K, t1);
+    ok(G, 'its raw bytes start "Midn", are printable and stay below the parse bound', dec.decode(raw.subarray(0, 4)) === 'Midn' && raw.length < SOL_PARSE_BOUND && /^[\x20-\x7e\n]*$/.test(dec.decode(raw)));
+    await refused(G, 'the approval check refuses a probe text', /does not start with the format line/, () => assertSolText(t1));
+    await refused(G, 'no approval message is built from a probe text (either format)', /does not start with the format line/, () => solApprovalBytes('offchain', K, t1));
+    await refused(G, 'the blind-request check refuses a probe text', /not a blind request/, () => assertSolBlindRequest(t1));
+    await refused(G, 'no blind request is built from a probe text (either format)', /not a blind request/, () => solBlindSignedMessage('raw', K, t1));
+    // its signature: refused as an approval's and as a blind request's
+    const w = other({ offchain: [1] });
+    await probeSolWalletFormats(w.wallet, w.account, { nonce });
+    const probeSig = w.calls[0].signature!;
+    const replay: SolSigner = { publicKey: K, formats: SOL_FORMATS, sign: () => probeSig };
+    const blind = (await deriveSolBlind(solSoftwareSigner(s), req)).blind;
+    await mismatch(G, "the probe signature replayed for an approval is refused before proving", undefined,
+      () => authoriseSolDevice(new SolEd25519Device({ publicKey: K, blind, signer: replay }), { contractAddress: seedOf('acct'), authNonce: 1n }, SITE, { op: 'rotate_enc_key', newKey: seedOf('k') }, 0n));
+    await mismatch(G, 'the probe signature replayed for a device blind request is refused', undefined, () => deriveSolBlind(replay, req));
+    await mismatch(G, 'the probe signature replayed for a grantee blind request is refused', undefined, () => deriveSolGranteeBlind(replay, { network: NETWORK, issuingAccount: seedOf('i') }));
+    // never stored: nothing the probe or the enrolment signer returns holds the probe signature
+    const w2 = other({ offchain: [1], raw: 'refuse' });
+    const p2 = await probeSolWalletFormats(w2.wallet, w2.account, { nonce });
+    const signer2 = await solEnrolmentSigner(w2.wallet, w2.account, { nonce });
+    const probeSigs = w2.calls.filter((c) => c.signature).map((c) => hex(c.signature!));
+    const n2 = w2.calls.length;
+    const rec2 = await deriveSolBlind(signer2, req);
+    const seen = JSON.stringify({ p2, signer2: { ...signer2, sign: undefined }, rec2 }, (_k, v) => (v instanceof Uint8Array ? hex(v) : typeof v === 'bigint' ? v.toString() : v));
+    ok(G, 'the probe signatures are dropped: no probe result, signer or record holds one, and the blind is not derived from one',
+      probeSigs.length >= 1 && probeSigs.every((x) => !seen.includes(x)) && probeSigs.every((x) => hex(sha256(cat(BLIND_TAG, Uint8Array.from(Buffer.from(x, 'hex'))))) !== hex(rec2.blind))
+      && w2.calls.length === n2 + 2, `${probeSigs.length} probe signatures`);
+  }
+  // 9. restore without a record moves past a refused format
+  {
+    const acct = seedOf('probe account');
+    const offRec = await deriveSolBlind(solSoftwareSigner(s), { ...req, format: 'offchain' });
+    const { surface } = accountSurface(acct, [new SolEd25519Device({ publicKey: K, blind: offRec.blind }).entryAt(acct, 0n, 0n)]);
+    const finds = solDeviceFinds(surface, K, 4n);
+    for (const mode of ['refuse', 'other-key', 'other-bytes'] as const) {
+      const w = other({ offchain: [1], raw: mode });
+      let r: Awaited<ReturnType<typeof restoreSolBlind>>, err: any;
+      try { r = await restoreSolBlind(solStandardSigner(w.wallet, w.account), { ...req, finds }); } catch (e) { err = e; }
+      if (r === undefined) { ok(G, `restore without a record, raw ${mode}: moves past raw (skipped) and finds the off-chain device`, false, `stopped: ${String(err?.message ?? err)}`); continue; }
+      ok(G, `restore without a record, raw ${mode}: moves past raw (skipped) and finds the off-chain device`, r.ok === true && r.source === 'search' && r.matches.length === 1
+        && r.matches[0].format === 'offchain' && eq(r.matches[0].blind, offRec.blind) && r.skipped?.length === 1 && r.skipped[0].format === 'raw'
+        && methods(w.calls).startsWith('signMessage') && methods(w.calls).endsWith('signOffchainMessage,signOffchainMessage'), r.ok === true ? JSON.stringify(r.skipped) : r.message);
+    }
+    const w = other({ offchain: [1], raw: 'refuse' });
+    await refused(G, 'with a stored raw record, only raw is used: the refusal is the result', /rejected the request/, () => restoreSolBlind(solStandardSigner(w.wallet, w.account), { ...req, stored: { format: 'raw' }, finds }));
+    ok(G, '... and off-chain was not asked', methods(w.calls) === 'signMessage');
+    const named = standardWallet({ name: 'Backpack', seed: s, offchain: [1], raw: 'refuse' });
+    await refused(G, 'a named family is not searched past: its refusal stops the restore, as the shared rule has it', /rejected the request/, () => restoreSolBlind(solStandardSigner(named.wallet, named.account), { ...req, finds }));
+    const none = other({ offchain: [1], raw: 'refuse', off: 'refuse' });
+    let r: Awaited<ReturnType<typeof restoreSolBlind>>, err: any;
+    try { r = await restoreSolBlind(solStandardSigner(none.wallet, none.account), { ...req, finds }); } catch (e) { err = e; }
+    ok(G, 'both formats refused: not found, both named as skipped, no blind', r !== undefined && r.ok === false && r.reason === 'not-found'
+      && (r as any).skipped?.map((x: any) => x.format).join(',') === 'raw,offchain', r === undefined ? `stopped: ${String(err?.message ?? err)}` : undefined);
+  }
 }
 
 // ── report ───────────────────────────────────────────────────────────────────
