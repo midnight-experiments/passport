@@ -199,9 +199,10 @@ struct SolEd25519Auth {
 }
 
 // The seam owns everything that identifies the signer and the call's
-// freshness: it derives the 32-byte key (and the current and next
-// entries, from one encoding: the module's derive_signer_entries_ed25519,
-// which asserts A != O) from the point the signature is verified under, and renders the message's common frame itself — the
+// freshness: it derives the 32-byte key (and the current and next entries,
+// from one encoding: the module's derive_signer_entries_ed25519 under this
+// arm's device tag, which asserts A != O) from the point the signature is
+// verified under, and renders the message's common frame itself — the
 // first line, the account (kernel.self()), the signing key, and the
 // auth_nonce line — around the title and body the gated circuit supplies. No
 // gated circuit passes a key, an account, a nonce or a frame of its own.
@@ -224,13 +225,13 @@ circuit require_authorised_with_sol_ed25519<#t, #b, #n>(
   frame: SolFrame,
   auth:  SolEd25519Auth,
 ): Bytes<32> {
-  const [key, current, successor] = derive_signer_entries_ed25519(kernel.self(), auth.pk, auth.pk_bytes, auth.pk_x, auth.blind,
-    device_epoch, auth.use_counter);
+  const [key, current, successor] = derive_signer_entries_ed25519(device_tag_sol_ed25519(), kernel.self(), auth.pk, auth.pk_bytes,
+    auth.pk_x, auth.blind, device_epoch, auth.use_counter);
   const text = sol_device_message<t, b, n>(kernel.self(), auth.pk_bytes, auth_nonce, title, body, show, frame);
   const entry = disclose(current);
   assert(devices.member(entry), "unknown device entry");
   const message = solana_signed_message<n>(auth.offchain, key, text);
-  assert(ed25519_verify<[Bytes<18>, Bytes<32>, Bytes<n>]>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
+  assert(ed25519_verify<SolanaSignedMessage<n>>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid signature");
   devices.remove(entry);
   const next = disclose(successor);
   devices.insert(next);
@@ -351,16 +352,16 @@ export circuit withdraw_shielded_to_contract_with_sol_ed25519(
 
 // ── Device lifecycle (MIP-0013 §6) ──────────────────────────────────────────
 //
-// The other key is a readable DESCRIPTOR: the target
-// scheme's registered tag and its key payload (an EVM target by its address
-// and privacy salt, a Solana target by its 32-byte key and privacy salt, a
-// k256 target by x, y and envelope, a passkey by x, y, its exact origin and
-// the RP hash, a JubJub target by its point). The message shows exactly those
-// values (coordinates in COORDINATE_DISPLAY_ORDER), and the circuit derives the
-// target's entry from them with the target scheme's own recipe
-// (modules/WalletArmDescriptors, by payload-width class). An unregistered tag
-// is refused, so a descriptor never enrols an
-// entry that no arm recognises by its tag.
+// The other key is a readable DESCRIPTOR: the registered device tag of the
+// target's kind and its key payload (an EVM target by its address and privacy
+// salt, a Solana target by its 32-byte key and privacy salt, a k256 target by
+// x, y and envelope, a passkey by x, y, its exact origin and the RP hash, a
+// JubJub target by its point). The message shows exactly those values
+// (coordinates in COORDINATE_DISPLAY_ORDER), and the circuit derives the
+// target's entry from them with the recipe of the kind's key class
+// (sol_kinds(); modules/WalletArmDescriptors). An unregistered tag is
+// refused, so a descriptor never enrols an entry that no arm recognises by
+// its tag.
 
 // add_device derives at the CURRENT device_epoch and counter 0, never at a
 // caller-chosen epoch or counter: this arm cannot plant an entry at
@@ -427,11 +428,11 @@ export circuit remove_device_with_sol_ed25519(
 //
 // The device issues, revokes and revokes all grants through the device seam
 // (over auth_nonce). The grantee is shown by its readable descriptor: its
-// scheme's key (a Solana grantee as a point), the site label (or, for a
-// k256 or JubJub grantee, the labelled origin hash; for a passkey, its exact
-// origin) and the slot; the circuit derives the
-// grant id from exactly those values with the grantee scheme's own grant-id
-// recipe. Every scope field is shown, the caller pin included (#176). The
+// kind's key (an ed25519-class grantee as a point), the site label (or, for
+// a k256 or JubJub grantee, the labelled origin hash; for a passkey, its
+// exact origin) and the slot; the circuit derives the grant id from exactly
+// those values with the grant-id recipe of the kind's key class
+// (sol_kinds()). Every scope field is shown, the caller pin included (#176). The
 // issue rules themselves are upstream's shared chip's.
 //
 // The delegate's read key is shown itself; the record stores its hash (the
@@ -476,14 +477,14 @@ export circuit issue_grant_with_sol_ed25519(
 ): [] {
   assert(read || read_pk == pad(32, ""), "sol_ed25519: a read key without read");
   assert(read_pk != pad(32, "") || !read, "sol_ed25519: read without a read key");
-  const cls = sol_grantee_class(grantee.tag);
-  assert(cls == 4 || rp_id_hash == pad(32, ""), "sol_ed25519: an RP hash belongs to a passkey grantee");
+  const c = sol_grantee_kind(grantee.tag).key_class;
+  assert(c == SolClass.passkey || rp_id_hash == pad(32, ""), "sol_ed25519: an RP hash belongs to a passkey grantee");
   // The RP hash is non-zero exactly when the grantee is a passkey AND the
   // scope can spend: upstream checks a grant's RP pin only
   // on the passkey spend path, so a read-only grant carries none and shows
   // "not applicable", and a spending passkey grant shows its real hash.
   const spends = op_withdraw_unshielded || op_withdraw_shielded || op_withdraw_shielded_to_contract;
-  assert(cls != 4 || !spends || rp_id_hash != pad(32, ""), "sol_ed25519: a passkey grantee's RP hash is zero");
+  assert(c != SolClass.passkey || !spends || rp_id_hash != pad(32, ""), "sol_ed25519: a passkey grantee's RP hash is zero");
   assert(spends || rp_id_hash == pad(32, ""), "sol_ed25519: a read-only grant carries no RP hash");
   // Any recipient (kind 0) carries no recipient: the wallet
   // never shows a recipient that nothing enforces.
@@ -495,7 +496,7 @@ export circuit issue_grant_with_sol_ed25519(
     sol_body_issue_grant(grantee, grantee_pk.pk_bytes, op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color,
       recipient_kind, recipient, max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read_pk, window_len, window_cap,
       caller, gs, ss, hex), show, frame, auth);
-  do_issue_grant(sol_grantee_id(grantee, grantee_pk, cls, self_addr, sol_grantee_origin_hash(grantee, cls)),
+  do_issue_grant(sol_grantee_id(grantee, grantee_pk, c, self_addr, sol_grantee_origin_hash(grantee, c)),
     op_withdraw_unshielded, op_withdraw_shielded, op_withdraw_shielded_to_contract, read, color, recipient_kind, recipient,
     max_coin_value, per_call_cap, cap, expires_at, rp_id_hash, read ? persistentHash<Bytes<32>>(read_pk) : pad(32, ""),
     window_len, window_cap, caller, scope_salt);
@@ -512,9 +513,9 @@ export circuit revoke_grant_with_sol_ed25519(
   auth:       SolEd25519Auth,
 ): [] {
   require_authorised_with_sol_ed25519<33, 427, 730>(sol_title_revoke_grant(), sol_body_revoke_grant(grantee, grantee_pk.pk_bytes, gs, hex), show, frame, auth);
-  const cls = sol_grantee_class(grantee.tag);
+  const c = sol_grantee_kind(grantee.tag).key_class;
   const self_addr = kernel.self();
-  do_revoke_grant(sol_grantee_id(grantee, grantee_pk, cls, self_addr, sol_grantee_origin_hash(grantee, cls)));
+  do_revoke_grant(sol_grantee_id(grantee, grantee_pk, c, self_addr, sol_grantee_origin_hash(grantee, c)));
 }
 
 export circuit revoke_all_grants_with_sol_ed25519(
@@ -645,7 +646,7 @@ circuit require_grant_with_sol_ed25519<#t, #b, #n>(
     max_coin_value, amount, spent_prev, op, recipient_bytes);
   const text = sol_grantee_message<t, b, n>(self_addr, auth.pk_bytes, auth.label, slot, gr.issued_at, gr.nonce, title, body, show, g, frame);
   const message = solana_signed_message<n>(auth.offchain, key, text);
-  assert(ed25519_verify<[Bytes<18>, Bytes<32>, Bytes<n>]>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
+  assert(ed25519_verify<SolanaSignedMessage<n>>(message, auth.sig, auth.pk, key, auth.r_bytes, auth.r_x), "invalid grant signature");
   grants.insert(id, GrantRecord {
     epoch:        gr.epoch,
     gen:          gr.gen,
@@ -875,17 +876,14 @@ export struct SolCoinShow {
 }
 
 // A readable target (add_device, remove_device): the registered device tag
-// and the key payload of its width class.
-//   w52  evm_k256     address (20), a = blind
-//   w64  jubjub       a = x_le, b = y_le         sol_ed25519  pk, a = key, b = blind
-//   w65  k256         a = x_le, b = y_le, envelope
-//   w117 p256         a = x_le, b = y_le, c = rp_id_hash, origin (21)
-// A Solana target is also a POINT with its checked byte inputs (SolKey),
-// passed beside the struct to the gated circuits: `a` must be its 32-byte
-// encoding, checked in-circuit with A != O by the same function the seam uses
-// for the signing key, so the key enrolled is a key that can sign; any other
-// class passes the identity with zero bytes. Fields a class does not use must
-// be zero, so each target has one encoding.
+// of its kind and the key payload of the kind's key class (SolClass, which
+// lists the fields each class uses). An ed25519-class target is also a
+// POINT with its checked byte inputs (SolKey), passed beside the struct to
+// the gated circuits: `a` must be its 32-byte encoding, checked in-circuit
+// with A != O by the same function the seam uses for the signing key, so the
+// key enrolled is a key that can sign; any other class passes the identity
+// with zero bytes. Fields a class does not use must be zero, so each target
+// has one encoding.
 export struct SolTarget {
   tag:      Bytes<32>;
   address:  Bytes<20>;
@@ -896,8 +894,8 @@ export struct SolTarget {
   envelope: Uint<8>;
 }
 
-// A Solana target's or grantee's key as the gated circuits take it: the
-// point, the key's 32-byte RFC 8032 encoding and its x-coordinate
+// An ed25519-class target's or grantee's key as the gated circuits take it:
+// the point, the key's 32-byte RFC 8032 encoding and its x-coordinate
 // little-endian, both byte vectors checked against the point by the Ed25519
 // core's checked encoding. Any other class passes the identity and zero
 // bytes. Internal, as SolEd25519Auth: the generated JavaScript takes it as one
@@ -910,8 +908,8 @@ struct SolKey {
 
 // A target's display inputs: the digits of the removal's use counter and
 // epoch, the characters of a passkey origin, and the base58 digits and
-// read-back hints of a Solana target's key (those of 32 zero bytes for every
-// other class). (A k256 envelope is shown as a circuit-fixed label.)
+// read-back hints of an ed25519-class target's key (those of 32 zero bytes
+// for every other class). (A k256 envelope is shown as a circuit-fixed label.)
 export struct SolTargetShow {
   counter:  Vector<20, Uint<8>>;
   epoch:    Vector<10, Uint<8>>;
@@ -919,12 +917,12 @@ export struct SolTargetShow {
   key:      SolBase58;
 }
 
-// A grantee (issue_grant, revoke_grant): its scheme's grant-id recipe binds
-// (key, origin_hash, slot). Classes: 0 evm_k256 (w52), 1 jubjub (w64),
-// 2 sol_ed25519 (w64; with its point, as a target), 3 k256 (w65), 4 p256 (w64, key
-// only; its RP is a scope field). origin_hash: a readable grantee's 32-byte
-// label (shown as text), a passkey's 21-byte origin (shown as text), or, for
-// k256/jubjub grantees, the labelled hash itself.
+// A grantee (issue_grant, revoke_grant): the grant-id recipe of its kind's
+// key class binds (key, origin_hash, slot); an ed25519-class grantee is also
+// a point, as a target is, and a passkey grantee binds its key only (its RP
+// is a scope field). origin_hash: a readable grantee's 32-byte label (shown
+// as text), a passkey's 21-byte origin (shown as text), or, for k256 and
+// JubJub grantees, the labelled hash itself.
 export struct SolGrantee {
   tag:         Bytes<32>;
   address:     Bytes<20>;
@@ -939,7 +937,8 @@ export struct SolGrantee {
 
 // A grantee's display inputs: the digits of its slot, the characters of its
 // label and of a passkey origin, and the base58 digits and read-back hints of
-// a Solana grantee's key (those of 32 zero bytes for every other class).
+// an ed25519-class grantee's key (those of 32 zero bytes for every other
+// class).
 export struct SolGranteeShow {
   slot:     Vector<3, Uint<8>>;
   label:    Vector<32, Uint<8>>;
@@ -1006,109 +1005,190 @@ circuit sol_chars32(b: Bytes<32>, v: Vector<32, Uint<8>>): Vector<32, Uint<8>> {
   return v;
 }
 
-// ── Readable targets: classes and derivations ───────────────────────────────
+// ── Enrolment kinds: the keys this arm enrols and grants to ─────────────────
 //
-// One circuit per operation derives the target's entry (or grant id) by the
-// class its tag registers. The tag is shown as its registered text,
-// which the class selects; an unregistered tag is refused.
+// add_device and remove_device take a TARGET device, and issue_grant and
+// revoke_grant a GRANTEE, as a readable descriptor whose tag names its KIND.
+// sol_kinds() lists the kinds, one entry each: the kind's device tag, its
+// grant-id tag and the class of its key. The class selects the descriptor
+// fields the kind uses and the derivation circuit of
+// modules/WalletArmDescriptors that derives its entry or grant id; the tag is
+// shown as its own text. A tag that no entry lists is refused. Each kind also
+// has its key lines, one row per kind in sol_kinds() order: in the device
+// block (sol_device_block) and in the grantee block (sol_grantee_block).
+//
+// A kind of an existing class is added as its entry in sol_kinds(), its row
+// in each of the two blocks and the count in SolKinds, which types every
+// per-kind list, so a block without the new kind's row does not compile. The
+// descriptor module admits a readable kind's tags once its arm is registered
+// there (readable_arms()). The client lists the same kinds in the same order
+// (SOL_KINDS, src/wallet/sol-ed25519-message.ts).
 
-circuit sol_device_class(tag: Bytes<32>): Uint<8> {
-  const cls = (tag == device_tag_evm_k256() ? 0
-             : tag == device_tag_jubjub() ? 1
-             : tag == device_tag_sol_ed25519() ? 2
-             : tag == device_tag_k256() ? 3 : 4) as Uint<8>;
-  assert(cls != 4 || tag == device_tag_p256(), "descriptor: not a registered device tag");
-  return cls;
+// The class of a kind's key: the descriptor fields it uses (every other
+// field is zero) and how its entry and grant id are derived.
+//   w52      a readable arm's 20-byte identity (`evm_k256`: the Ethereum
+//            address) with the account's blind: address, a = blind
+//   w64      a JubJub point: a = x_le, b = y_le
+//   ed25519  a readable arm's Ed25519 key, by its point (SolKey) and its
+//            32-byte encoding, with the account's blind: a = key, b = blind
+//   w65      a secp256k1 key and its signing envelope: a = x_le, b = y_le,
+//            envelope
+//   passkey  a P-256 passkey: a = x_le, b = y_le; as a device also its
+//            WebAuthn policy (c = rp_id_hash, origin: the w117 recipe); as a
+//            grantee its key only (the w64 grant-id recipe), its origin_hash
+//            derived from its exact origin (its RP hash is a scope field)
+enum SolClass { w52, w64, ed25519, w65, passkey }
+
+struct SolKind {
+  device:    Bytes<32>;
+  grant_id:  Bytes<32>;
+  key_class: SolClass;
+}
+
+// The number of kinds: the length of sol_kinds() and of every per-kind list.
+type SolKinds<T> = Vector<5, T>;
+
+circuit sol_kinds(): SolKinds<SolKind> {
+  return [
+    SolKind { device: device_tag_evm_k256(),    grant_id: grant_id_tag_evm_k256(),    key_class: SolClass.w52 },
+    SolKind { device: device_tag_jubjub(),      grant_id: grant_id_tag_jubjub(),      key_class: SolClass.w64 },
+    SolKind { device: device_tag_sol_ed25519(), grant_id: grant_id_tag_sol_ed25519(), key_class: SolClass.ed25519 },
+    SolKind { device: device_tag_k256(),        grant_id: grant_id_tag_k256(),        key_class: SolClass.w65 },
+    SolKind { device: device_tag_p256(),        grant_id: grant_id_tag_p256(),        key_class: SolClass.passkey },
+  ];
+}
+
+// The kind a tag names: one flag per entry of sol_kinds(), at most one of
+// them set (the tags are distinct), and that kind's key class.
+struct SolKindOf {
+  hit:       SolKinds<Boolean>;
+  key_class: SolClass;
+}
+
+// The flags of a target's (device) or a grantee's (grant id) tag, unchecked:
+// none is set for a tag that no kind lists.
+circuit sol_device_hits(tag: Bytes<32>): SolKinds<Boolean> {
+  return map((k: SolKind): Boolean => tag == k.device, sol_kinds());
+}
+circuit sol_grantee_hits(tag: Bytes<32>): SolKinds<Boolean> {
+  return map((k: SolKind): Boolean => tag == k.grant_id, sol_kinds());
+}
+
+circuit sol_any(hit: SolKinds<Boolean>): Boolean {
+  return fold((any: Boolean, h: Boolean): Boolean => any || h, false, hit);
+}
+
+// The key class of the kind whose flag is set (the first kind's when none
+// is, which the kind circuits below refuse).
+circuit sol_kind_class(hit: SolKinds<Boolean>): SolClass {
+  return fold((c: SolClass, h: Boolean, k: SolKind): SolClass => h ? k.key_class : c, sol_kinds()[0].key_class, hit, sol_kinds());
+}
+
+// The kind of a target's or a grantee's tag; an unregistered tag is refused.
+circuit sol_device_kind(tag: Bytes<32>): SolKindOf {
+  const hit = sol_device_hits(tag);
+  assert(sol_any(hit), "descriptor: not a registered device tag");
+  return SolKindOf { hit: hit, key_class: sol_kind_class(hit) };
+}
+circuit sol_grantee_kind(tag: Bytes<32>): SolKindOf {
+  const hit = sol_grantee_hits(tag);
+  assert(sol_any(hit), "descriptor: not a registered grant-id tag");
+  return SolKindOf { hit: hit, key_class: sol_kind_class(hit) };
+}
+
+// The row of the kind whose flag is set, from one row per kind in
+// sol_kinds() order. The choice starts from the first row (a choice between
+// two equal rows costs nothing), so it costs one selection per byte for
+// each further kind.
+circuit sol_kind_row<#w>(hit: SolKinds<Boolean>, rows: SolKinds<Vector<w, Uint<8>>>): Vector<w, Uint<8>> {
+  return fold((s: Vector<w, Uint<8>>, h: Boolean, r: Vector<w, Uint<8>>): Vector<w, Uint<8>> => h ? r : s, rows[0], hit, rows);
+}
+
+// Whether a class is a readable arm's: an identity with the account's
+// blind, shown as a grantee with the grant's site label.
+circuit sol_readable(c: SolClass): Boolean {
+  return c == SolClass.w52 || c == SolClass.ed25519;
 }
 
 // The fields a class does not use must be zero (one encoding per target).
-circuit sol_require_canonical_device(t: SolTarget, cls: Uint<8>): [] {
-  assert(cls == 0 || t.address == pad(20, ""), "descriptor: unused address must be zero");
-  assert(cls != 0 || t.b == pad(32, ""), "descriptor: unused second field must be zero");
-  assert(cls == 4 || t.c == pad(32, ""), "descriptor: unused rp hash must be zero");
-  assert(cls == 4 || t.origin == pad(21, ""), "descriptor: unused origin must be zero");
-  assert(cls == 3 || t.envelope == 0, "descriptor: unused envelope must be zero");
+circuit sol_require_canonical_device(t: SolTarget, c: SolClass): [] {
+  assert(c == SolClass.w52 || t.address == pad(20, ""), "descriptor: unused address must be zero");
+  assert(c != SolClass.w52 || t.b == pad(32, ""), "descriptor: unused second field must be zero");
+  assert(c == SolClass.passkey || t.c == pad(32, ""), "descriptor: unused rp hash must be zero");
+  assert(c == SolClass.passkey || t.origin == pad(21, ""), "descriptor: unused origin must be zero");
+  assert(c == SolClass.w65 || t.envelope == 0, "descriptor: unused envelope must be zero");
 }
 
-// A class other than sol_ed25519 (class 2, for targets and grantees alike)
-// has no key point: it passes the identity and zero bytes (one encoding per
-// target).
-circuit sol_require_unused_key(k: SolKey, cls: Uint<8>): [] {
-  assert(cls == 2 || (curve25519PointX(k.pk) as Bytes<32>) == pad(32, ""), "descriptor: unused point must be the identity");
-  assert(cls == 2 || (Bytes[...k.pk_bytes] == pad(32, "") && Bytes[...k.pk_x] == pad(32, "")),
+// A class other than ed25519 has no key point: it passes the identity and
+// zero bytes (one encoding per target or grantee).
+circuit sol_require_unused_key(k: SolKey, c: SolClass): [] {
+  assert(c == SolClass.ed25519 || (curve25519PointX(k.pk) as Bytes<32>) == pad(32, ""), "descriptor: unused point must be the identity");
+  assert(c == SolClass.ed25519 || (Bytes[...k.pk_bytes] == pad(32, "") && Bytes[...k.pk_x] == pad(32, "")),
          "descriptor: unused key bytes must be zero");
 }
 
-// The entry of a target device at (epoch, counter), by its class.
-// A Solana target is its point with its checked bytes (`k`): the module's
-// ed25519 class checks the bytes, derives the entry (A != O) and returns the
-// key it encoded, which must be the key the message shows (`t.a`). Any other
-// class carries the identity as its unused point (x = 0) and zero bytes.
+// The entry of a target device at (epoch, counter), by its kind's class.
+// An ed25519-class target is its point with its checked bytes (`k`): the
+// module's ed25519 class checks the bytes, derives the entry (A != O) and
+// returns the key it encoded, which must be the key the message shows
+// (`t.a`). Any other class carries the identity as its unused point (x = 0)
+// and zero bytes.
 circuit sol_device_entry(t: SolTarget, k: SolKey, self_addr: ContractAddress, epoch: Uint<32>, counter: Uint<64>): Bytes<32> {
-  const cls = sol_device_class(t.tag);
-  sol_require_canonical_device(t, cls);
-  sol_require_unused_key(k, cls);
+  const c = sol_device_kind(t.tag).key_class;
+  sol_require_canonical_device(t, c);
+  sol_require_unused_key(k, c);
   // A passkey's own RP hash is never zero: the passkey device
   // block shows it in hex, and no zero value enrols or removes a passkey.
-  assert(cls != 4 || t.c != pad(32, ""), "descriptor: a passkey's RP hash is zero");
-  if (cls == 0) {
+  assert(c != SolClass.passkey || t.c != pad(32, ""), "descriptor: a passkey's RP hash is zero");
+  if (c == SolClass.w52) {
     return derive_descriptor_entry_w52(t.tag, self_addr, t.address, t.a, epoch, counter);
   }
-  if (cls == 1) {
+  if (c == SolClass.w64) {
     return derive_descriptor_entry_w64(t.tag, self_addr, t.a, t.b, epoch, counter);
   }
-  if (cls == 2) {
+  if (c == SolClass.ed25519) {
     const [key, entry] = derive_descriptor_entry_ed25519(t.tag, self_addr, k.pk, k.pk_bytes, k.pk_x, t.b, epoch, counter);
-    assert(key == t.a, "descriptor: the Solana key is not the point's encoding");
+    assert(key == t.a, "descriptor: the Ed25519 key is not the point's encoding");
     return entry;
   }
-  if (cls == 3) {
+  if (c == SolClass.w65) {
     return derive_descriptor_entry_w65(t.tag, self_addr, t.a, t.b, t.envelope, epoch, counter);
   }
   return derive_descriptor_entry_w117(t.tag, self_addr, t.a, t.b, t.c, t.origin, epoch, counter);
 }
 
-circuit sol_grantee_class(tag: Bytes<32>): Uint<8> {
-  const cls = (tag == grant_id_tag_evm_k256() ? 0
-             : tag == grant_id_tag_jubjub() ? 1
-             : tag == grant_id_tag_sol_ed25519() ? 2
-             : tag == grant_id_tag_k256() ? 3 : 4) as Uint<8>;
-  assert(cls != 4 || tag == grant_id_tag_p256(), "descriptor: not a registered grant-id tag");
-  return cls;
-}
-
-// The grantee's origin_hash by class, the unused fields zero.
-circuit sol_grantee_origin_hash(t: SolGrantee, cls: Uint<8>): Bytes<32> {
-  assert(cls == 0 || t.address == pad(20, ""), "descriptor: unused address must be zero");
-  assert(cls != 0 || t.b == pad(32, ""), "descriptor: unused second field must be zero");
-  assert(cls == 3 || t.envelope == 0, "descriptor: unused envelope must be zero");
-  const readable = cls == 0 || cls == 2;
+// The grantee's origin_hash by its kind's class, the unused fields zero.
+circuit sol_grantee_origin_hash(t: SolGrantee, c: SolClass): Bytes<32> {
+  assert(c == SolClass.w52 || t.address == pad(20, ""), "descriptor: unused address must be zero");
+  assert(c != SolClass.w52 || t.b == pad(32, ""), "descriptor: unused second field must be zero");
+  assert(c == SolClass.w65 || t.envelope == 0, "descriptor: unused envelope must be zero");
+  const readable = sol_readable(c);
   assert(readable || t.label == pad(32, ""), "descriptor: unused label must be zero");
-  assert(cls == 4 || t.origin == pad(21, ""), "descriptor: unused origin must be zero");
+  assert(c == SolClass.passkey || t.origin == pad(21, ""), "descriptor: unused origin must be zero");
   if (readable) {
     assert(t.origin_hash == pad(32, ""), "descriptor: a readable grantee's origin hash is derived");
     return derive_grant_origin_hash_label(t.label);
   }
-  if (cls == 4) {
+  if (c == SolClass.passkey) {
     assert(t.origin_hash == pad(32, ""), "descriptor: a passkey grantee's origin hash is derived");
     return derive_grant_origin_hash_origin(t.origin);
   }
   return t.origin_hash;
 }
 
-// A Solana grantee is its point with its checked bytes, as a Solana target
-// is (see sol_device_entry).
-circuit sol_grantee_id(t: SolGrantee, k: SolKey, cls: Uint<8>, self_addr: ContractAddress, origin_hash: Bytes<32>): Bytes<32> {
-  sol_require_unused_key(k, cls);
-  if (cls == 2) {
+// An ed25519-class grantee is its point with its checked bytes, as such a
+// target is (see sol_device_entry).
+circuit sol_grantee_id(t: SolGrantee, k: SolKey, c: SolClass, self_addr: ContractAddress, origin_hash: Bytes<32>): Bytes<32> {
+  sol_require_unused_key(k, c);
+  if (c == SolClass.ed25519) {
     const [key, id] = derive_descriptor_grant_id_ed25519(t.tag, self_addr, k.pk, k.pk_bytes, k.pk_x, t.b, origin_hash, t.slot);
-    assert(key == t.a, "descriptor: the Solana key is not the point's encoding");
+    assert(key == t.a, "descriptor: the Ed25519 key is not the point's encoding");
     return id;
   }
-  if (cls == 0) {
+  if (c == SolClass.w52) {
     return derive_descriptor_grant_id_w52(t.tag, self_addr, t.address, t.a, origin_hash, t.slot);
   }
-  if (cls == 3) {
+  if (c == SolClass.w65) {
     return derive_descriptor_grant_id_w65(t.tag, self_addr, t.a, t.b, t.envelope, origin_hash, t.slot);
   }
   return derive_descriptor_grant_id_w64(t.tag, self_addr, t.a, t.b, origin_hash, t.slot);
@@ -1188,16 +1268,19 @@ circuit sol_key_text(key: Vector<32, Uint<8>>, k: SolBase58): Vector<44, Uint<8>
   return base58_text_32(key, k.digits, k.carry, k.low, k.top);
 }
 
-// The key bytes a target's or grantee's message shows in base58, for the
-// pure message circuits: a Solana target's or grantee's 32-byte key, zero for
-// every other class. A gated circuit shows the key bytes its key argument
-// carries instead, which it checks against the point and requires to equal
-// these.
+// The key bytes a target's or grantee's message shows, for the pure message
+// circuits: the 32-byte key of a kind of the ed25519 class, zero for every
+// other kind and for an unregistered tag (refused by the message itself). A
+// gated circuit shows the key bytes its key argument carries instead, which
+// it checks against the point and requires to equal these.
+circuit sol_has_point(hit: SolKinds<Boolean>): Boolean {
+  return fold((p: Boolean, h: Boolean, k: SolKind): Boolean => p || (h && k.key_class == SolClass.ed25519), false, hit, sol_kinds());
+}
 circuit sol_target_key_bytes(t: SolTarget): Vector<32, Uint<8>> {
-  return (t.tag == device_tag_sol_ed25519() ? t.a : pad(32, "")) as Vector<32, Uint<8>>;
+  return (sol_has_point(sol_device_hits(t.tag)) ? t.a : pad(32, "")) as Vector<32, Uint<8>>;
 }
 circuit sol_grantee_key_bytes(t: SolGrantee): Vector<32, Uint<8>> {
-  return (t.tag == grant_id_tag_sol_ed25519() ? t.a : pad(32, "")) as Vector<32, Uint<8>>;
+  return (sol_has_point(sol_grantee_hits(t.tag)) ? t.a : pad(32, "")) as Vector<32, Uint<8>>;
 }
 
 // The digits of a little-endian 32-byte value in big-endian order (the pairs
@@ -1263,27 +1346,21 @@ circuit sol_coin_lines(coin: QualifiedShieldedCoinInfo, amount: Uint<128>, h_non
           ...pad(29, "Change back to this account: "), ...uint128_text((coin.value - amount) as Uint<128>, c.change), 10];
 }
 
-// The registered tag's text (32 bytes, padding shown as spaces), selected
-// by the class: free, and equal to the tag bytes whenever the class check
-// holds.
-circuit sol_tag_text(cls: Uint<8>, t0: Bytes<32>, t1: Bytes<32>, t2: Bytes<32>, t3: Bytes<32>, t4: Bytes<32>): Vector<32, Uint<8>> {
-  return map((a: Uint<8>, b: Uint<8>, c: Uint<8>, d: Uint<8>, e: Uint<8>): Uint<8> => {
-               const x = cls == 0 ? a : cls == 1 ? b : cls == 2 ? c : cls == 3 ? d : e;
-               return (x == 0 ? 32 : x) as Uint<8>;
-             },
-             t0 as Vector<32, Uint<8>>, t1 as Vector<32, Uint<8>>, t2 as Vector<32, Uint<8>>,
-             t3 as Vector<32, Uint<8>>, t4 as Vector<32, Uint<8>>);
+// A registered tag's text (32 bytes, the zero padding shown as spaces): the
+// text of the kind's own tag, selected among the constant tags of
+// sol_kinds(), so it equals the tag bytes the kind's flag compared and costs
+// no per-byte conversion of the tag.
+circuit sol_tag_shown(tag: Bytes<32>): Vector<32, Uint<8>> {
+  return map((x: Uint<8>): Uint<8> => (x == 0 ? 32 : x) as Uint<8>, tag as Vector<32, Uint<8>>);
 }
 circuit sol_device_tag_text(tag: Bytes<32>): Vector<32, Uint<8>> {
-  return sol_tag_text(sol_device_class(tag), device_tag_evm_k256(), device_tag_jubjub(), device_tag_sol_ed25519(),
-                      device_tag_k256(), device_tag_p256());
+  return sol_kind_row<32>(sol_device_kind(tag).hit, map((k: SolKind): Vector<32, Uint<8>> => sol_tag_shown(k.device), sol_kinds()));
 }
 circuit sol_grantee_tag_text(tag: Bytes<32>): Vector<32, Uint<8>> {
-  return sol_tag_text(sol_grantee_class(tag), grant_id_tag_evm_k256(), grant_id_tag_jubjub(), grant_id_tag_sol_ed25519(),
-                      grant_id_tag_k256(), grant_id_tag_p256());
+  return sol_kind_row<32>(sol_grantee_kind(tag).hit, map((k: SolKind): Vector<32, Uint<8>> => sol_tag_shown(k.grant_id), sol_kinds()));
 }
 
-// A passkey origin's characters, checked against its bytes and visible on
+// A passkey origin's characters, checked against its bytes and visible for
 // the passkey class (the other classes carry zero, never shown).
 circuit sol_origin_chars(origin: Bytes<21>, v: Vector<21, Uint<8>>, passkey: Boolean): Vector<21, Uint<8>> {
   const o = sol_chars21(origin, v);
@@ -1293,67 +1370,77 @@ circuit sol_origin_chars(origin: Bytes<21>, v: Vector<21, Uint<8>>, passkey: Boo
   return o;
 }
 
-// The key lines of a target device (282 bytes, every class padded to the
-// longest with spaces before its last line break). Keys are shown in the form
-// their own wallets show (an EVM address, the 32-byte Solana key, a passkey
-// origin) or as coordinates in COORDINATE_DISPLAY_ORDER: secp256k1 and
-// P-256 big-endian (SEC1), JubJub little-endian (Midnight's encoding, the
-// bytes the entry binds).
+// The key lines of a target device (282 bytes): one row per kind, in
+// sol_kinds() order, each padded to the block's length with spaces before
+// its last line break. Keys are shown in the form their own wallets show (an
+// EVM address, the 32-byte Solana key in base58, a passkey origin) or as
+// coordinates in COORDINATE_DISPLAY_ORDER: secp256k1 and P-256 big-endian
+// (SEC1), JubJub little-endian (Midnight's encoding, the bytes the entry
+// binds). `key` is the key of an ed25519-class kind (zero for the others),
+// `h_address`, `h_a`, `h_b` and `h_c` the target's fields in hex.
 circuit sol_device_block(t: SolTarget, ts: SolTargetShow, key: Vector<32, Uint<8>>, h_address: Vector<40, Uint<8>>,
                          h_a: Vector<64, Uint<8>>, h_b: Vector<64, Uint<8>>, h_c: Vector<64, Uint<8>>): Vector<282, Uint<8>> {
-  const cls = sol_device_class(t.tag);
+  const kind = sol_device_kind(t.tag);
   const xa = sol_be(h_a);
   const yb = sol_be(h_b);
-  const evm = [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
-               ...pad(21, "Device privacy salt: "), ...h_a, ...sol_spaces<135>(), 10];
-  const jub = [...pad(14, "JubJub key x: "), ...h_a, 10,
-               ...pad(14, "JubJub key y: "), ...h_b, ...sol_spaces<124>(), 10];
-  const sol = [...pad(12, "Solana key: "), ...sol_key_text(key, ts.key), 10,
-               ...pad(21, "Device privacy salt: "), ...h_b, ...sol_spaces<139>(), 10];
-  const k1 = [...pad(17, "secp256k1 key x: "), ...xa, 10,
-              ...pad(17, "secp256k1 key y: "), ...yb, 10,
-              ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), ...sol_spaces<75>(), 10];
-  const r1 = [...pad(15, "Passkey key x: "), ...xa, 10,
-              ...pad(15, "Passkey key y: "), ...yb, 10,
-              ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, ts.origin, cls == 4), 10,
-              ...pad(19, "Passkey RP (hash): "), ...h_c, 10];
-  return map((e: Uint<8>, j: Uint<8>, s: Uint<8>, k: Uint<8>, p: Uint<8>): Uint<8> =>
-               cls == 0 ? e : cls == 1 ? j : cls == 2 ? s : cls == 3 ? k : p,
-             evm, jub, sol, k1, r1);
+  return sol_kind_row<282>(kind.hit, [
+    // evm_k256
+    [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
+     ...pad(21, "Device privacy salt: "), ...h_a, ...sol_spaces<135>(), 10],
+    // jubjub
+    [...pad(14, "JubJub key x: "), ...h_a, 10,
+     ...pad(14, "JubJub key y: "), ...h_b, ...sol_spaces<124>(), 10],
+    // sol_ed25519
+    [...pad(12, "Solana key: "), ...sol_key_text(key, ts.key), 10,
+     ...pad(21, "Device privacy salt: "), ...h_b, ...sol_spaces<139>(), 10],
+    // k256
+    [...pad(17, "secp256k1 key x: "), ...xa, 10,
+     ...pad(17, "secp256k1 key y: "), ...yb, 10,
+     ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), ...sol_spaces<75>(), 10],
+    // p256
+    [...pad(15, "Passkey key x: "), ...xa, 10,
+     ...pad(15, "Passkey key y: "), ...yb, 10,
+     ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, ts.origin, kind.key_class == SolClass.passkey), 10,
+     ...pad(19, "Passkey RP (hash): "), ...h_c, 10],
+  ]);
 }
 
-// The grantee's key and origin lines (299 bytes, padded as the device block;
-// coordinates in the same order).
+// The grantee's key and origin lines (299 bytes): one row per kind, in
+// sol_kinds() order, padded as the device block's (coordinates in the same
+// order). `h_oh` is the grantee's origin_hash in hex.
 circuit sol_grantee_block(t: SolGrantee, gs: SolGranteeShow, key: Vector<32, Uint<8>>, h_address: Vector<40, Uint<8>>,
                           h_a: Vector<64, Uint<8>>, h_b: Vector<64, Uint<8>>, h_oh: Vector<64, Uint<8>>): Vector<299, Uint<8>> {
-  const cls = sol_grantee_class(t.tag);
+  const kind = sol_grantee_kind(t.tag);
   const xa = sol_be(h_a);
   const yb = sol_be(h_b);
-  // Only a readable grantee (evm, sol) has a label; the others carry zero,
-  // which the label grammar refuses, so its grammar is checked only there.
+  // Only a readable grantee has a label; the others carry zero, which the
+  // label grammar refuses, so its grammar is checked only there.
   const chars = sol_chars32(t.label, gs.label);
-  const readable = cls == 0 || cls == 2;
-  const lab = sol_label_chars(readable ? chars : [45, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  const evm = [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
-               ...pad(22, "Grantee privacy salt: "), ...h_a, 10,
-               ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<103>(), 10];
-  const jub = [...pad(14, "JubJub key x: "), ...h_a, 10,
-               ...pad(14, "JubJub key y: "), ...h_b, 10,
-               ...pad(27, "Grantee site label (hash): "), ...h_oh, ...sol_spaces<49>(), 10];
-  const sol = [...pad(12, "Solana key: "), ...sol_key_text(key, gs.key), 10,
-               ...pad(22, "Grantee privacy salt: "), ...h_b, 10,
-               ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<107>(), 10];
-  const k1 = [...pad(17, "secp256k1 key x: "), ...xa, 10,
-              ...pad(17, "secp256k1 key y: "), ...yb, 10,
-              ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), 10,
-              ...pad(27, "Grantee site label (hash): "), ...h_oh, 10];
-  const r1 = [...pad(15, "Passkey key x: "), ...xa, 10,
-              ...pad(15, "Passkey key y: "), ...yb, 10,
-              ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, gs.origin, cls == 4), ...sol_spaces<101>(), 10];
-  return map((e: Uint<8>, j: Uint<8>, s: Uint<8>, k: Uint<8>, p: Uint<8>): Uint<8> =>
-               cls == 0 ? e : cls == 1 ? j : cls == 2 ? s : cls == 3 ? k : p,
-             evm, jub, sol, k1, r1);
+  const lab = sol_label_chars(sol_readable(kind.key_class) ? chars : [45, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  return sol_kind_row<299>(kind.hit, [
+    // evm_k256
+    [...pad(20, "Ethereum address: 0x"), ...h_address, 10,
+     ...pad(22, "Grantee privacy salt: "), ...h_a, 10,
+     ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<103>(), 10],
+    // jubjub
+    [...pad(14, "JubJub key x: "), ...h_a, 10,
+     ...pad(14, "JubJub key y: "), ...h_b, 10,
+     ...pad(27, "Grantee site label (hash): "), ...h_oh, ...sol_spaces<49>(), 10],
+    // sol_ed25519
+    [...pad(12, "Solana key: "), ...sol_key_text(key, gs.key), 10,
+     ...pad(22, "Grantee privacy salt: "), ...h_b, 10,
+     ...pad(15, "Grantee label: "), ...lab, ...sol_spaces<107>(), 10],
+    // k256
+    [...pad(17, "secp256k1 key x: "), ...xa, 10,
+     ...pad(17, "secp256k1 key y: "), ...yb, 10,
+     ...pad(18, "Signing envelope: "), ...k256_envelope_text(t.envelope), 10,
+     ...pad(27, "Grantee site label (hash): "), ...h_oh, 10],
+    // p256
+    [...pad(15, "Passkey key x: "), ...xa, 10,
+     ...pad(15, "Passkey key y: "), ...yb, 10,
+     ...pad(16, "Passkey origin: "), ...sol_origin_chars(t.origin, gs.origin, kind.key_class == SolClass.passkey), ...sol_spaces<101>(), 10],
+  ]);
 }
 
 
