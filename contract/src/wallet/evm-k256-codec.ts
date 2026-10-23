@@ -275,6 +275,27 @@ export const eip712V1Domain = (): Eip712Domain => ({
   name: EIP712_V1_DOMAIN_NAME, version: EIP712_V1_DOMAIN_VERSION, verifyingContract: EIP712_V1_VERIFYING_CONTRACT,
 });
 
+/** Refuses typed data that is not under the fixed V1 domain, before a
+ *  wallet is asked to sign it: the domain must be exactly eip712V1Domain()
+ *  (no other member, such as a chainId or a salt) and its EIP712Domain type
+ *  exactly the V1 type. The circuits verify V1 digests only, so a signature
+ *  under any other domain would be refused after the wallet had shown the
+ *  user a request that cannot succeed. Returns the typed data unchanged. */
+export function checkEip712V1TypedData(t: Eip712TypedData): Eip712TypedData {
+  const d = (t?.domain ?? undefined) as unknown as Record<string, unknown> | undefined;
+  const want = eip712V1Domain() as unknown as Record<string, unknown>;
+  const keys = d !== undefined && typeof d === 'object' ? Object.keys(d) : [];
+  if (keys.length !== 3 || !keys.every((k) => Object.prototype.hasOwnProperty.call(want, k) && d![k] === want[k])) {
+    throw new Error('eip712: not the fixed V1 domain (name "Midnight Passport", version "1", verifyingContract P, and no other member)');
+  }
+  const ty = t.types?.EIP712Domain as unknown;
+  if (!Array.isArray(ty) || ty.length !== DOMAIN_TYPE.length
+    || !ty.every((x, i) => x !== null && typeof x === 'object' && Object.keys(x).length === 2 && x.name === DOMAIN_TYPE[i].name && x.type === DOMAIN_TYPE[i].type)) {
+    throw new Error('eip712: the EIP712Domain type is not the V1 type (string name, string version, address verifyingContract)');
+  }
+  return t;
+}
+
 /** The type set of one message: the primary type, its nested type if any, and
  *  EIP712Domain (viem and ethers refuse unused types, so nothing else). */
 export function typesFor(primary: string, nested?: string): TypeSet {

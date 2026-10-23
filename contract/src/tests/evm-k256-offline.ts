@@ -244,7 +244,7 @@ vectors.blind = [];
   ok('blind');
   await refusedAsync('blind', () => enrolEvmBlind(new SoftwareEvmWallet(7n, true), 'undeployed', 0), /not deterministic/, 'a hedged (non-deterministic) wallet');
   const liar: EvmWallet = { address: async () => new SoftwareEvmWallet(2n).addressBytes, personalSign: (m) => w.personalSign(m), signTypedData: () => { throw new Error('unused'); } };
-  await refusedAsync('blind', () => enrolEvmBlind(liar, 'undeployed', 0), /does not recover to the wallet address/, 'a wallet whose signature is not its address');
+  await refusedAsync('blind', () => enrolEvmBlind(liar, 'undeployed', 0), /^SignerMismatchError: signer: refused before proving: the signature is not from the expected Ethereum address 0x[0-9a-fA-F]{40}, and the signer is unknown$/, 'a wallet whose signature is not its address');
   await refusedAsync('blind', () => enrolEvmBlind(w, 'Undeployed', 0), /network name/, 'an upper-case network name');
   await refusedAsync('blind', () => enrolEvmBlind(w, 'undeployed', -1), /0 to 4294967295/, 'a negative account index');
   // as a grantee the wallet derives its blind from the grantee request
@@ -271,6 +271,7 @@ console.log(`  ✓ blind: deterministic, == derive_blind == SHA-256, recovered p
   const back = EvmK256Device.fromRecord(JSON.parse(JSON.stringify(rec)));
   assert.ok(eq(back.address, d.address) && eq(back.blind, d.blind) && back.accountIndex === 0n && back.network === 'undeployed');
   assert.equal(rec.address, evmChecksumAddress(w.addressBytes));
+  assert.equal(rec.format, 'eip712-v1', 'the record names the device\'s format');
   ok('roster');
   const other = new SoftwareEvmWallet(scalar());
   refused('roster', () => EvmK256Device.fromRecord({ ...rec, address: evmChecksumAddress(other.addressBytes) }), /not the point's address/, 'a record whose address is not its point\'s');
