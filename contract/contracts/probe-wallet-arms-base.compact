@@ -14,7 +14,8 @@ import CompactStandardLibrary;
 //                                 entries, boot commitments, grant ids,
 //                                 origin_hash, the blind and the grant scope
 //                                 salt), one per payload class, with the
-//                                 registered tags
+//                                 registered tags and the registry of
+//                                 readable arms that admits them
 //   modules/WalletArmRendering    decimal, hex, label, base58, date, and
 //                                 word text for readable signed bytes
 //
@@ -40,6 +41,9 @@ export {
   grant_id_tag_evm_k256, grant_id_tag_sol_ed25519,
   blind_tag_evm_k256, blind_tag_sol_ed25519, grant_origin_tag,
   salt_tag_evm_k256, salt_tag_sol_ed25519,
+  ReadableClass, ReadableArm, readable_arms,
+  is_registered_device_tag, is_registered_boot_tag, is_registered_grant_id_tag,
+  is_registered_blind_tag, is_registered_salt_tag,
   derive_descriptor_entry_w52, derive_descriptor_entry_w64,
   derive_descriptor_entry_w65, derive_descriptor_entry_w117,
   derive_descriptor_boot_w52,

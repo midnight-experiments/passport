@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Readable device descriptors — the shared derivation module of the readable
-// authorisation arms (`evm_k256`, `sol_ed25519`).
+// authorisation arms, each registered by one entry of the registry below.
 //
 // A readable arm never signs an opaque entry or grant id. When it enrols,
 // removes, or grants to ANOTHER key, the signed bytes show that key as a
@@ -30,13 +30,18 @@
 // have one here (see the boot section):
 //
 //   class    device entry                    boot          grant id
-//   w52      evm_k256: address || blind      evm_k256      evm_k256: address || blind
+//   w52      readable: address || blind      readable      readable: address || blind
 //   w64      jubjub: x_le || y_le            —             jubjub: x_le || y_le
 //                                                          p256: x_le || y_le
-//   ed25519  sol_ed25519: key || blind       sol_ed25519   sol_ed25519: key || blind
+//   ed25519  readable: key || blind          readable      readable: key || blind
 //   w65      k256: x_le || y_le || envelope  —             k256: x_le || y_le || envelope
 //   w117     p256: x_le || y_le ||           —             —
 //            rp_id_hash || origin(21)
+//
+// A readable arm's class is named by its registry entry: w52 for an arm
+// identified by a 20-byte address (`evm_k256`, the Ethereum address), ed25519
+// for an arm identified by an Ed25519 key (`sol_ed25519`). Upstream's schemes
+// (`jubjub`, `k256`, `p256`) have the fixed classes shown.
 //
 // The ed25519 class takes the key as a Curve25519Point, never as bytes
 // alone: its 32-byte encoding is a checked input that must match the point
@@ -55,6 +60,12 @@
 // stricter than an unusable "dead" entry: an unknown scheme cannot be
 // enrolled at all.
 //
+// A readable arm's five tags (device, boot, grant id, blind, salt) are
+// registered by its one entry in readable_arms(), together with its class;
+// every derivation admits a readable tag by that list, so adding an arm of an
+// existing class is that entry and its five tag circuits, and no derivation
+// changes. Upstream's tags are fixed and admitted by name.
+//
 // Key admissibility (on the curve, not of small order, not the point at
 // infinity, and, for k256, a known envelope) is NOT checked here for the
 // byte classes: as with upstream's opaque `add_device(entry)`, an entry
@@ -70,14 +81,15 @@
 //                || slot)
 //   blind    = H(pad32(blind tag) || canonical signature (64 bytes))
 //   salt     = H(pad32(salt tag) || blind || account || auth_nonce)
-// where payload = identity || blind: the 20-byte Ethereum address, or the
-// 32-byte RFC 8032 Ed25519 public-key encoding of the key's point (checked
-// in-circuit against the point), followed by the account's 32-byte blind. The blind keeps a
-// public wallet identity out of the clear: without it, anyone could test a
-// known address against every account's entries. The canonical signature
-// is low-S r || s (big-endian, 32 bytes each) for EVM, and the raw 64-byte
-// R || S for Ed25519, over the client's readable blind-request message; no
-// circuit accepts that message as an authorisation.
+// where payload = identity || blind: the 20-byte address (w52), or the
+// 32-byte RFC 8032 Ed25519 public-key encoding of the key's point (ed25519,
+// checked in-circuit against the point), followed by the account's 32-byte
+// blind. The blind keeps a public wallet identity out of the clear: without
+// it, anyone could test a known address against every account's entries. The
+// canonical signature is low-S r || s (big-endian, 32 bytes each) for a
+// secp256k1 key, and the raw 64-byte R || S for an Ed25519 key, over the
+// client's readable blind-request message; no circuit accepts that message as
+// an authorisation.
 //
 // A readable grantee's origin label is a fixed 32-byte, zero-padded ASCII
 // string, shown as text and hashed with upstream's origin_hash recipe
@@ -97,8 +109,9 @@ module WalletArmDescriptors {
   //
   // Each fits its 32-byte pad (pad() refuses a longer literal at compile
   // time, and the offline suite checks every width). The legacy tags are
-  // upstream's; the readable arms' tags (`evm`, `sol`) are at v1. Boot,
-  // blind and salt tags are registered for the readable arms only.
+  // upstream's; a readable arm's tags carry its code (`evm`, `sol`) and are
+  // at v1. Boot, blind and salt tags exist for the readable arms only, which
+  // the registry below lists.
 
   export pure circuit device_tag_jubjub(): Bytes<32> {
     return pad(32, "midnight:account:device:v1");
@@ -161,10 +174,75 @@ module WalletArmDescriptors {
     return pad(32, "midnight:account:grant:origin:v1");
   }
 
+  // ── The registry of readable arms ─────────────────────────────────────────
+  //
+  // One entry per readable arm: the class of its key's payload and its five
+  // tags. A derivation admits a readable tag only if an entry registers it
+  // for that recipe AND that class (the is_registered_* circuits below), so
+  // a tag is hashed with one preimage shape only.
+  //
+  // To add an arm of an existing class: define its five tags above, with its
+  // own code and at most 32 bytes each, add its entry to readable_arms() and
+  // raise the vector's length by one. Nothing else in this module changes.
+  // An arm whose key fits neither class needs a class of its own: a member of
+  // ReadableClass and its own derivation circuits.
+  //
+  // The admission costs nothing for a tag fixed at compile time (the
+  // comparisons fold away) and one comparison per entry of the class for a
+  // tag taken from the signed bytes.
+
+  // The payload class of a readable arm's key, naming the derivations that
+  // take it: w52 for a 20-byte address, ed25519 for an Ed25519 key.
+  export enum ReadableClass { w52, ed25519 }
+
+  export struct ReadableArm {
+    payload_class: ReadableClass;
+    device:        Bytes<32>;
+    boot:          Bytes<32>;
+    grant_id:      Bytes<32>;
+    blind:         Bytes<32>;
+    salt:          Bytes<32>;
+  }
+
+  // The registered readable arms. Each entry's tags are distinct from every
+  // other tag of this module (the offline suite checks it); the codes `nea`
+  // (NEAR) and `cdo` (Cardano) are reserved for further Ed25519 arms.
+  export pure circuit readable_arms(): Vector<2, ReadableArm> {
+    return [
+      ReadableArm { payload_class: ReadableClass.w52,
+                    device: device_tag_evm_k256(), boot: boot_tag_evm_k256(), grant_id: grant_id_tag_evm_k256(),
+                    blind: blind_tag_evm_k256(), salt: salt_tag_evm_k256() },
+      ReadableArm { payload_class: ReadableClass.ed25519,
+                    device: device_tag_sol_ed25519(), boot: boot_tag_sol_ed25519(), grant_id: grant_id_tag_sol_ed25519(),
+                    blind: blind_tag_sol_ed25519(), salt: salt_tag_sol_ed25519() },
+    ];
+  }
+
+  // Whether `tag` is the device, boot or grant-id tag of a registered arm of
+  // class `c`, or the blind or salt tag of any registered arm.
+  export pure circuit is_registered_device_tag(tag: Bytes<32>, c: ReadableClass): Boolean {
+    return fold((found: Boolean, a: ReadableArm): Boolean => found || (a.payload_class == c && tag == a.device),
+                false, readable_arms());
+  }
+  export pure circuit is_registered_boot_tag(tag: Bytes<32>, c: ReadableClass): Boolean {
+    return fold((found: Boolean, a: ReadableArm): Boolean => found || (a.payload_class == c && tag == a.boot),
+                false, readable_arms());
+  }
+  export pure circuit is_registered_grant_id_tag(tag: Bytes<32>, c: ReadableClass): Boolean {
+    return fold((found: Boolean, a: ReadableArm): Boolean => found || (a.payload_class == c && tag == a.grant_id),
+                false, readable_arms());
+  }
+  export pure circuit is_registered_blind_tag(tag: Bytes<32>): Boolean {
+    return fold((found: Boolean, a: ReadableArm): Boolean => found || tag == a.blind, false, readable_arms());
+  }
+  export pure circuit is_registered_salt_tag(tag: Bytes<32>): Boolean {
+    return fold((found: Boolean, a: ReadableArm): Boolean => found || tag == a.salt, false, readable_arms());
+  }
+
   // ── Device entries, by payload width ──────────────────────────────────────
 
-  // Width 52: an `evm_k256` device, by its 20-byte Ethereum address and
-  // the account's blind.
+  // Width 52: a device of a w52 readable arm (`evm_k256`: its 20-byte
+  // Ethereum address), with the account's blind.
   export pure circuit derive_descriptor_entry_w52(
     tag:       Bytes<32>,
     self_addr: ContractAddress,
@@ -173,14 +251,14 @@ module WalletArmDescriptors {
     epoch:     Uint<32>,
     counter:   Uint<64>,
   ): Bytes<32> {
-    assert(tag == device_tag_evm_k256(), "descriptor: not a 52-byte device tag");
+    assert(is_registered_device_tag(tag, ReadableClass.w52), "descriptor: not a 52-byte device tag");
     return persistentHash<[Bytes<32>, ContractAddress, Bytes<20>, Bytes<32>, Uint<32>, Uint<64>]>(
       [tag, self_addr, address, blind, epoch, counter]
     );
   }
 
   // Width 64: a `jubjub` device (first = x_le, second = y_le of its
-  // JubjubPoint). A `sol_ed25519` device has its own class (by point, below).
+  // JubjubPoint). An Ed25519 key has its own class (by point, below).
   export pure circuit derive_descriptor_entry_w64(
     tag:       Bytes<32>,
     self_addr: ContractAddress,
@@ -237,10 +315,9 @@ module WalletArmDescriptors {
   // The boot commitment exists before the account does, so it binds a salt
   // instead of the account address. It exists only for an account's FIRST
   // device, and each readable arm activates only its own scheme, so this
-  // module has a boot recipe for `evm_k256` (w52, below) and
-  // `sol_ed25519` (the ed25519 class) only. An account whose first device is
-  // `jubjub`, `k256`, or `p256` boots through upstream's own
-  // `derive_boot_commitment_with_<scheme>`.
+  // module has boot recipes for the readable arms only: w52 (below) and the
+  // ed25519 class. An account whose first device is `jubjub`, `k256`, or
+  // `p256` boots through upstream's own `derive_boot_commitment_with_<scheme>`.
 
   export pure circuit derive_descriptor_boot_w52(
     tag:     Bytes<32>,
@@ -248,7 +325,7 @@ module WalletArmDescriptors {
     address: Bytes<20>,
     blind:   Bytes<32>,
   ): Bytes<32> {
-    assert(tag == boot_tag_evm_k256(), "descriptor: not a 52-byte boot tag");
+    assert(is_registered_boot_tag(tag, ReadableClass.w52), "descriptor: not a 52-byte boot tag");
     return persistentHash<[Bytes<32>, Bytes<32>, Bytes<20>, Bytes<32>]>(
       [tag, salt, address, blind]
     );
@@ -269,7 +346,7 @@ module WalletArmDescriptors {
     origin_hash: Bytes<32>,
     slot:        Uint<8>,
   ): Bytes<32> {
-    assert(tag == grant_id_tag_evm_k256(), "descriptor: not a 52-byte grant-id tag");
+    assert(is_registered_grant_id_tag(tag, ReadableClass.w52), "descriptor: not a 52-byte grant-id tag");
     return persistentHash<[Bytes<32>, ContractAddress, Bytes<20>, Bytes<32>, Bytes<32>, Uint<8>]>(
       [tag, self_addr, address, blind, origin_hash, slot]
     );
@@ -305,23 +382,23 @@ module WalletArmDescriptors {
     );
   }
 
-  // ── The ed25519 class: a `sol_ed25519` key by its point ───────────────────
+  // ── The ed25519 class: an Ed25519 key by its point ────────────────────────
   //
-  // A Solana key, as a target and as a signer, is a Curve25519Point, whose
-  // type admits only points of the prime-order subgroup: the runtime refuses
-  // any other point at the type boundary, the honest proof server refuses to
-  // decode it, and the circuit itself assigns a point input as [8]Q for a
-  // witnessed Q on the curve (midnight-circuits 7.2.4,
-  // ForeignEdwardsEccChip::assign, as pinned by proof server 9.0.0-rc.8), so
-  // a malicious prover cannot hold one either. The identity is the one
-  // subgroup point that is not a usable key; the derivations below refuse it
-  // explicitly (A != O).
+  // The key of an ed25519 arm (`sol_ed25519`), as a target and as a signer,
+  // is a Curve25519Point, whose type admits only points of the prime-order
+  // subgroup: the runtime refuses any other point at the type boundary, the
+  // honest proof server refuses to decode it, and the circuit itself assigns
+  // a point input as [8]Q for a witnessed Q on the curve (midnight-circuits
+  // 7.2.4, ForeignEdwardsEccChip::assign, as pinned by proof server
+  // 9.0.0-rc.8), so a malicious prover cannot hold one either. The identity
+  // is the one subgroup point that is not a usable key; the derivations below
+  // refuse it explicitly (A != O).
   //
   // The recipes bind the key's 32-byte RFC 8032 encoding, the bytes the
-  // wallet exports and a person compares. The solana arm's seam, which
+  // wallet exports and a person compares. An ed25519 arm's seam, which
   // verifies signatures under that point, derives its own entries with these
-  // same circuits, so enrolment, removal, grants and signing cannot use two
-  // different encodings of one key.
+  // same circuits, under its own registered tags, so enrolment, removal,
+  // grants and signing cannot use two different encodings of one key.
   //
   // The key's encoding is a checked input: modules/Ed25519Core checks it
   // against the point (ed25519_checked_encoding, from the encoding and the
@@ -349,7 +426,7 @@ module WalletArmDescriptors {
     epoch:     Uint<32>,
     counter:   Uint<64>,
   ): [Bytes<32>, Bytes<32>] {
-    assert(tag == device_tag_sol_ed25519(), "descriptor: not an Ed25519 device tag");
+    assert(is_registered_device_tag(tag, ReadableClass.ed25519), "descriptor: not an Ed25519 device tag");
     const key = ed25519_descriptor_key(pk, pk_bytes, pk_x);
     return [key, persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
       [tag, self_addr, key, blind, epoch, counter])];
@@ -364,7 +441,7 @@ module WalletArmDescriptors {
     pk_x:     Vector<32, Uint<8>>,
     blind:    Bytes<32>,
   ): [Bytes<32>, Bytes<32>] {
-    assert(tag == boot_tag_sol_ed25519(), "descriptor: not an Ed25519 boot tag");
+    assert(is_registered_boot_tag(tag, ReadableClass.ed25519), "descriptor: not an Ed25519 boot tag");
     const key = ed25519_descriptor_key(pk, pk_bytes, pk_x);
     return [key, persistentHash<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([tag, salt, key, blind])];
   }
@@ -380,16 +457,18 @@ module WalletArmDescriptors {
     origin_hash: Bytes<32>,
     slot:        Uint<8>,
   ): [Bytes<32>, Bytes<32>] {
-    assert(tag == grant_id_tag_sol_ed25519(), "descriptor: not an Ed25519 grant-id tag");
+    assert(is_registered_grant_id_tag(tag, ReadableClass.ed25519), "descriptor: not an Ed25519 grant-id tag");
     const key = ed25519_descriptor_key(pk, pk_bytes, pk_x);
     return [key, persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Bytes<32>, Uint<8>]>(
       [tag, self_addr, key, blind, origin_hash, slot])];
   }
 
   // [key, entry at `counter`, its successor at `counter + 1`]: the device
-  // seam (membership, then the roll) from one encoding, by the same recipe
-  // and with the same A != O assert.
+  // seam (membership, then the roll) from one encoding, by the same recipe,
+  // with the same tag admission and the same A != O assert. The seam passes
+  // its arm's own device tag.
   export pure circuit derive_signer_entries_ed25519(
+    tag:       Bytes<32>,
     self_addr: ContractAddress,
     pk:        Curve25519Point,
     pk_bytes:  Vector<32, Uint<8>>,
@@ -398,8 +477,8 @@ module WalletArmDescriptors {
     epoch:     Uint<32>,
     counter:   Uint<64>,
   ): [Bytes<32>, Bytes<32>, Bytes<32>] {
+    assert(is_registered_device_tag(tag, ReadableClass.ed25519), "descriptor: not an Ed25519 device tag");
     const key = ed25519_descriptor_key(pk, pk_bytes, pk_x);
-    const tag = device_tag_sol_ed25519();
     return [key,
             persistentHash<[Bytes<32>, ContractAddress, Bytes<32>, Bytes<32>, Uint<32>, Uint<64>]>(
               [tag, self_addr, key, blind, epoch, counter]),
@@ -409,8 +488,8 @@ module WalletArmDescriptors {
 
   // ── Grant origin_hash ─────────────────────────────────────────────────────
 
-  // A readable (`evm_k256` / `sol_ed25519`) grantee's origin label: 32
-  // bytes of zero-padded ASCII, shown as text.
+  // A readable grantee's origin label (any registered arm): 32 bytes of
+  // zero-padded ASCII, shown as text.
   export pure circuit derive_grant_origin_hash_label(label: Bytes<32>): Bytes<32> {
     return persistentHash<[Bytes<32>, Bytes<32>]>([grant_origin_tag(), label]);
   }
@@ -427,8 +506,7 @@ module WalletArmDescriptors {
   // client when it enrols a device or restores an account; exported so that
   // every implementation reproduces it through the contract's own toolchain.
   export pure circuit derive_blind(tag: Bytes<32>, signature: Bytes<64>): Bytes<32> {
-    assert(tag == blind_tag_evm_k256() || tag == blind_tag_sol_ed25519(),
-           "descriptor: not a blind tag");
+    assert(is_registered_blind_tag(tag), "descriptor: not a blind tag");
     return persistentHash<[Bytes<32>, Bytes<64>]>([tag, signature]);
   }
 
@@ -444,8 +522,7 @@ module WalletArmDescriptors {
   // commitments with it when it spends.
   export pure circuit derive_grant_scope_salt(tag: Bytes<32>, blind: Bytes<32>, self_addr: ContractAddress,
                                               auth_nonce: Uint<64>): Bytes<32> {
-    assert(tag == salt_tag_evm_k256() || tag == salt_tag_sol_ed25519(),
-           "descriptor: not a grant salt tag");
+    assert(is_registered_salt_tag(tag), "descriptor: not a grant salt tag");
     return persistentHash<[Bytes<32>, Bytes<32>, ContractAddress, Uint<64>]>([tag, blind, self_addr, auth_nonce]);
   }
 }

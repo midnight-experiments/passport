@@ -4,7 +4,10 @@
 // base probe contract.
 //
 //   1. Tags: every registered tag fits its 32-byte pad, is ASCII, and is
-//      registered once.
+//      registered once. The registry of readable arms lists each readable
+//      arm once, with its class and its five tags, in the client registry's
+//      order (src/wallet/descriptors.ts READABLE_ARMS), and its admission
+//      circuits accept exactly the registered tags of each recipe and class.
 //   2. Legacy recipes: for `jubjub`, `k256` and `p256`, the descriptor
 //      derivation by payload width equals upstream's own derivation circuit
 //      (device entry and grant id; these schemes have no boot recipe here,
@@ -21,8 +24,8 @@
 //      key's RFC 8032 encoding as Node's OpenSSL exports it, and the shared
 //      encoding circuit equals RFC 8032 (its section 7.1 vectors, the base
 //      point, and seeded keys of both x parities); each ed25519 derivation
-//      returns the key it hashed, and the signer helper equals two single
-//      derivations.
+//      returns the key it hashed, and the signer helper, given the arm's
+//      device tag, equals two single derivations.
 //   4. The checked encoding equals the encoding computed from the
 //      coordinates' own bytes (the probe's exploded_encoding_ed25519) on
 //      seeded keys, keys with a small y or x, keys with y just below p (high
@@ -32,7 +35,8 @@
 //      a byte at 256) are refused.
 //   5. Refusals: an unknown tag, a known tag of another class or another
 //      recipe, upstream's own boot tags (not registered here), and a
-//      non-canonically padded tag are each refused by every derivation; the
+//      non-canonically padded tag are each refused by every derivation, the
+//      signer helper included; the
 //      identity point is refused by the ed25519 class (A != O), and
 //      small-order and mixed-order points by the point type;
 //      a mismatched passkey RP yields an entry the passkey cannot use.
@@ -48,9 +52,9 @@ import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
 import { ed25519, ED25519_TORSION_SUBGROUP } from '@noble/curves/ed25519.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { pureCircuits as probe } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
+import { pureCircuits as probe, ReadableClass } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
 import { pureCircuits as upstream } from '../wallet/contract.js';
-import { grantScopeSalt, SALT_TAGS } from '../wallet/descriptors.js';
+import { grantScopeSalt, SALT_TAGS, READABLE_ARMS, READABLE_SCHEMES } from '../wallet/descriptors.js';
 
 const VECTORS = 24;
 
@@ -228,6 +232,26 @@ for (const text of seen) {
 }
 console.log(`  ✓ ${TAGS.length} tags fit 32 bytes, distinct, ASCII (widest: ${Math.max(...[...seen].map((s) => s.length))} bytes)`);
 
+// The registry of readable arms: one entry per arm, in the client registry's
+// order, with the same class and the same five tags; every tag registered.
+{
+  const arms = probe.readable_arms();
+  assert.equal(arms.length, READABLE_SCHEMES.length, 'the module registers the client registry\'s arms');
+  const CLASS = { w52: ReadableClass.w52, ed25519: ReadableClass.ed25519 } as const;
+  READABLE_SCHEMES.forEach((scheme, i) => {
+    const want = READABLE_ARMS[scheme], got = arms[i];
+    assert.equal(got.payload_class, CLASS[want.payloadClass], `${scheme}: class`);
+    for (const [field, text] of [['device', want.tags.device], ['boot', want.tags.boot], ['grant_id', want.tags['grant-id']],
+      ['blind', want.tags.blind], ['salt', want.tags.salt]] as const) {
+      assert.ok(eq(got[field], pad(32, text)), `${scheme}: ${field} tag ${text}`);
+      assert.ok(seen.has(text), `${scheme}: ${text} is one of the module's tag circuits`);
+      assert.ok(text.endsWith(`:${want.code}:v1`), `${scheme}: ${text} carries the arm's code`);
+    }
+  });
+  report.tags.push({ registry: READABLE_SCHEMES.map((s, i) => ({ scheme: s, class: READABLE_ARMS[s].payloadClass, code: READABLE_ARMS[s].code, index: i })) });
+  console.log(`  ✓ registry: ${arms.length} readable arms (${READABLE_SCHEMES.join(', ')}), class and five tags each equal to the client registry`);
+}
+
 // ── 2. Legacy recipes: descriptor == upstream circuit == independent SHA-256
 
 console.log('\n── legacy recipes (descriptor by width == upstream circuit == SHA-256)');
@@ -389,7 +413,7 @@ recipe(report.fresh, 'Ed25519 key encoding == OpenSSL RFC 8032 public key', (i) 
 recipe(report.fresh, 'signer entries sol_ed25519 == [key, entry(counter), entry(counter + 1)]', (i) => {
   const a = addr(), { key } = solKey(i), blind = rnd(32), ep = pick(U32_EDGES, i, 4);
   const ct = i === 0 ? 0n : i === 1 ? 0xfffffffffffffffen : bigLE(rnd(8)) % 0xffffffffffffffffn;
-  const [k, e0, e1] = probe.derive_signer_entries_ed25519(contractAddress(a), ...kin(key), blind, ep, ct);
+  const [k, e0, e1] = probe.derive_signer_entries_ed25519(T('midnight:account:device:sol:v1'), contractAddress(a), ...kin(key), blind, ep, ct);
   assert.ok(eq(k, key), 'the signer key is the RFC 8032 encoding');
   assert.ok(eq(e0, probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), contractAddress(a), ...kin(key), blind, ep, ct)[1]));
   assert.ok(eq(e1, probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), contractAddress(a), ...kin(key), blind, ep, ct + 1n)[1]));
@@ -573,6 +597,7 @@ const derivations: Record<string, { allowed: string[]; run: (tag: Uint8Array) =>
   grant_id_w52: { allowed: ['midnight:account:grant:id:evm:v1'], run: (t) => probe.derive_descriptor_grant_id_w52(t, A, B20, B32, B32, 0n) },
   grant_id_w64: { allowed: ['midnight:account:grant:id:v1', 'midnight:account:grant:id:r1:v1'], run: (t) => probe.derive_descriptor_grant_id_w64(t, A, B32, B32, B32, 0n) },
   grant_id_ed25519: { allowed: ['midnight:account:grant:id:sol:v1'], run: (t) => probe.derive_descriptor_grant_id_ed25519(t, A, ...PTK, B32, B32, 0n) },
+  signer_entries_ed25519: { allowed: ['midnight:account:device:sol:v1'], run: (t) => probe.derive_signer_entries_ed25519(t, A, ...PTK, B32, 0n, 0n) },
   grant_id_w65: { allowed: ['midnight:account:grant:id:k1:v1'], run: (t) => probe.derive_descriptor_grant_id_w65(t, A, B32, B32, 0n, B32, 0n) },
   blind: { allowed: ['midnight:account:blind:evm:v1', 'midnight:account:blind:sol:v1'], run: (t) => probe.derive_blind(t, rnd(64)) },
   grant_scope_salt: { allowed: ['midnight:account:salt:evm:v1', 'midnight:account:salt:sol:v1'], run: (t) => probe.derive_grant_scope_salt(t, B32, A, 0n) },
@@ -616,6 +641,31 @@ assert.equal(acceptsSeen, Object.values(derivations).reduce((n, d) => n + d.allo
 // Upstream's boot tags: refused by every derivation, the two boot ones included.
 assert.equal(upstreamBootRefused, UPSTREAM_BOOT_TAGS.length * Object.keys(derivations).length);
 report.refusals.upstreamBootTags = { cases: upstreamBootRefused, refused: upstreamBootRefused };
+
+// The registry's admission circuits accept exactly the tags the derivations
+// accept: per recipe and class for device, boot and grant-id tags, any arm's
+// blind and salt tags; every other candidate is refused.
+{
+  const admits: [string, (t: Uint8Array) => boolean, string[]][] = [
+    ['device w52', (t) => probe.is_registered_device_tag(t, ReadableClass.w52), derivations.entry_w52.allowed],
+    ['device ed25519', (t) => probe.is_registered_device_tag(t, ReadableClass.ed25519), derivations.entry_ed25519.allowed],
+    ['boot w52', (t) => probe.is_registered_boot_tag(t, ReadableClass.w52), derivations.boot_w52.allowed],
+    ['boot ed25519', (t) => probe.is_registered_boot_tag(t, ReadableClass.ed25519), derivations.boot_ed25519.allowed],
+    ['grant-id w52', (t) => probe.is_registered_grant_id_tag(t, ReadableClass.w52), derivations.grant_id_w52.allowed],
+    ['grant-id ed25519', (t) => probe.is_registered_grant_id_tag(t, ReadableClass.ed25519), derivations.grant_id_ed25519.allowed],
+    ['blind', (t) => probe.is_registered_blind_tag(t), derivations.blind.allowed],
+    ['salt', (t) => probe.is_registered_salt_tag(t), derivations.grant_scope_salt.allowed],
+  ];
+  let checked = 0;
+  for (const [name, f, allowed] of admits) {
+    for (const [label, tag] of candidates) {
+      assert.equal(f(tag), allowed.some((s) => eq(pad(32, s), tag)), `${name}: ${label}`);
+      checked++;
+    }
+  }
+  report.refusals.registryAdmission = { cases: checked, refused: checked - admits.reduce((n, [, , a]) => n + a.length, 0) };
+  console.log(`  ✓ registry admission: ${admits.length} circuits × ${candidates.length} candidate tags, each accepting exactly its recipe's and class's registered tags`);
+}
 console.log(`  ✓ ${refusalsSeen}/${refusalCases} wrong-tag cases refused at the generated JavaScript (each registered tag accepted only by its own recipe and width; upstream's ${UPSTREAM_BOOT_TAGS.length} boot tags refused by all ${Object.keys(derivations).length} derivations, ${upstreamBootRefused} cases)`);
 
 // A passkey whose descriptor carries the wrong RP (a mismatched rp_id_hash)
@@ -652,7 +702,7 @@ console.log(`  ✓ ${refusalsSeen}/${refusalCases} wrong-tag cases refused at th
     ['entry', () => probe.derive_descriptor_entry_ed25519(T('midnight:account:device:sol:v1'), A, ...OK, B32, 0n, 0n)],
     ['boot', () => probe.derive_descriptor_boot_ed25519(T('midnight:account:boot:sol:v1'), B32, ...OK, B32)],
     ['grant id', () => probe.derive_descriptor_grant_id_ed25519(T('midnight:account:grant:id:sol:v1'), A, ...OK, B32, B32, 0n)],
-    ['signer entries', () => probe.derive_signer_entries_ed25519(A, ...OK, B32, 0n, 0n)],
+    ['signer entries', () => probe.derive_signer_entries_ed25519(T('midnight:account:device:sol:v1'), A, ...OK, B32, 0n, 0n)],
   ];
   for (const [name, f] of idRefused) assert.throws(f, /failed assert: descriptor: the Ed25519 key is the identity/, `${name}: the identity is refused`);
   const degenerate: [string, { x: bigint; y: bigint }][] = [];
