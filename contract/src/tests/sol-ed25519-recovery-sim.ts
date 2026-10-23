@@ -155,7 +155,7 @@ const authFor = (d: SolEd25519Device, o: SolDeviceOperation, counter = counterOf
   authoriseSolDevice(d, ctx(), SITE, o, counter < 0n ? 0n : counter);
 /** The wallet signed `signed`; the call executes with display inputs `show`. */
 const signedOver = async (d: SolEd25519Device, signed: Uint8Array, show: unknown[], counter = counterOf(d)): Promise<SolEd25519Authorisation> =>
-  ({ ...(await authFor(d, { op: 'recover_cancel' }, counter)), sig: (await d.signBytes(signed)).sig, showArgs: show });
+  ({ ...(await authFor(d, { op: 'recover_cancel' }, counter)), sig: (await d.signApproval(signed)).sig, showArgs: show });
 const sessionArgs = (s: Session) => [s.recoveryPk, s.sessionNonce, ...s.phi, s.phiLen, s.wrap];
 const publish = async (d: SolEd25519Device, s: Session, counter = counterOf(d)) => call(PUBLISH, [...sessionArgs(s), ...authArgs(await authFor(d, s, counter))]);
 const cancel = async (d: SolEd25519Device, counter = counterOf(d)) => call(CANCEL, authArgs(await authFor(d, { op: 'recover_cancel' }, counter)));
@@ -420,7 +420,7 @@ await section('10 recover_cancel_with_sol_ed25519: binding, then the veto by a s
   await refused('an unenrolled sol key cancels', () => cancel(stranger, 0n), UNKNOWN);
   const before = L();
   const auth = await authFor(S2, C);
-  ok(auth.message.length === 371, 'the cancel approval: 371 bytes');
+  ok(auth.text.length === 371 && auth.message.length === 50 + 371, 'the cancel approval: 371 bytes (421 signed, with the raw head)');
   await call(CANCEL, authArgs(auth));
   const l = L();
   ok(l.pending_recovery === false && l.device_epoch === before.device_epoch, 'cancel clears the pending record; the epoch unchanged');

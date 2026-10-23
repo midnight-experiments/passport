@@ -125,6 +125,18 @@
 //                non-zero (not shown, so the signature is over the contract's
 //                own bytes); a literal removal's display inputs other than an
 //                empty target's;
+//   formats      the two signing formats at every circuit that verifies a
+//                signature (the 12 device-gated exports, the 3 grantee
+//                twins): the honest approval proved raw and as an off-chain
+//                message v1, with the same key, blind, counters and operands
+//                from one state, and the two calls' public parts equal (the
+//                public transcript, the contract call's guaranteed and
+//                fallible transcripts with their effects and gas, the state
+//                after the call; the proof and the hiding communications
+//                commitment excluded); each format's signature presented
+//                with the other format's flag, for the same validly enrolled
+//                device, refused by the proof server
+//                (SOL_ED25519_FORMATS_CIRCUITS=<circuit,...> runs a subset);
 //   display-module the base rendering module's asserts through this arm's
 //                exports, each text signed as shown: the UTC expiry line's
 //                shape, month, day and time of day, each text equal to the
@@ -180,7 +192,7 @@ import {
   GRANT_ID_FORGE_OVERRIDES, grantIdForgery, withLedgerCell, zswapLog, type LocalAccount, type LocalCoin,
 } from './sol-ed25519-negative.js';
 
-const ALL = ['activation', 'seam', 'replay', 'frame', 'custody', 'witness', 'devices', 'grants', 'grantee-scope', 'frame-lifecycle', 'recovery', 'field-rendering', 'readability', 'rules', 'module', 'hints', 'arm-asserts', 'display-module'];
+const ALL = ['activation', 'seam', 'replay', 'frame', 'custody', 'witness', 'devices', 'grants', 'grantee-scope', 'frame-lifecycle', 'recovery', 'field-rendering', 'readability', 'rules', 'module', 'hints', 'arm-asserts', 'formats', 'display-module'];
 const SECTIONS = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 for (const s of SECTIONS) if (!ALL.includes(s)) throw new Error(`sol-ed25519-prover: unknown section ${s} (${ALL.join(', ')})`);
 const DRY = process.env.SOL_ED25519_DRY === '1';
@@ -385,15 +397,15 @@ const ownControl = (section: string, expect: Expect, bypass: string[]) =>
  *  positive control) or the original module; `check` runs on the state
  *  after the call and must return true. Returns that state (or undefined). */
 async function positive(section: string, name: string, mod: BypassedContractModule | undefined, a: LocalAccount, circuit: string, args: unknown[],
-  check?: (after: LocalAccount) => boolean | Promise<boolean>, hook?: () => void): Promise<LocalAccount | undefined> {
+  check?: (after: LocalAccount) => boolean | Promise<boolean>, hook?: () => void, capture?: (x: { call: any; after: LocalAccount; proven?: any }) => void): Promise<LocalAccount | undefined> {
   const r: Result = { section, circuit, case: name, kind: 'positive' };
   let after: LocalAccount | undefined;
   if (DRY) {
-    try { hook?.(); after = (await execute((mod ?? Original).Contract, a, circuit, args)).after; r.positive = { verdict: 'PASS', reason: 'DRY: executed (not proved)' }; }
+    try { hook?.(); const x = await execute((mod ?? Original).Contract, a, circuit, args); after = x.after; capture?.(x); r.positive = { verdict: 'PASS', reason: 'DRY: executed (not proved)' }; }
     catch (e: any) { r.positive = { verdict: 'FAIL', reason: 'DRY: execution failed', detail: String(e?.message ?? e) }; }
   } else {
     r.positive = strip(await expectSuccess({ name: `${circuit}: ${name}`, proofLog, through: mod,
-      attempt: async () => { hook?.(); const x = await prove((mod ?? Original).Contract, a, circuit, args); after = x.after; return x; } }));
+      attempt: async () => { hook?.(); const x = await prove((mod ?? Original).Contract, a, circuit, args); after = x.after; capture?.(x); return x; } }));
     if (mod && r.positive.verdict === 'PASS') { controlled.add(`${mod.file}|${circuit}`); if (!controlledBy.has(`${mod.file}|${circuit}`)) controlledBy.set(`${mod.file}|${circuit}`, name); }
   }
   // DRY: the copy's execution stands in for the proof (the same bookkeeping)
@@ -564,6 +576,15 @@ const rIdentityFor = (seed: Uint8Array, key: Uint8Array) => (message: Uint8Array
   const k = leInt(sha512(new Uint8Array([...encO, ...key, ...message]))) % sol.ED25519_L;
   return { r: { x: 0n, y: 1n }, s: (k * a) % sol.ED25519_L };
 };
+/** The device's signature over `text` in its format as a wallet that signs
+ *  whatever it is given makes it: the format's head, then the bytes, with no
+ *  client-side check of the text (some cases sign texts the client refuses
+ *  to build, such as one ending in a control byte). */
+const signRawOver = async (d: Dev, text: Uint8Array) => {
+  const head = msg.solMessageHead(d.format, d.key) as Uint8Array;
+  const message = new Uint8Array(head.length + text.length); message.set(head); message.set(text, head.length);
+  return { ...(await d.signBytes(message)), message };
+};
 /** A local account activated by `d` (recovery key `recoverySecret`). */
 async function activated(d: Dev, salt: Uint8Array, recoverySecret?: bigint, window?: bigint): Promise<LocalAccount> {
   const rpk = recoverySecret === undefined ? JubjubDevice.generate().pk : recoveryKey(recoverySecret).pk;
@@ -590,7 +611,7 @@ async function foreignFrameDevice(section: string, rnd: (n?: number) => Uint8Arr
   const foreign = rnd();
   const forged = [...honest.showArgs]; forged[ix] = msg.solFrameNibbles(foreign, d.key);
   const bytes = msg.solMessageBytes(msg.solDeviceMessageText({ site, account: foreign, key: d.key, nonce: ledgerOf(a).auth_nonce as bigint }, o));
-  const { sig } = await d.signBytes(bytes);
+  const { sig } = await d.signApproval(bytes);
   await negative(section, `${label}: the wallet signed a message showing a foreign account (seam-owned frame)`, a, circuit,
     argsOf({ ...honest, sig, showArgs: forged }), HEXD, [HEXD], { a, args: argsOf(honest) });
 }
@@ -603,7 +624,7 @@ async function foreignFrameGrantee(section: string, rnd: (n?: number) => Uint8Ar
   const foreign = rnd();
   const forged = [...honest.showArgs]; forged[ix] = msg.solFrameNibbles(foreign, G.key);
   const bytes = msg.solMessageBytes(msg.solGranteeMessageText({ site, account: foreign, key: G.key, label: ctx.label, slot: ctx.slot, issuedAt: ctx.issuedAt, nonce: ctx.grantNonce }, o));
-  const { sig } = await G.device.signBytes(bytes);
+  const { sig } = await G.device.signApproval(bytes);
   await negative(section, `${label}: the grantee signed a message showing a foreign account (seam-owned frame)`, a, circuit,
     argsOf({ ...honest, sig, showArgs: forged }), HEXD, [HEXD], { a, args: argsOf(honest) });
 }
@@ -676,12 +697,12 @@ async function sectionSeam() {
   // check bypassed in the copy's pure circuit)
   const wrongNonceMsg: Uint8Array = mDigits.pureCircuits.sol_message_rotate_enc_key({ bytes: A1.addressBytes }, device.key, ledgerOf(A1).auth_nonce, k2,
     msg.solShow(SITE, 2n), a2.showArgs[1], a2.showArgs[2]);
-  const wrongNonceSig = (await device.signBytes(wrongNonceMsg)).sig;
+  const wrongNonceSig = (await device.signApproval(wrongNonceMsg)).sig;
   // foreign frame nibbles (account; signing key), signed by the wallet
   const foreignAccountFrame = msg.solFrameNibbles(rnd(), device.key);
   const foreignKeyFrame = msg.solFrameNibbles(A1.addressBytes, sol.solSoftwareSigner(rnd()).publicKey);
   const mB58 = await copyFor([B58LO, B58HI]);
-  const frameSig = async (frame: any, copy = mHex) => (await device.signBytes(copy.pureCircuits.sol_message_rotate_enc_key({ bytes: A1.addressBytes }, device.key,
+  const frameSig = async (frame: any, copy = mHex) => (await device.signApproval(copy.pureCircuits.sol_message_rotate_enc_key({ bytes: A1.addressBytes }, device.key,
     ledgerOf(A1).auth_nonce, k2, a2.showArgs[0], frame, a2.showArgs[2]))).sig;
   const NEG: [string, unknown[], Expect, string[]][] = [
     ['binding: another new key at execution (consistent display inputs)', cons(rnd(), a2), INVALID, [INVALID]],
@@ -981,7 +1002,7 @@ async function sectionDevices() {
     const badArg = { ...msg.solTargetArg(tP), tag: padTag('midnight:account:device:zz:v9') };
     const shown = shownFor(A0, { op: 'add_device', target: tP });
     const bytes = mTag.pureCircuits.sol_message_add_device({ bytes: A0.addressBytes }, S.key, ledgerOf(A0).auth_nonce, badArg, ...shown);
-    const { sig } = await S.signBytes(bytes);
+    const { sig } = await S.signApproval(bytes);
     const au = { ...(await authFor(A0, { op: 'add_device', target: tP })), sig };
     await negative('devices', 'guards: add_device, an unregistered tag under a valid signature (the message shows the passkey class text)', A0, ADD, [badArg, msg.solUnusedKey(), ...authArgs(au)], NOTREG, [NOTREG, W117],
       { a: A0, args: addArgs(tP, await authFor(A0, { op: 'add_device', target: tP })) });
@@ -1030,7 +1051,7 @@ async function sectionDevices() {
     // the descriptor's `a` is another key, whose hex nibbles are supplied
     const mOther = sol.solDeviceMessageCircuit(S.key, ctxOf(A0), SITE, { op: 'add_device', target: { ...tS2, a: other } });
     const shOther = mOther.showArgs as any[];
-    const auOther = { ...au, sig: (await S.signBytes(mOther.bytes)).sig,
+    const auOther = { ...au, sig: (await S.signApproval(mOther.bytes)).sig,
       showArgs: [shOther[0], shOther[1], shOther[2], msg.nibblesOf(...msg.solDeviceHexValues({ op: 'add_device', target: tS2 } as any))] };
     await negative('devices', "guards: a sol target whose descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)", A0, ADD,
       [msg.solTargetArg(tS2), keyOf(msg.solTargetPoint(other)), ...authArgs(auOther)], NOT_POINT, [NOT_POINT], ctlAdd);
@@ -1044,7 +1065,7 @@ async function sectionDevices() {
     const idArg = { ...msg.solTargetArg({ tag: 'midnight:account:device:v1' } as any), tag: padTag(DESCRIPTOR_TAGS.device.sol_ed25519), a: idKey, b: tId.b };
     const shownId = [msg.solTargetShow(tId as any), msg.solShow(SITE, ledgerOf(A0).auth_nonce), msg.solFrameNibbles(A0.addressBytes, S.key), msg.nibblesOf(...msg.solDeviceHexValues({ op: 'add_device', target: tId } as any))];
     const idBytes = Original.pureCircuits.sol_message_add_device({ bytes: A0.addressBytes }, S.key, ledgerOf(A0).auth_nonce, idArg, ...shownId);
-    const auId = { ...au, sig: (await S.signBytes(idBytes)).sig, showArgs: shownId };
+    const auId = { ...au, sig: (await S.signApproval(idBytes)).sig, showArgs: shownId };
     await negative('devices', 'guards: the identity point as a sol target (its encoding 0100..00 shown and signed): refused by A != O in the derivation', A0, ADD,
       [idArg, keyOf({ x: 0n, y: 1n }), ...authArgs(auId)], KEY_IS_IDENTITY, [KEY_IS_IDENTITY], ctlAdd);
   }
@@ -1067,7 +1088,7 @@ async function sectionDevices() {
       const R = ed25519.Point.BASE.multiply(sc).toAffine();
       const newKey = rnd();
       const idShow = sol.solDeviceMessageCircuit(idKey, ctxOf(AO), SITE, { op: 'rotate_enc_key', newKey }).showArgs;
-      const auth = { pk: { x: 0n, y: 1n }, ...sol.solKeyHints({ x: 0n, y: 1n }), blind: idBlind, use_counter: 0n, sig: { r: { x: R.x, y: R.y }, s: sc }, ...sol.solSignatureHints({ r: { x: R.x, y: R.y }, s: sc }) };
+      const auth = { pk: { x: 0n, y: 1n }, ...sol.solKeyHints({ x: 0n, y: 1n }), blind: idBlind, use_counter: 0n, offchain: false, sig: { r: { x: R.x, y: R.y }, s: sc }, ...sol.solSignatureHints({ r: { x: R.x, y: R.y }, s: sc }) };
       const honestRot = await authFor(AO, { op: 'rotate_enc_key', newKey });
       await negative('devices', "guards (e): the seam's A != O — a call signed for the identity key (its entry planted, the verification equation holding) is refused only by A != O (the descriptor module's signer derivation and the verification's identity-key assert)", AO, ROTATE,
         [newKey, ...idShow, auth], KEY_IS_IDENTITY, [KEY_IS_IDENTITY, IDENTITY_KEY], { a: AO, args: [newKey, ...authArgs(honestRot)] });
@@ -1090,7 +1111,7 @@ async function sectionGrants() {
    *  circuit can refuse it. */
   const circuitAuth = async (a: LocalAccount, o: any) => {
     const { bytes, showArgs } = sol.solDeviceMessageCircuit(S.key, ctxOf(a), SITE, o);
-    return { ...(await authFor(a, { op: 'revoke_all_grants' })), sig: (await S.signBytes(bytes)).sig, showArgs, message: bytes };
+    return { ...(await authFor(a, { op: 'revoke_all_grants' })), ...(await signRawOver(S, bytes)), showArgs };
   };
   const gSigner = sol.solSoftwareSigner(rnd());
   const G = await sol.SolEd25519Grantee.enrol(gSigner, { network: 'undeployed', issuingAccount: A0.addressBytes }, 'Example dApp');
@@ -1134,7 +1155,7 @@ async function sectionGrants() {
     const mO = sol.solDeviceMessageCircuit(S.key, ctxOf(A0), SITE, { op: 'issue_grant', grantee: { ...gG, a: other }, ...sU } as any);
     const shO = mO.showArgs as any[];
     const hexG = (shownFor(A0, { op: 'issue_grant', grantee: gG, ...sU }) as any[]).at(-1);
-    const auO = { ...auG, sig: (await S.signBytes(mO.bytes)).sig, showArgs: [...shO.slice(0, -1), hexG] };
+    const auO = { ...auG, sig: (await S.signApproval(mO.bytes)).sig, showArgs: [...shO.slice(0, -1), hexG] };
     await negative('grants', "issue: the grantee's descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)", A0, ISSUE,
       issueArgsOf(gG, sU, auO, keyOf(msg.solTargetPoint(other))), NOT_POINT, [NOT_POINT], ctlIssue);
   }
@@ -1259,7 +1280,7 @@ async function sectionGranteeScope() {
     const ctx = gctx(p.ctx ?? a, slot);
     const ga = await sol.authoriseSolGrantee(G.device, ctx, SITE, opOf(t, exec) as any);
     let auth: any = ga;
-    if (p.signed) auth = { ...ga, sig: (await G.device.signBytes(sol.solGranteeMessageCircuit(G.key, ctx, SITE, opOf(t, { ...exec, ...p.signed }) as any).bytes)).sig };
+    if (p.signed) auth = { ...ga, sig: (await G.device.signApproval(sol.solGranteeMessageCircuit(G.key, ctx, SITE, opOf(t, { ...exec, ...p.signed }) as any).bytes)).sig };
     const o = opening(t, slot, p.spentPrev ?? 0n);
     const args = t === 'U' ? [exec.color, p.amount, { bytes: exec.recipient }, ...grantAuthArgs(o as any, auth)]
       : [{ bytes: exec.recipient }, exec.color, p.amount, exec.change, exec.encPk, ...grantAuthArgs(o as any, auth)];
@@ -1531,7 +1552,7 @@ async function sectionRecovery(doRecovery: boolean, doFieldRendering: boolean) {
     msg.solMessageBytes(msg.solDeviceMessageText({ site: SITE, account, key: d.key, nonce }, o));
   /** The wallet signed `signed`; the call carries display inputs `show`. */
   const signedOver = async (a: LocalAccount, d: Dev, signed: Uint8Array, show: unknown[], counter = counterIn(a, d)) =>
-    ({ ...(await authFor(a, d, { op: 'recover_cancel' }, counter)), sig: (await d.signBytes(signed)).sig, showArgs: show });
+    ({ ...(await authFor(a, d, { op: 'recover_cancel' }, counter)), sig: (await d.signApproval(signed)).sig, showArgs: show });
   const pubArgs = async (a: LocalAccount, x: Sess, d: Dev = S, counter = counterIn(a, d)) => [...sArgs(x), ...authArgs(await authFor(a, d, x, counter))];
   const cancelArgs = async (a: LocalAccount, d: Dev, counter = counterIn(a, d)) => authArgs(await authFor(a, d, { op: 'recover_cancel' }, counter));
   const rIdentity = rIdentityFor(sSeed, S.key);
@@ -1722,7 +1743,7 @@ async function sectionReadability() {
     if (from.length !== to.length) throw new Error('forge: the forged text must keep the layout');
     return msg.solMessageBytes(text.replace(from, to));
   };
-  const forgedAuth = async (honest: any, from: string, to: string, dev: any = S) => ({ ...honest, sig: (await dev.signBytes(forge(honest.text, from, to))).sig });
+  const forgedAuth = async (honest: any, from: string, to: string, dev: any = S) => ({ ...honest, sig: (await dev.signApproval(forge(honest.text, from, to))).sig });
   const d39 = (v: bigint | string) => String(v).padEnd(39, ' ');
   const amt = (color: Uint8Array, amount: bigint, decimals = 0, symbol = 'tTOK') => ({ color, amount, decimals, symbol });
   // custody
@@ -1732,7 +1753,7 @@ async function sectionReadability() {
   const aU = await authFor(AU, oU);
   const uArgs = (au: any) => [COL_U, 1_000_000n, { bytes: RU }, ...authArgs(au)];
   const ctlU = { a: AU, args: uArgs(aU) };
-  textCheck('readability', 'withdraw_unshielded: "Amount (base units): 1000000…" in full digits, no magnitude (600 bytes)', aU.message.length === 600 && aU.text.includes(`Amount (base units): ${d39(1_000_000n)}\n`) && !aU.text.includes(' x 10^'));
+  textCheck('readability', 'withdraw_unshielded: "Amount (base units): 1000000…" in full digits, no magnitude (600 bytes)', aU.text.length === 600 && aU.message.length === 50 + 600 && aU.text.includes(`Amount (base units): ${d39(1_000_000n)}\n`) && !aU.text.includes(' x 10^'));
   await positive('readability', 'withdraw_unshielded 10^6: proved', undefined, AU, WU, ctlU.args);
   await negative('readability', 'forged amount: the wallet signed "100000" for an executed 1000000', AU, WU, uArgs(await forgedAuth(aU, `Amount (base units): ${d39(1_000_000n)}`, `Amount (base units): ${d39(100_000n)}`)), INVALID, [INVALID], ctlU);
   for (const [name, units, expect] of [
@@ -1743,7 +1764,7 @@ async function sectionReadability() {
     const shown = [...aU.showArgs] as any[];
     shown[0] = { ...shown[0], units: [...Buffer.from(units.padEnd(39, ' '), 'ascii')].map(BigInt) };
     const bytes: Uint8Array = copy.pureCircuits.sol_message_withdraw_unshielded({ bytes: AU.addressBytes }, S.key, ledgerOf(AU).auth_nonce, COL_U, 1_000_000n, { bytes: RU }, ...shown);
-    const { sig } = await S.signBytes(bytes);
+    const { sig } = await S.signApproval(bytes);
     await negative('readability', `${name}, signed over what they render`, AU, WU, uArgs({ ...aU, sig, showArgs: shown }), expect, [expect], ctlU);
   }
   const COL_A = fill(32, 0xa1), NONCE_H = fill(32, 0x11), RC = fill(32, 0x3c);
@@ -1760,7 +1781,7 @@ async function sectionReadability() {
     const sArgs = (x: any) => [{ bytes: recipient }, COL_A, 300n, ...authArgs(x)];
     const short = circuit === WS ? 'withdraw_shielded' : 'withdraw_shielded_to_contract';
     const len = circuit === WS ? 841 : 851;
-    textCheck('readability', `${short}: the amount, the spent value and the change in full digits (${len} bytes)`, au.message.length === len
+    textCheck('readability', `${short}: the amount, the spent value and the change in full digits (${len} bytes)`, au.text.length === len && au.message.length === 50 + len
       && au.text.includes(`Spent coin value: ${d39(1000n)}\n`) && au.text.includes(`Change back to this account: ${d39(700n)}\n`) && au.text.includes(`Amount (base units): ${d39(300n)}\n`));
     await positive('readability', `${short} 300 of a 1000 coin: proved`, undefined, H.a, circuit, sArgs(au));
     if (circuit === WS) await negative('readability', 'forged change: the wallet signed the change as 70', H.a, circuit,
@@ -1773,7 +1794,7 @@ async function sectionReadability() {
   const addArgs = (t: any, x: any) => [msg.solTargetArg(t), msg.solTargetPointArg(t), ...authArgs(x)];
   const ctlAdd = { a: A0, args: addArgs(tR, aR) };
   const NA = 'not applicable'.padEnd(64, ' ');
-  textCheck('readability', 'add_device: a passkey target shows its RP hash as 64 hex digits (685 bytes)', aR.message.length === 685 && aR.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}\n`));
+  textCheck('readability', 'add_device: a passkey target shows its RP hash as 64 hex digits (685 bytes)', aR.text.length === 685 && aR.message.length === 50 + 685 && aR.text.includes(`Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}\n`));
   const A1 = await positive('readability', 'add_device of that passkey target: proved', undefined, A0, ADD, ctlAdd.args);
   await negative('readability', 'forged word: the wallet signed "not applicable" for a passkey target\'s RP hash', A0, ADD,
     addArgs(tR, await forgedAuth(aR, `Passkey RP (hash): ${hex(pass.policy.rp_id_hash)}`, `Passkey RP (hash): ${NA}`)), INVALID, [INVALID], ctlAdd);
@@ -1794,7 +1815,7 @@ async function sectionReadability() {
   const ctlI = { a: A0, args: issueArgsOf(gG, sG, aI) };
   const MAXTXT = d39(MAX128);
   textCheck('readability', 'issue_grant: caps of 2^128 - 1 in full digits, expiry 0 reads "never", a non-passkey grantee\'s zero RP hash "not applicable", the expiry\'s UTC line "never", a zero window "no window" (1,690 bytes)',
-    aI.message.length === 1690 && aI.text.includes(`Expires at (UTC): ${'never'.padEnd(29)}\n`) && aI.text.includes(`Window length: ${'no window'.padEnd(20)}\n`) && aI.text.includes(`Total cap: ${MAXTXT}\n`) && aI.text.includes(`Max coin value: ${MAXTXT}\n`) && aI.text.includes(`Per-call cap: ${MAXTXT}\n`)
+    aI.text.length === 1690 && aI.message.length === 50 + 1690 && aI.text.includes(`Expires at (UTC): ${'never'.padEnd(29)}\n`) && aI.text.includes(`Window length: ${'no window'.padEnd(20)}\n`) && aI.text.includes(`Total cap: ${MAXTXT}\n`) && aI.text.includes(`Max coin value: ${MAXTXT}\n`) && aI.text.includes(`Per-call cap: ${MAXTXT}\n`)
     && aI.text.includes(`Expires at (block time, seconds): ${'never'.padEnd(20)}\n`) && aI.text.includes(`Passkey RP (hash): ${NA}\n`) && aI.text.includes(`Window cap: ${'no window'.padEnd(39)}\n`) && !aI.text.includes(' x 10^'));
   const AG = await positive('readability', 'issue_grant to a sol grantee with the words and the full digits: proved', undefined, A0, ISSUE, ctlI.args, (after) => ledgerOf(after).grants.member(G.grantId(after.addressBytes, 0n)));
   await negative('readability', 'forged cap: the wallet signed "no limit" for the total cap', A0, ISSUE, issueArgsOf(gG, sG, await forgedAuth(aI, `Total cap: ${MAXTXT}`, `Total cap: ${d39('no limit')}`)), INVALID, [INVALID], ctlI);
@@ -1848,7 +1869,7 @@ async function sectionReadability() {
     const ga = await sol.authoriseSolGrantee(G.device, gctx(AGU, 0n), SITE, o as any);
     const gArgs = (x: any) => [COL_U, 2_500_000n, { bytes: RU }, ...grantAuthArgs(opening(0n, saltG, 0n, MAX128) as any, x)];
     const ctlG = { a: AGU, args: gArgs(ga) };
-    textCheck('readability', 'the unshielded twin: "Amount (base units): 2500000…" in full digits (726 bytes)', ga.message.length === 726 && ga.text.includes(`Amount (base units): ${d39(2_500_000n)}\n`));
+    textCheck('readability', 'the unshielded twin: "Amount (base units): 2500000…" in full digits (726 bytes)', ga.text.length === 726 && ga.message.length === 50 + 726 && ga.text.includes(`Amount (base units): ${d39(2_500_000n)}\n`));
     await positive('readability', 'the unshielded twin: proved; auth_nonce untouched', undefined, AGU, GWU, ctlG.args, (after) => ledgerOf(after).auth_nonce === ledgerOf(AGU).auth_nonce);
     await negative('readability', 'forged amount: the grantee signed "250000" for an executed 2500000', AGU, GWU, gArgs(await forgedAuth(ga, `Amount (base units): ${d39(2_500_000n)}`, `Amount (base units): ${d39(250_000n)}`, G.device)), GINVALID, [GINVALID], ctlG);
   }
@@ -1865,7 +1886,7 @@ async function sectionReadability() {
         coin: { nonce: H.coin.nonce, color: COL_A, value: 1000n, mt_index: H.coin.mtIndex } };
       const ga = await sol.authoriseSolGrantee(G.device, gctx(H.a, 1n), SITE, o as any);
       const len = circuit === GWS ? 1566 : 1576;
-      textCheck('readability', `the ${circuit === GWS ? 'shielded' : 'to-contract'} twin: the amount, spent value and change in full digits (${len} bytes)`, ga.message.length === len
+      textCheck('readability', `the ${circuit === GWS ? 'shielded' : 'to-contract'} twin: the amount, spent value and change in full digits (${len} bytes)`, ga.text.length === len && ga.message.length === 50 + len
         && ga.text.includes(`Spent coin value: ${d39(1000n)}\n`) && ga.text.includes(`Change back to this account: ${d39(700n)}\n`));
       await positive('readability', `the ${circuit === GWS ? 'shielded' : 'to-contract'} twin 300 of a 1000 coin: proved`, undefined, H.a, circuit,
         [{ bytes: recipient }, COL_A, 300n, change, enc, ...grantAuthArgs(opening(1n, saltS, 0n, 1000n) as any, ga)]);
@@ -1887,7 +1908,7 @@ async function sectionRules() {
    *  refuses these values, so the bytes come from the pure message circuit). */
   const circuitAuth = async (a: LocalAccount, o: any) => {
     const { bytes, showArgs } = sol.solDeviceMessageCircuit(S.key, ctxOf(a), SITE, o);
-    return { ...(await authFor(a, { op: 'revoke_all_grants' })), sig: (await S.signBytes(bytes)).sig, showArgs, message: bytes };
+    return { ...(await authFor(a, { op: 'revoke_all_grants' })), ...(await signRawOver(S, bytes)), showArgs };
   };
   const ZERO_PK = "descriptor: a passkey's RP hash is zero";
   const ZERO_GRANTEE = "sol_ed25519: a passkey grantee's RP hash is zero";
@@ -1961,7 +1982,7 @@ async function sectionModule() {
   const shownFor = (o: any) => sol.solDeviceMessageCircuit(S.key, ctxOf(A0), SITE, o).showArgs as any[];
   /** A valid signature over `bytes`, the call carrying `showArgs`. */
   const signedOver = async (bytes: Uint8Array, showArgs: unknown[]) =>
-    ({ ...(await authFor({ op: 'revoke_all_grants' })), sig: (await S.signBytes(bytes)).sig, showArgs, message: bytes });
+    ({ ...(await authFor({ op: 'revoke_all_grants' })), ...(await signRawOver(S, bytes)), showArgs });
   const head = [{ bytes: A0.addressBytes }, S.key, ledgerOf(A0).auth_nonce];
   /** issue_grant's message as `pc` renders it (the contract's pure circuit, or a copy's). */
   const issueBytes = (pc: any, garg: unknown, sc: any, sh: unknown[]): Uint8Array => pc.sol_message_issue_grant(...head, garg,
@@ -2165,9 +2186,9 @@ async function sectionHints() {
     const nk = rnd();
     const m = sol.solDeviceMessageCircuit(fb, ctxOf(AP), SITE, { op: 'rotate_enc_key', newKey: nk });
     const n = nonce();
-    const kk = leInt(sha512(new Uint8Array([...n.e.map((x) => Number(x)), ...fb, ...m.bytes]))) % L;
+    const kk = leInt(sha512(new Uint8Array([...n.e.map((x) => Number(x)), ...fb, ...msg.solSignedMessage('raw', fb, m.bytes)]))) % L;
     const sig = { r: { x: n.R.x, y: n.R.y }, s: (n.r + kk * secret) % L };
-    const forgedAuth = { pk: device.pk, pk_bytes: Array.from(fb, (b) => BigInt(b)), pk_x: keyIn.pk_x, blind: device.blind, use_counter: 0n, sig, r_bytes: n.e, r_x: n.x };
+    const forgedAuth = { pk: device.pk, pk_bytes: Array.from(fb, (b) => BigInt(b)), pk_x: keyIn.pk_x, blind: device.blind, use_counter: 0n, offchain: false, sig, r_bytes: n.e, r_x: n.x };
     const auH = await sol.authoriseSolDevice(device, ctxOf(AP), SITE, { op: 'rotate_enc_key', newKey: nk }, counterIn(AP, device));
     await negative('hints', "the signing key's bytes forged (an entry planted for them, the message and the signature over them): refused only by the key encoding's y check",
       AP, ROTATE, [nk, ...m.showArgs, forgedAuth], Y, [Y], { a: AP, args: [nk, ...authArgs(auH)] });
@@ -2213,10 +2234,11 @@ async function sectionHints() {
   const flipX = (x: bigint[]) => { const o = [...x]; o[13] ^= 1n; return o; };
   const big = (b: Uint8Array) => Array.from(b, (v) => BigInt(v));
   const secretOf = (sd: Uint8Array) => { const hh = sha512(sd).slice(0, 32); hh[0] &= 248; hh[31] &= 127; hh[31] |= 64; return leInt(hh) % L; };
-  /** a signature by secret `sk` whose hash takes `claimed` as the key's encoding */
+  /** a raw signature by secret `sk` over the text `m` whose hash takes
+   *  `claimed` as the key's encoding */
   const signClaimed = (sk: bigint, claimed: Uint8Array, m: Uint8Array) => {
     const n = nonce();
-    const k = leInt(sha512(new Uint8Array([...n.e.map((v) => Number(v)), ...claimed, ...m]))) % L;
+    const k = leInt(sha512(new Uint8Array([...n.e.map((v) => Number(v)), ...claimed, ...msg.solSignedMessage('raw', claimed, m)]))) % L;
     return { sig: { r: { x: n.R.x, y: n.R.y }, s: (n.r + k * sk) % L }, r_bytes: n.e, r_x: n.x };
   };
   const lastArg = (args: unknown[], o: Record<string, unknown>) => { const c = [...args]; c[c.length - 1] = { ...(c.at(-1) as any), ...o }; return c; };
@@ -2237,7 +2259,7 @@ async function sectionHints() {
     const nk = rnd();
     const m = sol.solDeviceMessageCircuit(fb, ctxOf(AP), SITE, { op: 'rotate_enc_key', newKey: nk });
     const sc = signClaimed(secret, fb, m.bytes);
-    const forgedAuth = { pk: device.pk, pk_bytes: big(fb), pk_x: keyIn.pk_x, blind: device.blind, use_counter: 0n, ...sc };
+    const forgedAuth = { pk: device.pk, pk_bytes: big(fb), pk_x: keyIn.pk_x, blind: device.blind, use_counter: 0n, offchain: false, ...sc };
     const auH = await sol.authoriseSolDevice(device, ctxOf(AP), SITE, { op: 'rotate_enc_key', newKey: nk }, counterIn(AP, device));
     await negative('hints', "the signing key's sign bit flipped (an entry planted for those bytes, the message and the signature over them): refused only by the parity check",
       AP, ROTATE, [nk, ...m.showArgs, forgedAuth], SIGN, [SIGN], { a: AP, args: [nk, ...authArgs(auH)] });
@@ -2304,7 +2326,7 @@ async function sectionHints() {
       if (!ledgerOf(AF).grants.member(idF)) throw new Error('setup: the planted grant');
       const m = sol.solGranteeMessageCircuit(fb, gctxOf(AF, idF), SITE, o200 as any);
       const sg = signClaimed(secretOf(gSeed), fb, m.bytes);
-      const forged = lastArg(gArgs({ arm: 'sol_ed25519', pk: G4.device.pk, blind: G4.device.blind, label, sig: sg.sig, showArgs: m.showArgs, message: m.bytes }, saltAt(AU, device)),
+      const forged = lastArg(gArgs({ arm: 'sol_ed25519', pk: G4.device.pk, blind: G4.device.blind, label, offchain: false, sig: sg.sig, showArgs: m.showArgs, message: msg.solSignedMessage('raw', fb, m.bytes) }, saltAt(AU, device)),
         { pk_bytes: big(fb), r_bytes: sg.r_bytes, r_x: sg.r_x });
       await negative('hints', `withdraw_unshielded_with_grant: the grantee's ${what} (a grant planted for them, the message and the signature over them): refused only by ${expect === Y ? 'the y check' : 'the parity check'}`,
         AF, GWU, forged, expect, [expect], { a: AF, args: await honestG(AF) });
@@ -2363,7 +2385,7 @@ function deviceKit(S: Dev, site: string) {
   const authFor = (a: LocalAccount, o: any) => sol.authoriseSolDevice(S, ctxOf(a), site, o, counterIn(a, S));
   const shownFor = (a: LocalAccount, o: any) => sol.solDeviceMessageCircuit(S.key, ctxOf(a), site, o).showArgs as any[];
   const signedOver = async (a: LocalAccount, bytes: Uint8Array, showArgs: unknown[]) =>
-    ({ ...(await authFor(a, { op: 'revoke_all_grants' })), sig: (await S.signBytes(bytes)).sig, showArgs, message: bytes });
+    ({ ...(await authFor(a, { op: 'revoke_all_grants' })), ...(await signRawOver(S, bytes)), showArgs });
   /** a valid signature over the contract's own bytes for `o` */
   const circuitAuth = async (a: LocalAccount, o: any) => { const m = sol.solDeviceMessageCircuit(S.key, ctxOf(a), site, o); return signedOver(a, m.bytes, m.showArgs); };
   const head = (a: LocalAccount) => [{ bytes: a.addressBytes }, S.key, ledgerOf(a).auth_nonce];
@@ -2698,6 +2720,181 @@ async function sectionDisplayModule() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// formats: the two signing formats at every circuit that verifies a signature
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** What a verifier and the chain see of a call, without its proof: the public
+ *  transcript as executed and as partitioned, each contract call of the
+ *  transaction with its address, entry point and guaranteed and fallible
+ *  transcripts (operations, effects, gas), and the contract state after the
+ *  call. The communications commitment is a hiding commitment with fresh
+ *  randomness per call; it is returned apart and never compared for
+ *  equality. A transcript's effects are sets and maps (the claimed
+ *  nullifiers, spends, receives and calls as arrays, the mints and the
+ *  unshielded inputs and outputs as maps), which the bindings return in no
+ *  fixed order, so they are compared sorted. */
+function publicParts(x: { call: any; after: LocalAccount; proven?: any }) {
+  const canon = (y: unknown): unknown => (typeof y === 'bigint' ? `${y}n` : y instanceof Uint8Array ? hex(y) : y);
+  const sorted = (a: unknown[]) => a.map((e) => JSON.stringify(e, (_k, y) => canon(y))).sort();
+  const ser = (v: unknown) => JSON.stringify(v, (k, y) => {
+    if (y instanceof Map) return sorted([...y.entries()]);
+    if (y instanceof Set) return sorted([...y]);
+    if (Array.isArray(y) && /^claimed/.test(k)) return sorted(y);
+    return canon(y);
+  });
+  // a proved transaction comes back as { version: 'v9', tx }
+  const tx = x.proven ? (x.proven.version === 'v9' ? x.proven.tx : undefined) : x.call.private.unprovenTx;
+  if (!tx) throw new Error(`formats: a proved transaction of version ${String(x.proven?.version)}, not v9`);
+  const calls = [...(tx.intents?.values() ?? [])].flatMap((i: any) => i.actions).filter((c: any) => c && 'entryPoint' in c);
+  return {
+    parts: {
+      publicTranscript: ser(x.call.public.publicTranscript),
+      partitionedTranscript: ser(x.call.public.partitionedTranscript),
+      contractCalls: ser(calls.map((c: any) => ({ address: String(c.address), entryPoint: c.entryPoint instanceof Uint8Array ? hex(c.entryPoint) : String(c.entryPoint),
+        guaranteed: ser(c.guaranteedTranscript), fallible: ser(c.fallibleTranscript) }))),
+      stateAfter: hex(x.after.state.serialize()),
+    },
+    contractCalls: calls.length,
+    commitments: calls.map((c: any) => String(c.communicationCommitment)),
+  };
+}
+
+async function sectionFormats() {
+  const rnd = rng('formats');
+  const SITE = 'Formats prover test';
+  const { seed, d: S } = await solDevice(rnd());
+  // the same key and blind, signing as an off-chain message v1: one device
+  const SO = new sol.SolEd25519Device({ publicKey: S.key, blind: S.blind, sign: sol.solSoftwareSigner(seed).sign, format: 'offchain' });
+  interface FCase { circuit: string; seam: 'device' | 'grant'; a: LocalAccount; raw: unknown[]; off: unknown[]; rawAsOff: unknown[]; offAsRaw: unknown[]; note: string; shown?: Uint8Array }
+  const cases: FCase[] = [];
+  const device = async (circuit: string, a: LocalAccount, o: any, argsOf: (au: any) => unknown[], note: string, shown?: Uint8Array) => {
+    const counter = counterIn(a, S);
+    const auR = await sol.authoriseSolDevice(S, ctxOf(a), SITE, o, counter);
+    const auO = await sol.authoriseSolDevice(SO, ctxOf(a), SITE, o, counter);
+    if (auR.text !== auO.text || auR.offchain || !auO.offchain) throw new Error(`formats: ${circuit}: the two authorisations differ in more than the format`);
+    cases.push({ circuit, seam: 'device', a, raw: argsOf(auR), off: argsOf(auO), rawAsOff: argsOf({ ...auR, offchain: true }), offAsRaw: argsOf({ ...auO, offchain: false }), note, shown });
+  };
+  const A0 = await activated(S, rnd(), 0x0b1a5en);
+  { const k = rnd(); await device(ROTATE, A0, { op: 'rotate_enc_key', newKey: k }, (au) => [k, ...authArgs(au)], 'activated account', k); }
+  { const e = rnd(192); await device(APPEND, A0, { op: 'append_inbox', entry: e }, (au) => [e, ...authArgs(au)], 'activated account'); }
+  {
+    const field = (n: number) => BigInt('0x' + hex(rnd(31))) + BigInt(n);
+    const X = sol.solRecoverySession({ recoveryPk: recoveryKey(0x5e55n).pk, sessionNonce: rnd(32), phi: [field(1), field(2)], wrap: rnd(64) });
+    await device(PUBLISH, A0, X, (au) => [X.recoveryPk, X.sessionNonce, ...X.phi, X.phiLen, X.wrap, ...authArgs(au)], 'activated account, a two-value backup vector');
+  }
+  {
+    const COL = fill(32, 0xc1), RCPT = fill(32, 0x77);
+    const AU = (await execute(Original.Contract, A0, 'deposit_unshielded', [COL, 1000n])).after;
+    await device(WU, AU, { op: 'withdraw_unshielded', amount: { color: COL, amount: 400n, decimals: 2, symbol: 'tTOK' }, recipient: RCPT },
+      (au) => [COL, 400n, { bytes: RCPT }, ...authArgs(au)], '400 of a 1000 mirror');
+  }
+  for (const circuit of [WS, WSC]) {
+    const COL = fill(32, 0xa1);
+    const { account, coins } = withLocalCoins(A0, [{ nonce: fill(32, 0xf0), color: COL, value: 5n }, { nonce: fill(32, 0x11), color: COL, value: 1000n }]);
+    const H = { ...account, privateState: coinStoreAnswering([{ key: COL, coin: coins[1] }]) } as LocalAccount;
+    const recipient = circuit === WS ? localCoinPublicKeyBytes() : fill(32, 0x3c);
+    const o = { op: circuit === WS ? 'withdraw_shielded' : 'withdraw_shielded_to_contract', amount: { color: COL, amount: 300n, decimals: 0, symbol: 'tA' },
+      recipient, coin: { nonce: coins[1].nonce, color: coins[1].color, value: coins[1].value, mt_index: coins[1].mtIndex } };
+    await device(circuit, H, o, (au) => [{ bytes: recipient }, COL, 300n, ...authArgs(au)], '300 of a 1000 coin at index 1');
+  }
+  const jub = JubjubDevice.generate();
+  const tJ = sol.solTargetOf({ scheme: 'jubjub', x: jub.pk.x, y: jub.pk.y });
+  const addArgs = (au: any) => [msg.solTargetArg(tJ), msg.solTargetPointArg(tJ), ...authArgs(au)];
+  await device(ADD, A0, { op: 'add_device', target: tJ }, addArgs, 'a jubjub target');
+  const A1 = (await execute(Original.Contract, A0, ADD, addArgs(await sol.authoriseSolDevice(S, ctxOf(A0), SITE, { op: 'add_device', target: tJ }, counterIn(A0, S))))).after;
+  {
+    const ep = ledgerOf(A1).device_epoch as bigint;
+    await device(REMOVE, A1, { op: 'remove_device', literal: false, target: tJ, counter: 0n, epoch: ep },
+      (au) => [false, msg.solTargetArg(tJ), msg.solTargetPointArg(tJ), 0n, ep, new Uint8Array(32), ...authArgs(au)], 'the jubjub target by descriptor');
+  }
+  const gSeed = rnd();
+  const G = await sol.SolEd25519Grantee.enrol(sol.solSoftwareSigner(gSeed), { network: 'undeployed', issuingAccount: A0.addressBytes }, 'Example dApp');
+  const GO = new sol.SolEd25519Grantee(new sol.SolEd25519Device({ publicKey: G.key, blind: G.blind, sign: sol.solSoftwareSigner(gSeed).sign, format: 'offchain' }), G.label);
+  const COLS = fill(32, 0xa1), COLU = fill(32, 0xc7), RCPTU = fill(32, 0x7e);
+  const scS = scopeOf({ opWithdrawShielded: true, opWithdrawShieldedToContract: true, read: true, readPk: fill(32, 0x77), color: COLS, maxCoinValue: 1000n, perCallCap: 600n, cap: 1200n });
+  const scU = scopeOf({ opWithdrawUnshielded: true, color: COLU, recipientKind: RECIPIENT_USER_ADDRESS, recipient: RCPTU, maxCoinValue: 300n, perCallCap: 300n, cap: 450n });
+  const g0 = G.grantee(0n), g1 = G.grantee(1n);
+  await device(ISSUE, A0, { op: 'issue_grant', grantee: g0, ...scS }, (au) => issueArgsOf(g0, scS, au), 'a sol grantee, shielded scope');
+  const salt0 = saltAt(A0, S);
+  const AG0 = (await execute(Original.Contract, A0, ISSUE, issueArgsOf(g0, scS, await sol.authoriseSolDevice(S, ctxOf(A0), SITE, { op: 'issue_grant', grantee: g0, ...scS }, counterIn(A0, S))))).after;
+  const salt1 = saltAt(AG0, S);
+  const AG = (await execute(Original.Contract, AG0, ISSUE, issueArgsOf(g1, scU, await sol.authoriseSolDevice(S, ctxOf(AG0), SITE, { op: 'issue_grant', grantee: g1, ...scU }, counterIn(AG0, S))))).after;
+  await device(REVOKE, AG, { op: 'revoke_grant', grantee: g0 }, (au) => [msg.solGranteeArg(g0), msg.solTargetPointArg(g0), ...authArgs(au)], 'the slot-0 grant');
+  await device(REVOKE_ALL, AG, { op: 'revoke_all_grants' }, (au) => authArgs(au), 'two live grants');
+  {
+    const l = ledgerOf(A0);
+    const Q = JubjubDevice.generate();
+    const succPk = recoveryKey(0x9e11n).pk;
+    const nowUpper = BigInt(Math.floor(Date.now() / 1000)) + 2n;
+    const sub = signRecoverSubmit(recoveryKey(0x0b1a5en), Q,
+      recoverSubmitChallenge({ contractAddress: A0.addressBytes, authNonce: l.auth_nonce }, l.recovery_pk, Q.pk, succPk, l.device_epoch + 1n, nowUpper),
+      { successorRecoveryPk: succPk, expectedEpoch: l.device_epoch, expectedNonce: l.auth_nonce, nowUpper });
+    const AP = (await execute(Original.Contract, A0, 'recover_submit', recoverSubmitArgs(sub))).after;
+    if (!ledgerOf(AP).pending_recovery) throw new Error('formats: setup: no pending recovery');
+    await device(CANCEL, AP, { op: 'recover_cancel' }, (au) => authArgs(au), 'a recovery pending');
+  }
+  const grant = async (circuit: string, a: LocalAccount, slot: bigint, o: any, scope: any, salt: Uint8Array, argsOf: (op: any, au: any) => unknown[], note: string) => {
+    const r = ledgerOf(a).grants.lookup(G.grantId(a.addressBytes, slot));
+    const ctx = { contractAddress: a.addressBytes, label: G.label, slot, issuedAt: r.issued_at as bigint, grantNonce: r.nonce as bigint };
+    const gR = await sol.authoriseSolGrantee(G.device, ctx, SITE, o);
+    const gO = await sol.authoriseSolGrantee(GO.device, ctx, SITE, o);
+    if (gR.text !== gO.text || gR.offchain || !gO.offchain) throw new Error(`formats: ${circuit}: the two grantee authorisations differ in more than the format`);
+    const op = { originHash: grantOriginHash(msg.labelBytes(G.label)), slot, scopeSalt: salt, recipientKind: scope.recipientKind, pinnedRecipient: scope.recipient, maxCoinValue: scope.maxCoinValue, spentPrev: 0n };
+    cases.push({ circuit, seam: 'grant', a, raw: argsOf(op, gR), off: argsOf(op, gO), rawAsOff: argsOf(op, { ...gR, offchain: true }), offAsRaw: argsOf(op, { ...gO, offchain: false }), note });
+  };
+  {
+    const AU = (await execute(Original.Contract, AG, 'deposit_unshielded', [COLU, 1000n])).after;
+    await grant(GWU, AU, 1n, { op: 'withdraw_unshielded_with_grant', amount: { color: COLU, amount: 200n, decimals: 0, symbol: 'tG' }, recipient: RCPTU },
+      scU, salt1, (op, au) => [COLU, 200n, { bytes: RCPTU }, ...grantAuthArgs(op, au)], 'slot 1, 200 to the pinned user address');
+    const { account, coins } = withLocalCoins(AG, [{ nonce: fill(32, 0xf0), color: COLS, value: 5n }, { nonce: fill(32, 0x11), color: COLS, value: 1000n }]);
+    const AS = { ...account, privateState: coinStoreAnswering([{ key: COLS, coin: coins[1] }]) } as LocalAccount;
+    const enc = ledgerOf(AS).enc_key, chg = fill(192, 0x2c);
+    for (const [circuit, recipient, opName] of [[GWS, localCoinPublicKeyBytes(), 'withdraw_shielded_with_grant'],
+      [GWSC, fill(32, 0x3c), 'withdraw_shielded_to_contract_with_grant']] as [string, Uint8Array, string][]) {
+      const o = { op: opName, amount: { color: COLS, amount: 300n, decimals: 0, symbol: 'tA' }, recipient, changeEntry: chg, encPk: enc,
+        coin: { nonce: coins[1].nonce, color: COLS, value: 1000n, mt_index: coins[1].mtIndex } };
+      await grant(circuit, AS, 0n, o, scS, salt0, (op, au) => [{ bytes: recipient }, COLS, 300n, chg, enc, ...grantAuthArgs(op, au)], 'slot 0, 300 of a 1000 coin at index 1');
+    }
+  }
+  const VERIFYING = [ROTATE, APPEND, WU, WS, WSC, ADD, REMOVE, ISSUE, REVOKE, REVOKE_ALL, PUBLISH, CANCEL, GWU, GWS, GWSC];
+  if (JSON.stringify(cases.map((c) => c.circuit).sort()) !== JSON.stringify([...VERIFYING].sort())) throw new Error('formats: the cases do not cover the verifying circuits');
+
+  // SOL_ED25519_FORMATS_CIRCUITS=<circuit,...> runs the cases of the named
+  // circuits only (every case is still built), so that one proof server
+  // need not hold the keys of all fifteen circuits at once
+  const only = process.env.SOL_ED25519_FORMATS_CIRCUITS?.split(',').filter(Boolean);
+  if (only) for (const c of only) if (!VERIFYING.includes(c)) throw new Error(`formats: ${c} is not a circuit that verifies a signature`);
+  for (const c of cases.filter((x) => !only || only.includes(x.circuit))) {
+    const short = c.circuit.replace('_sol_ed25519', '').replace('_with', '');
+    const expect = c.seam === 'device' ? INVALID : GINVALID;
+    const copy = await copyFor([expect]);
+    const got: Record<'raw' | 'off', { call: any; after: LocalAccount; proven?: any } | undefined> = { raw: undefined, off: undefined };
+    await positive('formats', `${short}: raw approval (${c.note}), proved through the copy`, copy, c.a, c.circuit, c.raw, undefined, undefined, (x) => { got.raw = x; });
+    await positive('formats', `${short}: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy`,
+      copy, c.a, c.circuit, c.off, undefined, undefined, (x) => { got.off = x; });
+    {
+      const r: Result = { section: 'formats', circuit: c.circuit, case: `${short}: the two formats' public parts are equal (proof bytes and the communications commitment excluded)`, kind: 'state' };
+      if (!got.raw || !got.off) r.positive = { verdict: 'FAIL', reason: 'a positive did not complete, nothing to compare' };
+      else {
+        const pr = publicParts(got.raw), po = publicParts(got.off);
+        const differing = Object.keys(pr.parts).filter((k) => (pr.parts as any)[k] !== (po.parts as any)[k]);
+        const where = Object.fromEntries(differing.map((k) => { const a = (pr.parts as any)[k] as string, b = (po.parts as any)[k] as string; let i = 0; while (a[i] === b[i]) i++;
+          return [k, { at: i, raw: a.slice(Math.max(0, i - 120), i + 80), offchain: b.slice(Math.max(0, i - 120), i + 80) }]; }));
+        // the comparison reads values: the rotated key is in both transcripts
+        const reads = !c.shown || [pr.parts.publicTranscript, pr.parts.contractCalls].every((t) => t.includes(hex(c.shown!)));
+        const okc = differing.length === 0 && pr.contractCalls === 1 && reads;
+        r.positive = { verdict: okc ? 'PASS' : 'FAIL', reason: okc ? `equal: ${Object.keys(pr.parts).join(', ')}${DRY ? ' (executed, not proved: DRY)' : ' (from the proved transactions)'}` : `differ: ${differing.join(', ')}${reads ? '' : '; the serialised transcript lacks a public value'}`,
+          detail: JSON.stringify({ sha256: Object.fromEntries(Object.entries(pr.parts).map(([k, v]) => [k, createHash('sha256').update(v).digest('hex')])),
+            commitmentsDiffer: pr.commitments.join() !== po.commitments.join(), contractCalls: pr.contractCalls, ...(differing.length ? { where } : {}) }) };
+      }
+      tally(r.positive); results.push(r); line(r);
+    }
+    await negative('formats', `${short}: the raw signature presented as an off-chain message (same key, validly enrolled device)`, c.a, c.circuit, c.rawAsOff, expect, [expect], { a: c.a, args: c.raw });
+    await negative('formats', `${short}: the off-chain signature presented as raw (same key, validly enrolled device)`, c.a, c.circuit, c.offAsRaw, expect, [expect], { a: c.a, args: c.off });
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Run
 // ═════════════════════════════════════════════════════════════════════════════
 const startedAt = new Date().toISOString();
@@ -2717,6 +2914,7 @@ try {
   if (SECTIONS.includes('module')) await sectionModule();
   if (SECTIONS.includes('hints')) await sectionHints();
   if (SECTIONS.includes('arm-asserts')) await sectionArmAsserts();
+  if (SECTIONS.includes('formats')) await sectionFormats();
   if (SECTIONS.includes('display-module')) await sectionDisplayModule();
 } catch (e: any) {
   fatal = String(e?.stack ?? e?.message ?? e).split('\n').slice(0, 14).join('\n');

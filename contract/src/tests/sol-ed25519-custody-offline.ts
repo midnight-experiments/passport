@@ -97,7 +97,7 @@ const G1 = '1 append_inbox';
   const entry = rnd(192);
   const before = ledgerOf(sim.state);
   const a = await auth(sim, dev, { op: 'append_inbox', entry });
-  ok(G1, 'the signed message is the contract\'s own bytes (813, all 192 bytes in full hex)', a.message.length === 813
+  ok(G1, 'the signed text is the contract\'s own bytes (813, all 192 bytes in full hex), after the 50-byte raw head', a.text.length === 813 && a.message.length === 50 + 813
     && a.text.includes(`Inbox entry 1 of 6: ${hex(entry.subarray(0, 32))}\n`) && a.text.includes(`Inbox entry 6 of 6: ${hex(entry.subarray(160))}\n`));
   const other = rnd(192);
   await refused(G1, 'another entry at execution (consistent display inputs)', 'runtime', /invalid signature/, () =>
@@ -130,7 +130,7 @@ const G2 = '2 withdraw_unshielded';
   const amount: SolAmount = { color, amount: 1200n, decimals: 2, symbol: 'tDUST' };
   const o: SolDeviceOperation = { op: 'withdraw_unshielded', amount, recipient: to };
   const a = await auth(sim, dev, o);
-  ok(G2, 'the message shows the token, the amount (39 digits, no magnitude), the site\'s label and the recipient (600 bytes)', a.message.length === 600
+  ok(G2, 'the message shows the token, the amount (39 digits, no magnitude), the site\'s label and the recipient (600 bytes)', a.text.length === 600 && a.message.length === 50 + 600
     && a.text.includes(`Token: ${hex(color)}\n`) && a.text.includes('Amount (base units): 1200' + ' '.repeat(35) + '\n')
     && a.text.includes('This site labels it: 12.00 tDUST') && a.text.includes(`To unshielded address: ${hex(to)}\n`));
   const exec = (c: Uint8Array, n: bigint, r: Uint8Array, x: SolEd25519Authorisation) => call(sim, 'withdraw_unshielded_with_sol_ed25519', c, n, { bytes: r }, ...authArgs(x));
@@ -165,7 +165,7 @@ const shielded = async (G: string, circuit: string, op: 'withdraw_shielded' | 'w
   const o: SolDeviceOperation = { op, amount, recipient: to, coin };
   const a = await auth(sim, dev, o);
   const len = op === 'withdraw_shielded' ? 841 : 851;
-  ok(G, `the message shows the coin's colour, value, nonce, Merkle index and the change (${len} bytes)`, a.message.length === len
+  ok(G, `the message shows the coin's colour, value, nonce, Merkle index and the change (${len} bytes)`, a.text.length === len && a.message.length === 50 + len
     && a.text.includes(`Token: ${hex(colA)}\n`) && a.text.includes('Spent coin value: 1000' + ' '.repeat(35) + '\n')
     && a.text.includes(`Spent coin nonce: ${hex(nonceH)}\n`) && a.text.includes('Spent coin index: 7' + ' '.repeat(19) + '\n')
     && a.text.includes('Change back to this account: 700' + ' '.repeat(36) + '\n'));

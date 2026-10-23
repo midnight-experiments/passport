@@ -134,7 +134,7 @@ for (const [scheme, d, dev] of D) {
   const t = solTargetOf(d);
   const ep = epochOf(sim);
   const a = await auth(sim, S, { op: 'add_device', target: t });
-  ok(G1, `${scheme}: the message is the contract's own (685 bytes) and shows the consequence`, a.message.length === 685 && a.text.includes('Consequence: gives this device FULL control of this account.\n'));
+  ok(G1, `${scheme}: the message is the contract's own (685 bytes) and shows the consequence`, a.text.length === 685 && a.message.length === 50 + 685 && a.text.includes('Consequence: gives this device FULL control of this account.\n'));
   await add(sim, t, a);
   const e0 = entryOf(scheme, d, dev, sim.bytes, ep, 0n);
   ok(G1, `${scheme}: the entry equals ${scheme === 'evm_k256' ? 'the descriptor module recipe' : `the ${scheme} arm's own derivation`} at (epoch, 0); nothing at epoch + 1`,
@@ -179,7 +179,7 @@ const tJ = solTargetOf(D[0][1]), tK = solTargetOf(D[1][1]), tP = solTargetOf(D[2
   ok(G3, 'the upstream residual: K plants a sol entry at device_epoch + 1', live(simR, plant));
   const tW = solTargetOf(W.descriptor());
   const aW = await auth(simR, S, { op: 'remove_device', literal: false, target: tW, counter: 0n, epoch: ep + 1n });
-  ok(G3, 'the removal message shows the epoch and counter (761 bytes)', aW.message.length === 761 && aW.text.includes(`Device epoch: ${String(ep + 1n).padEnd(10, ' ')}\n`));
+  ok(G3, 'the removal message shows the epoch and counter (761 bytes)', aW.text.length === 761 && aW.message.length === 50 + 761 && aW.text.includes(`Device epoch: ${String(ep + 1n).padEnd(10, ' ')}\n`));
   await remove(simR, false, tW, 0n, ep + 1n, new Uint8Array(32), aW);
   ok(G3, 'S evicts the plant by descriptor at target epoch device_epoch + 1', !live(simR, plant));
   // descriptor and literal removals
@@ -242,7 +242,7 @@ const G4 = '4 binding';
     await refused(G4, 'add_device: the wallet signed a message showing another evm address (its hex digits with it): the display check', 'runtime',
       /hex digits do not match the value/, async () => {
         const a = await auth(b, S, { op: 'add_device', target: tE });
-        return add(b, tE, { ...a, sig: (await S.signBytes(m.bytes)).sig, showArgs: m.showArgs });
+        return add(b, tE, { ...a, sig: (await S.signApproval(m.bytes)).sig, showArgs: m.showArgs });
       });
     const ep = epochOf(b);
     await add(b, tE, await auth(b, S, { op: 'add_device', target: tE }));
@@ -296,8 +296,8 @@ const G5 = '5 guards';
     const a = await auth(g, S, { op: 'add_device', target: tK });
     if (a.text.split(/Signing envelope: .{24}/).length !== 2) throw new Error('setup: the envelope line is not shown exactly once');
     const bytes = solMessageBytes(a.text.replace(/Signing envelope: .{24}/, `Signing envelope: ${' '.repeat(24)}`));
-    if (bytes.length !== a.message.length) throw new Error('setup: the blank envelope changed the layout');
-    return add(g, { ...tK, envelope: 2n }, { ...a, sig: (await S.signBytes(bytes)).sig });
+    if (bytes.length !== a.text.length) throw new Error('setup: the blank envelope changed the layout');
+    return add(g, { ...tK, envelope: 2n }, { ...a, sig: (await S.signApproval(bytes)).sig });
   });
   await refused(G5, 'a jubjub target with a non-zero envelope (not shown; its digits supplied consistently)', 'runtime', /unused envelope must be zero/, async () => {
     const a = await auth(g, S, { op: 'add_device', target: tJ });
@@ -315,7 +315,7 @@ const G5 = '5 guards';
     await refused(G5, `${name} (not shown; the wallet signed the contract's bytes)`, 'runtime', re, async () => {
       const m = solDeviceMessageCircuit(S.key, ctxOf(g), SITE, { op: 'add_device', target: t });
       const a = await auth(g, S, { op: 'add_device', target: tJ });
-      return add(g, t, { ...a, sig: (await S.signBytes(m.bytes)).sig, showArgs: m.showArgs });
+      return add(g, t, { ...a, sig: (await S.signApproval(m.bytes)).sig, showArgs: m.showArgs });
     });
   }
   const S3 = await newSolDevice();
@@ -328,7 +328,7 @@ const G5 = '5 guards';
     const m = solDeviceMessageCircuit(S.key, ctxOf(sim), SITE, { op: 'add_device', target: shown });
     const sh = m.showArgs as any[];
     const a = await auth(sim, S, { op: 'add_device', target: exec });
-    return add(sim, exec, { ...a, sig: (await S.signBytes(m.bytes)).sig, showArgs: [sh[0], sh[1], sh[2], nibblesOf(...solDeviceHexValues({ op: 'add_device', target: exec }))] }, key);
+    return add(sim, exec, { ...a, sig: (await S.signApproval(m.bytes)).sig, showArgs: [sh[0], sh[1], sh[2], nibblesOf(...solDeviceHexValues({ op: 'add_device', target: exec }))] }, key);
   };
   {
     const O = await newSolDevice();
@@ -365,7 +365,7 @@ const G5 = '5 guards';
   await refused(G5, 'the identity point as a Solana target under a valid signature (A != O in the derivation)', 'runtime', /the Ed25519 key is the identity/, async () => {
     const shown = [solTargetShow(tId), solShow(SITE, ledgerOf(g.state).auth_nonce), solFrameNibbles(g.bytes, S.key), nibblesOf(...solDeviceHexValues({ op: 'add_device', target: tId }))];
     const bytes: Uint8Array = (pureCircuits as any).sol_message_add_device({ bytes: g.bytes }, S.key, ledgerOf(g.state).auth_nonce, solTargetArg(tId), ...shown);
-    const { sig } = await S.signBytes(bytes);
+    const { sig } = await S.signApproval(bytes);
     const a = await auth(g, S, { op: 'add_device', target: tJ });
     return add(g, tId, { ...a, sig, showArgs: shown }, keyOf({ x: 0n, y: 1n }));
   });
@@ -415,7 +415,7 @@ const G5 = '5 guards';
     const tZ: SolTargetFields = { ...tP, c: new Uint8Array(32) };
     const signedCircuit = async (sim: Sim, o: SolDeviceOperation) => {
       const { bytes, showArgs } = solDeviceMessageCircuit(S.key, ctxOf(sim), SITE, o);
-      return { ...(await auth(sim, S, { op: 'add_device', target: tJ })), sig: (await S.signBytes(bytes)).sig, showArgs };
+      return { ...(await auth(sim, S, { op: 'add_device', target: tJ })), sig: (await S.signApproval(bytes)).sig, showArgs };
     };
     await refused(G5, "a passkey target with an all-zero RP hash: the renderer refuses the add_device message", 'client', /a passkey's RP hash is zero/, () =>
       auth(g, S, { op: 'add_device', target: tZ }));

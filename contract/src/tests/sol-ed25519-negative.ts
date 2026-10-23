@@ -390,7 +390,7 @@ export async function prove(C: any, a: LocalAccount, circuitId: string, args: un
     const before = proofLog.length;
     try {
       const proven = await proofProvider.proveTx({ version: 'v9', tx: call.private.unprovenTx } as any);
-      return { proven, after };
+      return { proven, after, call };
     } catch (e: any) {
       const answered = proofLog.slice(before).some((q) => q.status !== null && !q.ok);
       const text = String(e?.message ?? e) + ' ' + String(e?.cause?.message ?? '') + ' ' + String(e?.cause?.code ?? '');
