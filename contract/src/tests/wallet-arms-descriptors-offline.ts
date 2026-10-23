@@ -25,7 +25,10 @@
 //      encoding circuit equals RFC 8032 (its section 7.1 vectors, the base
 //      point, and seeded keys of both x parities); each ed25519 derivation
 //      returns the key it hashed, and the signer helper, given the arm's
-//      device tag, equals two single derivations.
+//      device tag, equals two single derivations. The shared derivation of
+//      a key from a seed equals RFC 8032 section 5.1.5: the section 7.1
+//      secret keys give their public keys, and seeds with edge bytes and
+//      seeded seeds give OpenSSL's and noble's public keys.
 //   4. The checked encoding equals the encoding computed from the
 //      coordinates' own bytes (the probe's exploded_encoding_ed25519) on
 //      seeded keys, keys with a small y or x, keys with y just below p (high
@@ -425,14 +428,14 @@ recipe(report.fresh, 'signer entries sol_ed25519 == [key, entry(counter), entry(
 });
 // RFC 8032 section 7.1 (secret key -> public key) and the base point: OpenSSL
 // reproduces each public key, and the circuit encodes its point to it.
+const RFC8032: [string, string, string][] = [
+  ['TEST 1', '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60', 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a'],
+  ['TEST 2', '4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb', '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c'],
+  ['TEST 3', 'c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7', 'fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025'],
+  ['TEST 1024', 'f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5', '278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e'],
+  ['TEST SHA(abc)', '833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42', 'ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf'],
+];
 {
-  const RFC8032: [string, string, string][] = [
-    ['TEST 1', '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60', 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a'],
-    ['TEST 2', '4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb', '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c'],
-    ['TEST 3', 'c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7', 'fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025'],
-    ['TEST 1024', 'f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5', '278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e'],
-    ['TEST SHA(abc)', '833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42', 'ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf'],
-  ];
   const rfc: unknown[] = [];
   for (const [name, sk, pk] of RFC8032) {
     const key = Buffer.from(pk, 'hex');
@@ -447,6 +450,38 @@ recipe(report.fresh, 'signer entries sol_ed25519 == [key, entry(counter), entry(
   report.fresh['RFC 8032 section 7.1 public keys and the base point'] = { vectors: rfc.length, agree: rfc.length, first: rfc };
   assert.ok(rfc.some((v: any) => v.xOdd === 1) && rfc.some((v: any) => v.xOdd === 0), 'both x parities among the RFC vectors');
   console.log(`  ✓ RFC 8032 section 7.1 public keys and the base point: ${rfc.length}/${rfc.length} (both x parities)`);
+}
+// The shared seed derivation (compute_public_key_ed25519) == RFC 8032 section
+// 5.1.5: the point it derives from each section 7.1 secret key is the RFC
+// public key's point and encodes to that key; for seeds with edge bytes and
+// seeded seeds, the point equals that of OpenSSL's and noble's public key,
+// with both x parities, and its clamped scalar is at least L (the cast's
+// reduction mod L is exercised). Seeds come from their own stream, so the
+// shared stream is unchanged.
+{
+  const L_ED = ed25519.Point.Fn.ORDER;
+  const own = (i: number) => sha(Buffer.from(`${SEED}/compute_public_key_ed25519`), le(BigInt(i), 8));
+  const derives = (name: string, seed: Uint8Array, key: Uint8Array) => {
+    const pt = probe.compute_public_key_ed25519(seed);
+    assert.deepEqual({ x: pt.x, y: pt.y }, pointOf(key), `${name}: the derived point is the public key's point`);
+    assert.ok(eq(probe.encode_public_key_ed25519(pt, u8v(key), u8v(le(pt.x, 32))), key), `${name}: the derived point encodes to the public key`);
+    const h = createHash('sha512').update(seed).digest().subarray(0, 32);
+    h[0] &= 248; h[31] &= 127; h[31] |= 64;
+    assert.ok(bigLE(h) >= L_ED, `${name}: the clamped scalar is at least L`);
+    return (key[31] >> 7) & 1;
+  };
+  for (const [name, sk, pk] of RFC8032) derives(name, new Uint8Array(Buffer.from(sk, 'hex')), new Uint8Array(Buffer.from(pk, 'hex')));
+  const seeds = [new Uint8Array(32), new Uint8Array(32).fill(0xff), Uint8Array.from({ length: 32 }, (_, i) => i),
+    ...Array.from({ length: VECTORS }, (_, i) => own(i))];
+  const parities = new Set<number>();
+  for (const [i, seed] of seeds.entries()) {
+    const key = opensslPublicKey(seed);
+    assert.ok(eq(new Uint8Array(ed25519.getPublicKey(seed)), key), `seed #${i}: noble == OpenSSL`);
+    parities.add(derives(`seed #${i}`, seed, key));
+  }
+  assert.deepEqual([...parities].sort(), [0, 1], 'both x parities among the seeds');
+  report.fresh['Ed25519 key of a seed == RFC 8032 (section 7.1, OpenSSL, noble)'] = { vectors: RFC8032.length + seeds.length, agree: RFC8032.length + seeds.length, first: RFC8032.slice(0, 1).map(([name, sk, pk]) => ({ name, secret: sk, publicKey: pk })) };
+  console.log(`  ✓ Ed25519 key of a seed (compute_public_key_ed25519) == RFC 8032: ${RFC8032.length}/${RFC8032.length} section 7.1 secret keys, ${seeds.length}/${seeds.length} seeds (zero, 0xff.., 00..1f, seeded) == OpenSSL == noble, both x parities, the clamped scalar >= L`);
 }
 const LABELS = ['Midnight Night Market', 'wallet.example', 'a', 'x'.repeat(32), 'MN Bank - grants v1'];
 recipe(report.fresh, 'grant origin_hash of a 32-byte label', (i) => {

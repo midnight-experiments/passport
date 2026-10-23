@@ -81,6 +81,13 @@ export interface ReadableArm {
   readonly code: string;
   readonly payloadClass: ReadableClass;
   readonly signature: ReadableSignature;
+  /** The formats the arm's wallets sign in, each with the name the client
+   *  shows for it. A format fixes how a wallet signs both the arm's
+   *  approvals and its blind requests. A device is bound to the format it
+   *  was enrolled in: its blind is the signature over the blind request in
+   *  that format, so a wallet that cannot sign that format cannot derive it
+   *  again (blind.ts restoreBlind). An arm with one format lists it alone. */
+  readonly formats: Readonly<Record<string, string>>;
   /** The arm's registered tags, one per recipe, the blind and the grant
    *  scope salt. */
   readonly tags: {
@@ -99,6 +106,8 @@ export interface ReadableArm {
 export const READABLE_ARMS = {
   evm_k256: {
     code: 'evm', payloadClass: 'w52', signature: 'secp256k1-ecdsa',
+    // Approvals as EIP-712 V1 typed data, blind requests by personal_sign.
+    formats: { 'eip712-v1': 'EIP-712 V1' },
     tags: {
       device: 'midnight:account:device:evm:v1', boot: 'midnight:account:boot:evm:v1',
       'grant-id': 'midnight:account:grant:id:evm:v1', blind: 'midnight:account:blind:evm:v1',
@@ -121,6 +130,8 @@ export const READABLE_ARMS = {
   },
   sol_ed25519: {
     code: 'sol', payloadClass: 'ed25519', signature: 'ed25519',
+    // The signMessage bytes, or the Solana off-chain message v1.
+    formats: { raw: 'raw', offchain: 'off-chain' },
     tags: {
       device: 'midnight:account:device:sol:v1', boot: 'midnight:account:boot:sol:v1',
       'grant-id': 'midnight:account:grant:id:sol:v1', blind: 'midnight:account:blind:sol:v1',
@@ -140,6 +151,9 @@ export const READABLE_ARMS = {
 
 export type ReadableScheme = keyof typeof READABLE_ARMS;
 export const READABLE_SCHEMES: readonly ReadableScheme[] = Object.keys(READABLE_ARMS) as ReadableScheme[];
+/** The formats of a readable scheme: the keys of its entry's `formats`. */
+export type ReadableFormat<S extends ReadableScheme = ReadableScheme> =
+  { [K in S]: keyof (typeof READABLE_ARMS)[K]['formats'] & string }[S];
 type SchemesOfClass<C extends ReadableClass> =
   { [S in ReadableScheme]: (typeof READABLE_ARMS)[S]['payloadClass'] extends C ? S : never }[ReadableScheme];
 /** The readable schemes of each payload class. */
