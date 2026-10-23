@@ -28,13 +28,14 @@
 // every proof and is never disclosed.
 //
 // THE ADDRESS IS ALWAYS DERIVED FROM THE PRESENTED POINT. Every path that
-// admits a key (activation, the device seam and the grant seam) takes
-// the secp256k1 point and derives the address itself
-// (`evm_address`), after refusing the point at infinity by its
-// COORDINATES, so that both encodings of the identity ({0, 0, identity} and
-// {0, 0, not identity}) are refused, as upstream's `require_live_k256_key`
-// does. A caller can therefore never present an address it did not prove a
-// key for.
+// admits a key (activation, the device seam and the grant seam) takes the
+// secp256k1 point and derives the address itself (`evm_address`), and the
+// point passes K256Core's key rule, which refuses the point at infinity by
+// its COORDINATES, so that both encodings of the identity ({0, 0, identity}
+// and {0, 0, not identity}) are refused, as upstream's
+// `require_live_k256_key` does: activation calls the rule itself, and the
+// seams through the verification (`k256_ecdsa_verify`). A caller can
+// therefore never present an address it did not prove a key for.
 //
 // Tags: the arm hashes four tags, all registered in the descriptor module
 // (`midnight:account:{device,boot,grant:id,blind}:evm:v1`).
@@ -100,10 +101,9 @@ export pure circuit compute_public_point_with_evm_k256(scalar: Secp256k1Scalar):
 }
 
 // The device's address (modules/EvmIdentity: the low 20 bytes of keccak256
-// of the key's big-endian x || y, the point at infinity refused in both
-// encodings), re-exported as a pure circuit of the account contract, so
-// that clients and tests obtain the address through the contract's own
-// code.
+// of the key's big-endian x || y; the point at infinity has none),
+// re-exported as a pure circuit of the account contract, so that clients
+// and tests obtain the address through the contract's own code.
 export { evm_address };
 
 // ── Derivations (width class 52 of the descriptor module) ──────────────────
@@ -149,6 +149,7 @@ export circuit activate_initial_device_with_evm_k256(
   hint:  EvmAddressHint,
 ): [] {
   assert(!booted, "already activated");
+  k256_require_live_key(pk);
   const address = evm_address(pk, hint);
   assert(derive_boot_commitment_with_evm_k256(salt, address, blind) == boot,
          "boot commitment mismatch");
@@ -195,19 +196,17 @@ struct EvmK256SeamHint {
 // require_authorised_with_evm_k256_either (remove_device's two forms, the
 // second type when `second`) and require_authorised_with_evm_k256_bare (a
 // type with no members of its own). Each body derives the address from
-// auth.pk (evm_address refuses the point at infinity in both
-// encodings), builds the frame from kernel.self(), that address and
+// auth.pk, builds the frame from kernel.self(), that address and
 // auth_nonce (read before this call advances it), builds the struct hash,
 // checks the entry, verifies the signature and rolls the entry. No circuit
 // that checks or rolls a device entry takes an address, an account, a nonce
 // or a struct hash from its caller, so an entry is matched, and a signature
 // verified, only for the address of the key that signed.
 //
-// The verification (k256_ecdsa_verify) accepts both S forms (FIPS
-// 186-5): the rolling entry, consumed by this call, makes a malleated twin
-// single-use, as on the k256 arm. r = 0 and s = 0 are refused explicitly: with
-// s = 0 the inverse has no meaning, and r = 0 can only match the point at
-// infinity.
+// The verification (k256_ecdsa_verify) holds the acceptance rules: it
+// refuses the point at infinity as the key and r = 0 or s = 0, and accepts
+// both S forms (FIPS 186-5): the rolling entry, consumed by this call, makes
+// a malleated twin single-use, as on the k256 arm.
 //
 // Each body returns the caller's post-roll entry (remove_device's S13 guard).
 circuit require_authorised_with_evm_k256<T>(auth: EvmK256Auth, type_hash: Bytes<32>, tail: T): Bytes<32> {
@@ -217,8 +216,6 @@ circuit require_authorised_with_evm_k256<T>(auth: EvmK256Auth, type_hash: Bytes<
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
-  assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_k256: signature scalar is zero");
   assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
                                  auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
@@ -243,8 +240,6 @@ circuit require_authorised_with_evm_k256_either<T, U>(
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
-  assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_k256: signature scalar is zero");
   assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
                                  auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
@@ -267,8 +262,6 @@ circuit require_authorised_with_evm_k256_bare(auth: EvmK256Auth, type_hash: Byte
     kernel.self(), address, auth.blind, device_epoch, auth.use_counter
   ));
   assert(devices.member(entry), "unknown device entry");
-  assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_k256: signature scalar is zero");
   assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),
                                  auth.hint.digest, auth.sig, auth.pk),
          "invalid signature");
@@ -617,9 +610,10 @@ export circuit recover_cancel_with_evm_k256(auth: EvmK256Auth): [] {
 // tail. The MIP's steps in order: identity (the record by id), liveness
 // (active, epoch, generation, expiry), the spend scope (upstream's shared
 // check_spend_scope: operation, caller pin, object, per-call cap, spent
-// opening, cumulative cap, recipient pin), then r != 0, s != 0, the
-// signature, the record written back with its nonce advanced and the new
-// spent commitment, and round bumped.
+// opening, cumulative cap, recipient pin), then the signature
+// (k256_ecdsa_verify, which also refuses the point at infinity as the key
+// and r = 0 or s = 0), the record written back with its nonce advanced and
+// the new spent commitment, and round bumped.
 struct EvmK256GrantAuth {
   pk:    Secp256k1Point;
   blind: Bytes<32>;
@@ -669,8 +663,6 @@ circuit require_grant_with_evm_k256<T>(
                  : g.scope.op_withdraw_shielded_to_contract;
   const new_spent = check_spend_scope(g, admitted, scope_salt, obj_color, recipient_kind, pinned_recipient,
     max_coin_value, amount, spent_prev, op, recipient_bytes);
-  assert(auth.sig.r != default<Secp256k1Scalar> && auth.sig.s != default<Secp256k1Scalar>,
-         "evm_k256: signature scalar is zero");
   const struct_hash = evm_k256_grantee_struct<T>(type_hash, kernel.self().bytes, address, label, auth.hint.label, slot,
     g.issued_at, auth.hint.issued_at, g.nonce, auth.hint.grant_nonce, tail);
   assert(k256_ecdsa_verify(eip712_v1_digest(kernel.self().bytes, struct_hash, auth.hint.account_hash),

@@ -476,7 +476,7 @@ async function scenario(ownerArm: OwnerArm, granteeArm: GranteeArm) {
   }, 'operation not in scope');
   if (granteeArm === 'evm_k256') {
     const eg = g;
-    await expectAbort(`${tag} evm grantee: r = 0`, () => spend(acc, eg, slot, color, 10n, recipient, opening, { tamper: (a) => ({ ...a, sig: { ...a.sig, r: 0n } }) }), 'evm_k256: signature scalar is zero');
+    await expectAbort(`${tag} evm grantee: r = 0`, () => spend(acc, eg, slot, color, 10n, recipient, opening, { tamper: (a) => ({ ...a, sig: { ...a.sig, r: 0n } }) }), 'k256: signature scalar is zero');
     await expectAbort(`${tag} evm grantee: another blind (another grant id)`, () => spend(acc, eg, slot, color, 10n, recipient, opening, { tamper: (a) => ({ ...a, blind: rnd() }) }), 'unknown grant');
     await expectAbort(`${tag} evm grantee: another site label (another grant id)`, () => spend(acc, eg, slot, color, 10n, recipient, opening, { tamper: (a) => ({ ...a, label: grantLabel('evil.example') }) }), 'unknown grant');
     await expectAbort(`${tag} evm grantee: another slot (another grant id)`, () => spend(acc, eg, slot, color, 10n, recipient, { ...opening, slot: 7n }), 'unknown grant');

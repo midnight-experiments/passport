@@ -602,7 +602,7 @@
     "mutants": [
       {
         "id": "H1",
-        "mutation": "evm_k256_bytes_of without its check (every coordinate, key and label hint unchecked)",
+        "mutation": "evm_bytes_of without its check (every coordinate, key and label hint unchecked)",
         "killedBy": [
           "evm-k256-hints-offline",
           "evm-k256-prover-dry"
@@ -617,7 +617,7 @@
       },
       {
         "id": "H2",
-        "mutation": "evm_k256_low20 without its check (the key hash and the account hash unchecked)",
+        "mutation": "evm_low20 without its check (the key hash and the account hash unchecked)",
         "killedBy": [
           "evm-k256-hints-offline",
           "evm-k256-prover-dry"
@@ -632,7 +632,7 @@
       },
       {
         "id": "H3",
-        "mutation": "evm_k256_low20 takes bytes 11..30 instead of 12..31",
+        "mutation": "evm_low20 takes bytes 11..30 instead of 12..31",
         "killedBy": [
           "evm-k256-offline",
           "evm-k256-grants-offline",

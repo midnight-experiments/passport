@@ -7,8 +7,8 @@
 //     account's frame (signed by the device; one foreign account for the
 //     domain's verifyingContract and the frame's account), another key's
 //     signature with the device's entry opening, and (r, s) = (0, 0), which
-//     reaches each body's own zero-scalar assert (the one-type, the two-form
-//     remove_device and the bare body);
+//     reaches K256Core's zero-scalar assert through each body (the one-type,
+//     the two-form remove_device and the bare body);
 //   - every grantee twin (3) refuses the same three approvals at the grant
 //     seam;
 //   - every shielded spend (the two device exports and the two shielded
@@ -148,8 +148,8 @@ async function deviceGated(label: string, circuit: string, msg: (f: DeviceFrame)
   body: keyof typeof BODY, positive: 'positive' | string, effect?: [string, () => boolean]) {
   await refused(`${label}: an approval over another account's frame, signed by the device`, async () => call(circuit, args(await deviceAuth('foreign', msg))), 'invalid signature');
   await refused(`${label}: another key's signature with the device's entry opening`, async () => call(circuit, args(await deviceAuth('other', msg))), 'invalid signature');
-  await refused(`${label}: (r, s) = (0, 0) with the device's entry opening (${BODY[body]}'s own assert)`, async () => call(circuit, args(await deviceAuth('zero', msg))),
-    'evm_k256: signature scalar is zero');
+  await refused(`${label}: (r, s) = (0, 0) with the device's entry opening (K256Core's assert, through ${BODY[body]})`, async () => call(circuit, args(await deviceAuth('zero', msg))),
+    'k256: signature scalar is zero');
   if (positive === 'positive') {
     const n0 = L().auth_nonce as bigint, c0 = counterOf(E);
     await call(circuit, args(await deviceAuth('honest', msg)));
@@ -298,8 +298,8 @@ await section('every grantee twin refuses an approval it did not get (the grant 
   for (const [label, circuit, x, msg, ops, positive] of twins) {
     await refused(`${label}: an approval over another account's frame, signed by the grantee`, async () => call(circuit, twinArgs(x, ops, await granteeAuth(x, 'foreign', msg))), 'invalid grant signature');
     await refused(`${label}: another key's signature with the grantee's opening`, async () => call(circuit, twinArgs(x, ops, await granteeAuth(x, 'other', msg))), 'invalid grant signature');
-    await refused(`${label}: (r, s) = (0, 0) with the grantee's opening (the grant seam's own assert)`, async () => call(circuit, twinArgs(x, ops, await granteeAuth(x, 'zero', msg))),
-      'evm_k256: signature scalar is zero');
+    await refused(`${label}: (r, s) = (0, 0) with the grantee's opening (K256Core's assert, through the grant seam)`, async () => call(circuit, twinArgs(x, ops, await granteeAuth(x, 'zero', msg))),
+      'k256: signature scalar is zero');
     if (positive === 'positive') {
       const id = x.g.grantId(address); const n0 = L().grants.lookup(id).nonce as bigint, a0 = L().auth_nonce as bigint;
       await call(circuit, twinArgs(x, ops, await granteeAuth(x, 'honest', msg)));
