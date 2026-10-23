@@ -161,7 +161,7 @@ export function solSoftwareSigner(seed: Uint8Array): SolSigner {
  *  encoding checks it. */
 export function solPublicKeyFromSeed(seed: Uint8Array): { pk: Curve25519Point; key: Uint8Array } {
   if (seed.length !== 32) throw new Error('sol_ed25519: a seed is 32 bytes');
-  const pk: Curve25519Point = pureCircuits.compute_public_key_with_sol_ed25519(seed);
+  const pk: Curve25519Point = pureCircuits.compute_public_key_ed25519(seed);
   const h = solKeyHints(pk);
   return { pk, key: pureCircuits.encode_public_key_ed25519(pk, h.pk_bytes, h.pk_x) };
 }

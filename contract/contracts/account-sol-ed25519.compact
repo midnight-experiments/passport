@@ -77,8 +77,9 @@ import "modules/WalletArmRendering";
 // inputs, asserts A != O, checks the encoding with the core's checked
 // encoding, and returns the key with the derived value: enrolment, removal,
 // grants and signing use one encoding of one key.
-// Exported for clients.
-export { encode_public_key_ed25519 };
+// Exported for clients, with the core's derivation of a key from an RFC 8032
+// seed (compute_public_key_ed25519), which software signers and tests use.
+export { encode_public_key_ed25519, compute_public_key_ed25519 };
 
 export pure circuit derive_boot_commitment_with_sol_ed25519(
   salt:     Bytes<32>,
@@ -120,40 +121,6 @@ export pure circuit derive_grant_id_with_sol_ed25519(
 // own toolchain. No circuit accepts the request message as an authorisation.
 export pure circuit derive_blind_with_sol_ed25519(signature: Bytes<64>): Bytes<32> {
   return derive_blind(blind_tag_sol_ed25519(), signature);
-}
-
-// ── Key derivation from a seed ──────────────────────────────────────────────
-//
-// RFC 8032 section 5.1.5: h = SHA-512(seed); s = h[0..32] with bits 0, 1, 2
-// and 255 cleared and bit 254 set ("clamped"), read little-endian; A = [s]B.
-// Returns A, so a software signer obtains exactly the point the arm's
-// circuits use; its 32-byte encoding is then checked against it by
-// encode_public_key_ed25519. Pure: no proving key, nothing on
-// chain. There is deliberately no raw-scalar helper: a Solana secret key is a
-// seed, and a seed passed as a scalar gives another key.
-//
-// The clamped s lies in [2^254, 2^255), above the group order L; the cast to
-// Curve25519Scalar reduces it mod L (ZKIR FromBytes32 on a foreign field), and
-// [s mod L]B = [s]B because B has order L.
-export pure circuit compute_public_key_with_sol_ed25519(seed: Bytes<32>): Curve25519Point {
-  const h = slice<32>(sha512<Bytes<32>>(seed), 0) as Vector<32, Uint<8>>;
-  // Clear bits 0..2 of the first byte: subtract its value mod 8.
-  const f = h[0];
-  const f6 = f  >= 128 ? f  - 128 : f;
-  const f5 = f6 >= 64  ? f6 - 64  : f6;
-  const f4 = f5 >= 32  ? f5 - 32  : f5;
-  const f3 = f4 >= 16  ? f4 - 16  : f4;
-  const low = f3 >= 8 ? f3 - 8 : f3;
-  // Clear bit 7 and set bit 6 of the last byte.
-  const t = h[31];
-  const t7 = t >= 128 ? t - 128 : t;
-  const top = t7 >= 64 ? t7 : t7 + 64;
-  const s = Bytes[(f - low) as Uint<8>, h[1],  h[2],  h[3],  h[4],  h[5],  h[6],  h[7],
-                  h[8],  h[9],  h[10], h[11], h[12], h[13], h[14], h[15],
-                  h[16], h[17], h[18], h[19], h[20], h[21], h[22], h[23],
-                  h[24], h[25], h[26], h[27], h[28], h[29], h[30],
-                  top as Uint<8>] as Curve25519Scalar;
-  return ecMulGenerator(s);
 }
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────

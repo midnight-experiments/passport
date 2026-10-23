@@ -104,7 +104,7 @@ const SEEDS: Uint8Array[] = [new Uint8Array(32), new Uint8Array(32).fill(0xff), 
       && strict.x === pk.x && strict.y === pk.y;
     if (same) agree++; else ok(G, `seed ${hex(seed)}`, false, `contract ${hex(key)} noble ${hex(noble)} openssl ${hex(ossl)}`);
   }
-  ok(G, `compute_public_key_with_sol_ed25519 == noble == OpenSSL, encode(point) == key, strict decode(key) == point (${SEEDS.length} seeds incl. zero, 0xff.., 00..1f)`, agree === SEEDS.length, `${agree}/${SEEDS.length}`);
+  ok(G, `compute_public_key_ed25519 == noble == OpenSSL, encode(point) == key, strict decode(key) == point (${SEEDS.length} seeds incl. zero, 0xff.., 00..1f)`, agree === SEEDS.length, `${agree}/${SEEDS.length}`);
   // The clamped scalar exceeds L on every seed: the helper's reduction is exercised every time.
   const h = sha512(SEEDS[3]).subarray(0, 32).slice(); h[0] &= 248; h[31] &= 127; h[31] |= 64;
   ok(G, 'clamped scalar >= L (reduction mod L exercised)', BigInt('0x' + hex(h.reverse())) >= ED25519_L);
