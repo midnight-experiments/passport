@@ -3,7 +3,8 @@
 //
 // A readable arm's device entries and grant ids bind a per-account secret,
 // the BLIND, so that a public wallet identity (an Ethereum address, a Solana
-// key) never appears in ledger state in a form anyone can test:
+// key: the identity of the arm's READABLE_ARMS entry) never appears in
+// ledger state in a form anyone can test:
 //
 //   blind = SHA-256(pad32(blind tag) || canonical signature)
 //
@@ -42,24 +43,34 @@
 //   - says that the issuing account's owner learns it, what it reveals, and
 //     that it authorises nothing.
 //
-// The canonical forms make the blind independent of signature malleability:
-// EVM signatures are reduced to low-S r || s (big-endian, 32 bytes each, the
-// recovery byte dropped); Ed25519 signatures are the raw 64-byte R || S, with
-// S below the group order and R a canonical point encoding. Enrolment signs
-// twice and refuses the wallet unless both canonical forms are equal
-// (sameCanonicalSignature): a non-deterministic wallet would lose its accounts
-// on restore.
+// The canonical forms make the blind independent of signature malleability.
+// Each arm's entry names its wallet's signature scheme, which picks the form:
+// secp256k1 ECDSA signatures (EVM) are reduced to low-S r || s (big-endian,
+// 32 bytes each, the recovery byte dropped); Ed25519 signatures are the raw
+// 64-byte R || S, with S below the group order and R a canonical point
+// encoding. Enrolment signs twice and refuses the wallet unless both
+// canonical forms are equal (sameCanonicalSignature): a non-deterministic
+// wallet would lose its accounts on restore.
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { BLIND_TAGS, padTag, evmChecksumAddress, base58Encode, parseSolanaPublicKey, unknownScheme } from './descriptors.js';
+import {
+  READABLE_SCHEMES, padTag, readableArm, unknownScheme,
+  type ReadableArm, type ReadableScheme, type ReadableSignature,
+} from './descriptors.js';
 
-export type BlindScheme = 'evm_k256' | 'sol_ed25519';
-/** The readable schemes that have a blind. Every switch over a BlindScheme
- *  ends in unknownScheme (a `never` check): any other scheme is refused. */
-export const BLIND_SCHEMES: readonly BlindScheme[] = ['evm_k256', 'sol_ed25519'];
+/** The readable schemes, which have a blind: one per READABLE_ARMS entry. */
+export type BlindScheme = ReadableScheme;
+export const BLIND_SCHEMES: readonly BlindScheme[] = READABLE_SCHEMES;
 const unknownBlindScheme = (scheme: never, where: string): never => unknownScheme(scheme, where, BLIND_SCHEMES, 'blind');
+
+/** The registry entry of a blind scheme; any other value (an unregistered
+ *  scheme, one without a blind, none) is refused, never looked up as
+ *  undefined. */
+function blindArm(scheme: BlindScheme, where: string): ReadableArm {
+  return readableArm(scheme) ?? unknownBlindScheme(scheme as never, where);
+}
 
 /** The device request message's format version, named on its first line. */
 export const BLIND_MESSAGE_VERSION = 1;
@@ -73,8 +84,8 @@ export interface BlindRequest {
   scheme: BlindScheme;
   /** The network the account lives on, by its Midnight network name. */
   network: string;
-  /** The wallet identity: the 20-byte Ethereum address, or the 32-byte
-   *  Ed25519 public key. */
+  /** The wallet identity, as the arm's entry defines it: a w52 arm's 20-byte
+   *  address (the Ethereum address), or an ed25519 arm's 32-byte public key. */
   identity: Uint8Array;
   /** 0 for the wallet's first Passport account on this network, then 1, 2, ... */
   accountIndex: bigint | number;
@@ -84,25 +95,15 @@ function checkNetwork(network: string): void {
   if (!NETWORK.test(network)) throw new Error('blind: the network name is lower-case letters, digits, and hyphens');
 }
 
-/** The wallet line's value: the EIP-55 address, or the base58 Ed25519 key. */
+/** The wallet line's value, by the arm's entry (for example the EIP-55
+ *  address, or the base58 Solana key). */
 function walletText(scheme: BlindScheme, identity: Uint8Array): string {
-  switch (scheme) {
-    case 'evm_k256':
-      if (identity.length !== 20 || identity.every((b) => b === 0)) throw new Error('blind: an Ethereum address is 20 bytes, not zero');
-      return `Ethereum address ${evmChecksumAddress(identity)}`;
-    case 'sol_ed25519': return `Solana public key ${base58Encode(parseSolanaPublicKey(identity))}`;
-    default: return unknownBlindScheme(scheme, 'the blind request');
-  }
+  return blindArm(scheme, 'the blind request').identity.walletText(identity);
 }
 
-/** The blind tag text of a readable scheme; any other scheme is refused (never
- *  looked up as undefined). */
+/** The blind tag text of a readable scheme; any other scheme is refused. */
 function blindTagText(scheme: BlindScheme, where: string): string {
-  switch (scheme) {
-    case 'evm_k256': return BLIND_TAGS.evm_k256;
-    case 'sol_ed25519': return BLIND_TAGS.sol_ed25519;
-    default: return unknownBlindScheme(scheme, where);
-  }
+  return blindArm(scheme, where).tags.blind;
 }
 
 /** The DEVICE request message (ASCII, lines separated by LF, no trailing
@@ -138,8 +139,8 @@ export interface GranteeBlindRequest {
   scheme: BlindScheme;
   /** The network the issuing account lives on, by its Midnight network name. */
   network: string;
-  /** The grantee wallet's identity: the 20-byte Ethereum address, or the
-   *  32-byte Ed25519 public key. */
+  /** The grantee wallet's identity, as the arm's entry defines it (see
+   *  BlindRequest.identity). */
   identity: Uint8Array;
   /** The issuing account: the 32-byte contract address of the Passport
    *  account that issues the grant (the address its grant ids bind). */
@@ -212,13 +213,16 @@ export function canonicalEd25519Signature(sig: Uint8Array): Uint8Array {
   return new Uint8Array(sig);
 }
 
-/** The canonical form for a scheme; any other scheme is refused. */
+/** The canonical form of each signature scheme a readable arm's wallet uses. */
+const CANONICAL_FORMS: Readonly<Record<ReadableSignature, (sig: Uint8Array) => Uint8Array>> = {
+  'secp256k1-ecdsa': canonicalEvmSignature,
+  ed25519: canonicalEd25519Signature,
+};
+
+/** The canonical form for a scheme (its arm's signature scheme); any other
+ *  scheme is refused. */
 export function canonicalSignature(scheme: BlindScheme, sig: Uint8Array): Uint8Array {
-  switch (scheme) {
-    case 'evm_k256': return canonicalEvmSignature(sig);
-    case 'sol_ed25519': return canonicalEd25519Signature(sig);
-    default: return unknownBlindScheme(scheme, 'canonicalSignature');
-  }
+  return CANONICAL_FORMS[blindArm(scheme, 'canonicalSignature').signature](sig);
 }
 
 /** The sign-twice check: true only when both signatures have the same

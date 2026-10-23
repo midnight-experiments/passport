@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// Readable rendering — the shared text helpers of the readable authorisation
-// arms (`evm_k256`, `sol_ed25519`).
+// Readable rendering — the shared text helpers of every readable
+// authorisation arm (`evm_k256`, `sol_ed25519`).
 //
 // A readable arm's signed bytes show every operand in full, and the circuit
 // recomputes those bytes from exactly the values it executes on. These
@@ -36,6 +36,18 @@
 // The functions are pure and return byte vectors for the arm to place in its
 // message (or to hash). An arm that shows a text MUST obtain it from these
 // helpers with the executed value, never take shown text as a free input.
+//
+// WHAT THIS MODULE IS NOT: a frame. It holds the pieces above and their
+// rules (the canonical decimal, hex and base58 texts, the dates, the fixed
+// words and enumerated labels, and the label-safety rule of label_text:
+// visible words separated by single spaces, no leading or trailing space,
+// so two different labels never show the same text). It holds no line
+// order, no separator, no first line, no field name and no fixed sentence.
+// Each arm owns its frame in its own file and builds it from these pieces;
+// a new arm's frame is a new file, and this module does not change for it.
+// A frame that joins fields with a separator character must also refuse
+// that character inside the labels it shows, in its own file, since the
+// label-safety rule here does not know the frame's separator.
 // ---------------------------------------------------------------------------
 
 module WalletArmRendering {
