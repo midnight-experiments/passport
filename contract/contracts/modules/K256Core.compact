@@ -47,6 +47,11 @@ module K256Core {
   // byte by byte.
   // compact row optimization | ECDSA verify with the digest from checked bytes | -38% rows
   export circuit k256_ecdsa_verify(digest: Bytes<32>, h: Vector<32, Uint<8>>, sig: Secp256k1EcdsaSignature, pk: Secp256k1Point): Boolean {
+    // Extra safety check: a caller is expected to refuse the point at infinity
+    // before calling (an arm's seam does when it derives the key's address:
+    // extracting the coordinates of the flagged encoding fails, and the
+    // unflagged (0, 0) is not a point of the curve). The rule is repeated here
+    // so that this verification never depends on its caller.
     k256_require_live_key(pk);
     const {r, s} = sig;
     assert(r != default<Secp256k1Scalar> && s != default<Secp256k1Scalar>, "k256: signature scalar is zero");
