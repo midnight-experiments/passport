@@ -29,11 +29,19 @@ role (13 device, 3 grantee). Its members are every operand and every
 consumed witness value, in full; the circuit recomputes the struct
 hash and verifies ECDSA over
 `keccak256(0x19 || 0x01 || domainSeparator || hashStruct(message))`.
-The domain is `EIP712Domain(string name,string version,address
-verifyingContract)` with name `Midnight Passport Account`, version
-`1`, and `verifyingContract` the low 20 bytes of `keccak256` of the
-account address; it has no `chainId` and no salt (see Network
-below). Consumed private values that ledger state already pins (the
+The domain is the fixed V1 domain `EIP712Domain(string name,string
+version,address verifyingContract)` with name `Midnight Passport`,
+version `1`, and `verifyingContract` P, the low 20 bytes of
+`keccak256("midnight:passport:evm:v1")`
+(`0x596e089eF2D7308208B9e8f7e1A147942a84104F`, at which no contract
+is deployed); it has no `chainId` and no salt (see Network below). One
+domain serves every account and network, so the domain separator is a
+circuit constant (`c199a56c83cc5d0377e7f261c33491d1ee5fa301de75f83dfb8bc32a21e08ad8`;
+type hash `91ab3d17e3a50a9d89e63fd30b92be7f5336b03b287bb946787a83a9d62a2766`),
+and the account is bound by every type's first member, `bytes32
+account`, which the circuit takes from the contract's own address.
+Clients MUST refuse to ask a wallet for typed data under any other
+domain. Consumed private values that ledger state already pins (the
 signer's blind and use counter, the spent opening, a grantee's pinned
 recipient and coin bound) are verified against state rather than
 shown. A grant's `scope_salt` is not shown either: `issue_grant`
@@ -143,6 +151,54 @@ an authority). A grantee's blind, which the issuer must know, comes
 from a separate request naming the role and the issuing account (no
 account index), so an issuer never learns a device blind and each
 issuer gets its own.
+
+**Signing format and the format-bound device.** The arm has one
+signing format, `eip712-v1`: approvals are the EIP-712 V1 typed data
+above, signed with `eth_signTypedData_v4`; blind requests are signed
+with `personal_sign`. Clients MUST NOT ask a wallet for anything else.
+A device is bound to the format it was enrolled in: its blind is the
+signature over the blind request in that format, so only a wallet
+that signs that format deterministically with the same key derives it
+again. Clients store per device its arm, its format, its network and
+its account index (none of them secret), and per grant a wallet holds
+the issuing account; they MAY cache the blind (and a grantee's read
+seed) with that record in local storage, protected as the wallet's
+session data, and MUST NOT send it anywhere. On restore a client MUST
+use the cached blind if present, else derive the blind in the stored
+format from a signature by the stored address, else (no record)
+derive it in every format the wallet can sign and test it against the
+account's entries or the grant ID; it MUST NOT derive a blind in any
+other format, and without a match it reports that no account (or
+grant) was found in the formats the wallet can sign and that the
+device can be enrolled anew from another device or through the
+account's recovery (a grantee: a new grant from the issuing account).
+
+**The signer check.** A wallet may answer with another account than
+the one asked for (two extensions in one browser, a switched account),
+and a wallet-reported address is not a verified signer. Clients MUST
+check every signature a wallet returns (approvals and both signatures
+of a blind request) before any proof: the address recovered from the
+exact digest the wallet was asked to sign must be the expected one,
+otherwise the signature is refused. A refusal MAY name another address
+only when the signature recovers to it (for example the address
+another connected wallet reports); otherwise it says the signer is
+unknown.
+
+**Wallet limitations.** With its default settings, the Ledger
+Ethereum app (1.22.5) refuses this typed data with status `0x6a80`
+and asks for blind signing; clear signing needs Ledger-signed
+clear-signing metadata for this domain. A wallet setting that
+approves signing requests unseen (an auto-approve period) would sign
+approvals unseen; clients cannot detect it, and users MUST keep such
+settings off for a wallet used as a device or grantee.
+
+**Extensibility.** A further arm or enrolment kind is added in source
+by registry entries (the readable registry's tags and class, the
+client's arm registry, one entry of the arm's kinds list), but it
+changes the ZKIR, and so the verifier keys, of the existing readable
+arms' enrolment and grant circuits. An account that has retired its
+maintenance authority cannot take new keys, so such an upgrade is new
+code, new keys and a new account version.
 
 **Privacy.** A call publishes its entry point (the arm and the role);
 blinded device entries, boot commitments and grant IDs; a grant's
