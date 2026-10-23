@@ -28,11 +28,11 @@
 //             refused after exactly two requests, before any transaction, as
 //             a device, as a grantee and in a restore
 //   records   device and grantee records: the format and the cached blind
-//             (and read seed) round-trip; records of another arm, role or
-//             format, with a malformed or half cache, a malformed point,
-//             address, index or issuing account are refused before the
-//             wallet is asked; a record without its cache is refused by
-//             fromRecord
+//             round-trip; records of another arm, role or format, with a
+//             malformed cache, a malformed point, address, index or issuing
+//             account, and grantee records that carry a read seed are
+//             refused before the wallet is asked; a record without its
+//             cache is refused by fromRecord
 //   restore   restoreEvmK256Device and restoreEvmK256Grantee: from the cache
 //             (no signature asked); from the stored format when the cache is
 //             lost (the blind derived again, equal to the enrolment's, from
@@ -41,6 +41,15 @@
 //             found: the message that says so and what remains, for each
 //             role); a wallet of another key against a record refused,
 //             naming the key it reports
+//   read seed a grantee's read seed is in memory only: no grantee record
+//             written in this suite holds it; a grantee restored from its
+//             cached blind reads after exactly one signature of its grantee
+//             request, the same read key as at enrolment, and after that,
+//             for this and its other grants, with none; concurrent reads ask
+//             once; two restored sessions give the same read key; a grantee
+//             whose blind was derived again, or that was just enrolled, reads
+//             with no signature; another key's wallet and a non-deterministic
+//             one are refused after one signature, and the seed stays absent
 //   requests  every wallet request of this suite: `personal_sign` only for
 //             a device or grantee blind request, byte for byte,
 //             `eth_signTypedData_v4` only for V1 typed data, and no other
@@ -55,7 +64,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { pureCircuits } from '../wallet/contract.js';
-import { blindFormats, blindFormatName, blindMessageBytes, granteeBlindMessageBytes, SignerMismatchError } from '../wallet/blind.js';
+import { blindFormats, blindFormatName, blindMessageBytes, canonicalEvmSignature, granteeBlindMessageBytes, SignerMismatchError } from '../wallet/blind.js';
 import { evmChecksumAddress, grantLabel, padTag } from '../wallet/descriptors.js';
 import {
   eip712V1Domain, evmK256Messages, typedDataDigest, checkEip712V1TypedData, EIP712_V1_VERIFYING_CONTRACT,
@@ -66,6 +75,7 @@ import {
   EVM_K256_FORMAT, EvmK256Device, EvmK256Grantee, SoftwareEvmWallet, checkEvmK256Signer, enrolEvmBlind, enrolEvmGranteeBlind,
   evmK256WalletFormats, highSTwin, parseEvmSignature, personalMessageDigest, restoreEvmK256Device, restoreEvmK256Grantee,
   revokeAllGrantsWithEvmK256, rotateEncKeyWithEvmK256, serialiseEvmSignature, withdrawUnshieldedAsEvmGrantee, SECP256K1_ORDER,
+  evmK256GrantReadSeed,
   type EvmK256GranteeRecord, type EvmK256RosterRecord, type EvmWallet,
 } from '../wallet/signer-evm-k256.js';
 
@@ -182,6 +192,24 @@ function granteeSurface(g: EvmK256Grantee) {
 const OPENING = { scopeSalt: new Uint8Array(32), recipientKind: 0n, pinnedRecipient: new Uint8Array(32), maxCoinValue: 0n, spentPrev: 0n };
 
 const report: Record<string, unknown> = {};
+
+/** The read seeds this suite knows (hex), and every grantee record it has
+ *  written: none may hold a seed. */
+const KNOWN_SEEDS = new Set<string>();
+const GRANTEE_RECORDS: EvmK256GranteeRecord[] = [];
+async function knowSeed(wallet: SoftwareEvmWallet, network: string, issuingAccount: Uint8Array): Promise<string> {
+  const e = await enrolEvmGranteeBlind(new SoftwareEvmWallet(wallet.sk), network, issuingAccount);
+  const s = hex(evmK256GrantReadSeed(canonicalEvmSignature(e.signatures[0])));
+  KNOWN_SEEDS.add(s);
+  return s;
+}
+/** A grantee's record, kept for the check that no written record holds a
+ *  read seed. */
+function grecOf(g: EvmK256Grantee): EvmK256GranteeRecord {
+  const r = g.toRecord();
+  GRANTEE_RECORDS.push(JSON.parse(JSON.stringify(r)));
+  return r;
+}
 
 // ── Format ───────────────────────────────────────────────────────────────────
 
@@ -448,28 +476,38 @@ const sessions: Record<string, string>[] = [];
 
   const issuer = rnd();
   const g = await EvmK256Grantee.enrol(k, NET, issuer, LABEL, 2n);
-  const grec = g.toRecord();
+  const seed = await knowSeed(k, NET, issuer);
+  const grec = grecOf(g);
   assert.equal(grec.role, 'grantee'); assert.equal(grec.format, 'eip712-v1'); assert.equal(grec.issuingAccount, hex(issuer));
+  assert.ok(!('readSeed' in grec) && grec.blind === hex(g.blind), 'the grantee record caches the blind and not the read seed');
   const gback = EvmK256Grantee.fromRecord(JSON.parse(JSON.stringify(grec)), LABEL, 2n);
-  assert.ok(eq(gback.blind, g.blind) && eq(gback.grantId(issuer), g.grantId(issuer)) && eq(gback.readKey(issuer).publicKey, g.readKey(issuer).publicKey));
+  assert.ok(eq(gback.blind, g.blind) && eq(gback.grantId(issuer), g.grantId(issuer)) && gback.hasReadSeed === false && g.hasReadSeed === true);
+  refused('records', () => gback.readKey(issuer), /no read seed in memory/, 'a read key of a grantee read from its record, before its wallet signs');
   const shop = grantLabel('shop.example');
   assert.ok(eq(EvmK256Grantee.fromRecord(grec, shop, 0n).grantId(issuer), g.withGrant(shop, 0n).grantId(issuer)), 'one record serves every grant of the issuer');
-  ok('records', 2);
-  refused('records', () => new EvmK256Grantee(g.pk, g.blind, LABEL, 2n).toRecord(), /only a grantee enrolled from its wallet/, 'a record of the issuer\'s view of a grantee');
-  const { blind: _gb, readSeed: _rs, ...glost } = grec;
+  assert.deepEqual(grecOf(gback), grec, 'a grantee read from its record writes the same record');
+  ok('records', 3);
+  refused('records', () => new EvmK256Grantee(g.pk, g.blind, LABEL, 2n).toRecord(), /only a grantee enrolled or restored/, 'a record of the issuer\'s view of a grantee');
+  const { blind: _gb, ...glost } = grec;
   refused('records', () => EvmK256Grantee.fromRecord(glost as EvmK256GranteeRecord, LABEL, 2n), /holds no cached blind/, 'a grantee record without its cache');
-  const gbad: [string, Partial<Record<keyof EvmK256GranteeRecord, unknown>>, RegExp][] = [
+  const gbad: [string, Record<string, unknown>, RegExp][] = [
     ['the role device', { role: 'device' }, /not a grantee record/],
     ['no role', { role: undefined }, /not a grantee record/],
-    ['the blind without the read seed', { readSeed: undefined }, /together/],
-    ['the read seed without the blind', { blind: undefined }, /together/],
+    ['its read seed', { readSeed: seed }, /never holds the read seed/],
+    ['its read seed and no blind', { readSeed: seed, blind: undefined }, /never holds the read seed/],
+    ['an empty read seed member', { readSeed: undefined }, /never holds the read seed/],
+    ['a malformed read seed', { readSeed: 'zz' }, /never holds the read seed/],
     ['a 31-byte issuing account', { issuingAccount: hex(rnd(31)) }, /issuing account/],
     ['an upper-case issuing account', { issuingAccount: hex(issuer).toUpperCase() }, /issuing account/],
     ['the format raw', { format: 'raw' }, /has no format/],
-    ['a malformed read seed', { readSeed: 'zz' }, /hex/],
   ];
   for (const [why, patch, re] of gbad) refused('records', () => EvmK256Grantee.fromRecord({ ...grec, ...patch } as EvmK256GranteeRecord, LABEL, 2n), re, `a grantee record with ${why}`);
-  console.log(`  ✓ records: device and grantee records carry the format and the cached blind (and read seed), round trip; ${tally.records.refused} malformed records and requests refused, the wallet never asked`);
+  for (const [why, patch, re] of gbad) {
+    const w = new RecordingWallet(k);
+    await refusedAsync('records', () => restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 2n, record: { ...grec, ...patch } as EvmK256GranteeRecord }), re, `a grantee restore from a record with ${why}`);
+    assert.equal(w.requests.length, 0, `${why}: the wallet is not asked`);
+  }
+  console.log(`  ✓ records: device and grantee records carry the format and the cached blind, never a read seed, round trip; ${tally.records.refused} malformed records and requests refused (a stored read seed among them), the wallet never asked`);
 }
 
 // ── Restore ──────────────────────────────────────────────────────────────────
@@ -554,15 +592,16 @@ const restoreCases: Record<string, unknown>[] = [];
   // grantees
   const issuer = rnd();
   const g = await EvmK256Grantee.enrol(A, NET, issuer, LABEL, 1n);
-  const grec = g.toRecord();
-  const { blind: _gb, readSeed: _rs, ...glost } = grec;
+  await knowSeed(A, NET, issuer);
+  const grec = grecOf(g);
+  const { blind: _gb, ...glost } = grec;
   const grequest = granteeBlindMessageBytes({ scheme: 'evm_k256', network: NET, identity: A.addressBytes, issuingAccount: issuer });
   const ids = new Set([hex(g.grantId(issuer))]);
   const gfinds = (x: EvmK256Grantee) => ids.has(hex(x.grantId(issuer)));
   {
     const w = new RecordingWallet(A);
     const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: grec });
-    assert.ok(r.ok === true && r.source === 'cache' && eq(r.value.grantId(issuer), g.grantId(issuer)) && eq(r.value.readKey(issuer).secretKey, g.readKey(issuer).secretKey));
+    assert.ok(r.ok === true && r.source === 'cache' && eq(r.value.grantId(issuer), g.grantId(issuer)) && r.value.hasReadSeed === false);
     assert.equal(signs(w).length, 0);
     restoreCases.push({ case: 'grantee, cached', source: 'cache', signatures: 0 });
     ok('restore');
@@ -572,7 +611,7 @@ const restoreCases: Record<string, unknown>[] = [];
     const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: glost as EvmK256GranteeRecord });
     assert.ok(r.ok === true && r.source === 'stored-format' && eq(r.value.blind, g.blind) && eq(r.value.readKey(issuer).secretKey, g.readKey(issuer).secretKey));
     assert.ok(signs(w).length === 2 && signs(w).every((x) => x.method === 'personalSign' && eq(x.message, grequest)), 'the grantee request of the record');
-    assert.deepEqual(r.ok === true && r.value.toRecord(), grec, 'the restored grantee writes the same record, cache included');
+    assert.deepEqual(r.ok === true && grecOf(r.value), grec, 'the restored grantee writes the same record, cache included');
     restoreCases.push({ case: 'grantee, cache lost', source: 'stored-format', signatures: 2 });
     ok('restore');
   }
@@ -601,6 +640,105 @@ const restoreCases: Record<string, unknown>[] = [];
   }
   report.restore = restoreCases;
   console.log(`  ✓ restore: ${tally.restore.pass} cases (device and grantee: cache, cache lost, no record found and not found with the restore message, another key's wallet); ${tally.restore.refused} refused`);
+}
+
+// ── The read seed: in memory only, derived again from one signature ─────────
+
+const readCases: Record<string, unknown>[] = [];
+{
+  const A = new SoftwareEvmWallet(scalar()), B = new SoftwareEvmWallet(scalar());
+  const issuer = rnd(), other = rnd();
+  const shop = grantLabel('shop.example');
+  const g = await EvmK256Grantee.enrol(A, NET, issuer, LABEL, 3n);
+  await knowSeed(A, NET, issuer);
+  const grec = grecOf(g);
+  const grequest = granteeBlindMessageBytes({ scheme: 'evm_k256', network: NET, identity: A.addressBytes, issuingAccount: issuer });
+  const want = g.readKey(issuer), wantShop = g.withGrant(shop, 0n).readKey(issuer), wantOther = g.readKey(other);
+  const signs = (w: RecordingWallet) => w.requests.filter((r) => r.method !== 'address');
+  const restored = async (w: RecordingWallet) => {
+    const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 3n, record: grec });
+    assert.ok(r.ok === true && r.source === 'cache');
+    return (r as { value: EvmK256Grantee }).value;
+  };
+  // an enrolled grantee holds its seed: no signature to read
+  {
+    const w = new RecordingWallet(A);
+    const enrolled = await EvmK256Grantee.enrol(w, NET, issuer, LABEL, 3n);
+    const before = signs(w).length;
+    const k = await enrolled.readKeyFromWallet(issuer);
+    assert.ok(eq(k.secretKey, want.secretKey) && signs(w).length === before && before === 2, 'an enrolled grantee reads with no further signature');
+    readCases.push({ case: 'enrolled', signaturesToRead: 0 });
+    ok('read seed');
+  }
+  // restored from the cache: exactly one signature, then none, for every grant of the session
+  {
+    const w = new RecordingWallet(A);
+    const x = await restored(w);
+    assert.equal(signs(w).length, 0, 'the cache restores the grantee with no signature');
+    const k1 = await x.readKeyFromWallet(issuer);
+    assert.ok(eq(k1.secretKey, want.secretKey) && eq(k1.publicKey, want.publicKey), 'the same read key as at enrolment');
+    assert.ok(signs(w).length === 1 && signs(w)[0].method === 'personalSign' && eq((signs(w)[0] as { message: Uint8Array }).message, grequest), 'one signature, of the grantee request');
+    const k2 = await x.readKeyFromWallet(issuer);
+    const k3 = await x.withGrant(shop, 0n).readKeyFromWallet(issuer);
+    const k4 = x.readKey(other);
+    assert.ok(eq(k2.secretKey, want.secretKey) && eq(k3.secretKey, wantShop.secretKey) && eq(k4.secretKey, wantOther.secretKey), 'the session\'s seed serves every grant and account');
+    assert.equal(signs(w).length, 1, 'no further signature while the seed is in memory');
+    assert.ok(!JSON.stringify(grecOf(x)).includes(hex(evmK256GrantReadSeed(canonicalEvmSignature(await A.personalSign(grequest))))), 'the record written after reading still holds no seed');
+    readCases.push({ case: 'restored from the cache', signaturesToRead: 1, thenForOtherGrants: 0 });
+    ok('read seed', 3);
+  }
+  // concurrent first reads ask once
+  {
+    const w = new RecordingWallet(A);
+    const x = await restored(w);
+    const [k1, k2] = await Promise.all([x.readKeyFromWallet(issuer), x.withGrant(shop, 0n).readKeyFromWallet(issuer)]);
+    assert.ok(eq(k1.secretKey, want.secretKey) && eq(k2.secretKey, wantShop.secretKey) && signs(w).length === 1, 'two concurrent first reads, one signature');
+    ok('read seed');
+  }
+  // two restored sessions (two wallet instances of the key): the same read key
+  {
+    const w1 = new RecordingWallet(new SoftwareEvmWallet(A.sk)), w2 = new RecordingWallet(new SoftwareEvmWallet(A.sk));
+    const k1 = await (await restored(w1)).readKeyFromWallet(issuer), k2 = await (await restored(w2)).readKeyFromWallet(issuer);
+    assert.ok(eq(k1.secretKey, k2.secretKey) && eq(k1.secretKey, want.secretKey) && signs(w1).length === 1 && signs(w2).length === 1, 'two sessions, one read key');
+    readCases.push({ case: 'two restored sessions', equal: true });
+    ok('read seed');
+  }
+  // the cache lost: the restore's signatures give the seed, no extra signature
+  {
+    const w = new RecordingWallet(A);
+    const { blind: _b, ...lost } = grec;
+    const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 3n, record: lost as EvmK256GranteeRecord });
+    assert.ok(r.ok === true && r.value.hasReadSeed === true);
+    const k = await (r as { value: EvmK256Grantee }).value.readKeyFromWallet(issuer);
+    assert.ok(eq(k.secretKey, want.secretKey) && signs(w).length === 2, 'the blind derived again brings the seed: no third signature');
+    readCases.push({ case: 'restored with the cache lost', signaturesToRead: 0 });
+    ok('read seed');
+  }
+  // refusals, after one signature, with the seed left absent
+  {
+    const w = new RecordingWallet(B);
+    const x = await restored(w);
+    await refusedAsync('read seed', () => x.readKeyFromWallet(issuer), namedSigner(A, B), 'another key\'s wallet signing the read request');
+    assert.ok(signs(w).length === 1 && x.hasReadSeed === false);
+    const h = new RecordingWallet(new SoftwareEvmWallet(A.sk, true));
+    const y = await restored(h);
+    await refusedAsync('read seed', () => y.readKeyFromWallet(issuer), /not deterministic/, 'a non-deterministic wallet of the key');
+    assert.ok(signs(h).length === 1 && y.hasReadSeed === false);
+    await refusedAsync('read seed', () => EvmK256Grantee.fromRecord(grec, LABEL, 3n).readKeyFromWallet(issuer), /has no wallet/, 'a grantee read from its record without a wallet');
+    await refusedAsync('read seed', () => new EvmK256Grantee(g.pk, g.blind, LABEL, 3n, new RecordingWallet(A)).readKeyFromWallet(issuer), /issuing account is not known/, 'a grantee whose issuing account is not known');
+  }
+  // no grantee record written in this suite holds a read seed
+  {
+    assert.ok(GRANTEE_RECORDS.length >= 5 && KNOWN_SEEDS.size >= 3);
+    for (const r of GRANTEE_RECORDS) {
+      assert.ok(!('readSeed' in r), 'no readSeed member');
+      const text = JSON.stringify(r).toLowerCase();
+      for (const s of KNOWN_SEEDS) assert.ok(!text.includes(s), 'no known read seed in any written record');
+    }
+    ok('read seed', GRANTEE_RECORDS.length);
+  }
+  report.readSeed = { cases: readCases, recordsChecked: GRANTEE_RECORDS.length, seedsKnown: KNOWN_SEEDS.size };
+  console.log(`  ✓ read seed: in memory only (${GRANTEE_RECORDS.length} grantee records written, none holds one of ${KNOWN_SEEDS.size} known seeds); a cache-restored grantee reads after exactly one signature, then none for its other grants (concurrent reads: one); two sessions, one read key; a re-derived or enrolled grantee reads with none; ${tally['read seed'].refused} refusals, the seed left absent`);
 }
 
 // ── Every wallet request of this suite ───────────────────────────────────────

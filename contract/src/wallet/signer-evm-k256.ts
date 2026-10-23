@@ -56,7 +56,11 @@
 // || r || s) over the same canonical signature as the grantee blind. The
 // issuer learns the blind, never the signature, so it cannot derive the key.
 // The grantee record (`EvmK256GranteeRecord`), one per issuing account,
-// caches the grantee blind and the read seed in the same way.
+// caches the grantee blind in the same way. The read seed is never stored:
+// it stays in memory for the session, and a grantee restored from its cache
+// derives it again from one signature of the grantee request when it first
+// reads (`readKeyFromWallet`), so a leak of the client's storage links the
+// wallet to its grants but opens none of their records.
 //
 // Every derivation goes through the contract's own exported pure circuits
 // (`derive_*_with_evm_k256`), so the client and the circuit can never
@@ -320,8 +324,8 @@ function recordPoint(pk: unknown): Secp256k1Point {
   return point;
 }
 
-/** A record's cached 32-byte secret (the blind, a read seed), or undefined
- *  when the cache is absent. */
+/** A record's cached 32-byte secret (the blind), or undefined when the
+ *  cache is absent. */
 function recordSecret(v: unknown, what: string): Uint8Array | undefined {
   if (v === undefined) return undefined;
   if (typeof v !== 'string') throw new Error(`evm_k256: a record's ${what} is hex`);
@@ -974,12 +978,19 @@ export function evmK256GrantReadKey(readSeed: Uint8Array, account: Uint8Array, l
  * derive_grant_id_with_evm_k256(account, address, blind,
  * H(origin tag || label), slot). It signs one readable type per operation
  * over the grant frame (the record's issuedAt and nonce, never auth_nonce).
+ *
+ * Its read seed (the grant read keys' secret) is held in memory only, shared
+ * by the grantee's copies for other grants of the same issuing account
+ * (`withGrant`), and never written to a record.
  */
 export class EvmK256Grantee {
   readonly arm = 'evm_k256' as const;
   /** The format the grantee signs in and its blind is bound to. */
   readonly format = EVM_K256_FORMAT;
   readonly address: Uint8Array;
+  /** The session's read seed, once known, and its derivation while one is
+   *  asked of the wallet (so concurrent reads ask once). */
+  private session: { readSeed?: Uint8Array; deriving?: Promise<Uint8Array> };
 
   constructor(
     readonly pk: Secp256k1Point,
@@ -987,14 +998,16 @@ export class EvmK256Grantee {
     readonly label: Uint8Array,
     readonly slot: bigint,
     readonly wallet?: EvmWallet,
-    private readonly readSeed?: Uint8Array,
+    readSeed?: Uint8Array,
     /** The network and the issuing account of the grantee request the blind
-     *  was derived from (known to a grantee enrolled from its wallet). */
+     *  was derived from (known to a grantee enrolled or restored from its
+     *  wallet or its record). */
     readonly issuer?: { network: string; issuingAccount: Uint8Array },
   ) {
     if (blind.length !== 32) throw new Error('evm_k256: a blind is 32 bytes');
     if (label.length !== 32) throw new Error('evm_k256: a site label is 32 bytes');
     if (readSeed && readSeed.length !== 32) throw new Error('evm_k256: a read seed is 32 bytes');
+    this.session = { readSeed: readSeed === undefined ? undefined : new Uint8Array(readSeed) };
     if (issuer && (!(issuer.issuingAccount instanceof Uint8Array) || issuer.issuingAccount.length !== 32)) throw new Error('evm_k256: the issuing account address is 32 bytes');
     if (pk.x === 0n && pk.y === 0n) throw new Error('evm_k256: the point at infinity is not a grantee key');
     secp256k1.Point.fromAffine({ x: pk.x, y: pk.y }).assertValidity();
@@ -1010,39 +1023,81 @@ export class EvmK256Grantee {
   }
 
   /** The grantee record to persist (one per issuing account), with the
-   *  blind and the read seed cached; only a grantee enrolled from its wallet
-   *  has one. */
+   *  blind cached and never the read seed; only a grantee whose issuing
+   *  account is known (enrolled or restored) has one. */
   toRecord(): EvmK256GranteeRecord {
-    if (!this.issuer || !this.readSeed) throw new Error('evm_k256: only a grantee enrolled from its wallet has a record');
+    if (!this.issuer) throw new Error('evm_k256: only a grantee enrolled or restored from its wallet or record has a record');
     return {
       scheme: 'evm_k256', role: 'grantee', format: this.format, network: this.issuer.network, issuingAccount: hex(this.issuer.issuingAccount),
       address: evmChecksumAddress(this.address),
       pk: { x: this.pk.x.toString(16).padStart(64, '0'), y: this.pk.y.toString(16).padStart(64, '0') },
-      blind: hex(this.blind), readSeed: hex(this.readSeed),
+      blind: hex(this.blind),
     };
   }
 
   /** The grantee of one grant (`label`, `slot`) from its record and its
-   *  cache. Refuses a record of another arm, role or format, one whose
-   *  address is not its point's, and one without the cache
-   *  (restoreEvmK256Grantee derives it again from the wallet). */
+   *  cached blind, with no read seed in memory (readKeyFromWallet derives
+   *  it). Refuses a record of another arm, role or format, one whose address
+   *  is not its point's, one that carries a read seed, and one without the
+   *  cache (restoreEvmK256Grantee derives it again from the wallet). */
   static fromRecord(rec: EvmK256GranteeRecord, label: Uint8Array, slot: bigint, wallet?: EvmWallet): EvmK256Grantee {
     const r = parseGranteeRecord(rec);
-    if (r.blind === undefined || r.readSeed === undefined) throw new Error('evm_k256: the record holds no cached blind; restore the grantee from its wallet (restoreEvmK256Grantee)');
-    return new EvmK256Grantee(r.pk, r.blind, label, slot, wallet, r.readSeed, { network: r.network, issuingAccount: r.issuingAccount });
+    if (r.blind === undefined) throw new Error('evm_k256: the record holds no cached blind; restore the grantee from its wallet (restoreEvmK256Grantee)');
+    return new EvmK256Grantee(r.pk, r.blind, label, slot, wallet, undefined, { network: r.network, issuingAccount: r.issuingAccount });
   }
 
+  /** Whether the session holds the read seed (no signature is needed to
+   *  read). */
+  get hasReadSeed(): boolean { return this.session.readSeed !== undefined; }
+
   /** This grant's read key on `account` (its `read_pk` goes into the grant
-   *  request); needs the grantee's own enrolment (the read seed). */
+   *  request), from the session's read seed; refused when the session holds
+   *  none (readKeyFromWallet derives it). */
   readKey(account: Uint8Array): EvmK256ReadKey {
-    if (!this.readSeed) throw new Error('evm_k256: this grantee has no read seed (enrol it from its wallet)');
-    return evmK256GrantReadKey(this.readSeed, account, this.label, this.slot);
+    const seed = this.session.readSeed;
+    if (!seed) throw new Error('evm_k256: this grantee has no read seed in memory (derive it from its wallet with readKeyFromWallet)');
+    return evmK256GrantReadKey(seed, account, this.label, this.slot);
+  }
+
+  /**
+   * This grant's read key on `account`, deriving the read seed first when
+   * the session holds none: the wallet signs the grantee request once; the
+   * signature must come from this grantee's address (the signer check) and
+   * its canonical form must give this grantee's blind, so it is the
+   * signature the blind was derived from (a non-deterministic wallet is
+   * refused, as by the sign-twice check). While the session holds the seed,
+   * no signature is asked.
+   */
+  async readKeyFromWallet(account: Uint8Array): Promise<EvmK256ReadKey> {
+    if (!this.session.readSeed) {
+      const s = this.session;
+      s.deriving ??= this.deriveReadSeed().finally(() => { s.deriving = undefined; });
+      s.readSeed = await s.deriving;
+    }
+    return this.readKey(account);
+  }
+
+  private async deriveReadSeed(): Promise<Uint8Array> {
+    if (!this.wallet) throw new Error('evm_k256: this grantee has no wallet');
+    if (!this.issuer) throw new Error('evm_k256: this grantee\'s issuing account is not known, so its request cannot be built');
+    const message = granteeBlindMessageBytes({ scheme: 'evm_k256', network: this.issuer.network, identity: this.address, issuingAccount: this.issuer.issuingAccount });
+    const others = [await this.wallet.address(), ...(await otherAddresses(this.wallet))];
+    const signature = await this.wallet.personalSign(message);
+    checkEvmK256Signer(this.address, personalMessageDigest(message), signature, others);
+    const canonical = canonicalEvmSignature(signature);
+    if (!eq(deriveBlind('evm_k256', canonical), this.blind)) {
+      throw new Error('blind: the wallet signed the grantee privacy-key request with another signature than the one this grant\'s blind was derived from (not deterministic); its read key cannot be derived');
+    }
+    return evmK256GrantReadSeed(canonical);
   }
 
   /** The same grantee under another site label or slot (another grant of the
-   *  same issuing account), keeping its wallet and read seed. */
+   *  same issuing account), keeping its wallet and sharing its session's
+   *  read seed. */
   withGrant(label: Uint8Array, slot: bigint): EvmK256Grantee {
-    return new EvmK256Grantee(this.pk, this.blind, label, slot, this.wallet, this.readSeed, this.issuer);
+    const g = new EvmK256Grantee(this.pk, this.blind, label, slot, this.wallet, undefined, this.issuer);
+    g.session = this.session;
+    return g;
   }
 
   /** origin_hash of the site label (what the grant id binds). */
@@ -1088,25 +1143,22 @@ export interface EvmK256GranteeRecord {
   address: string;
   /** The recovered public point, big-endian hex coordinates. */
   pk: { x: string; y: string };
-  /** The cached grantee blind and read seed, hex, both from the grantee
-   *  request's canonical signature. Secrets (the blind links this wallet to
-   *  its grants from the account; the read seed derives their read keys):
-   *  they stay in the client's local storage and are never sent. Both are
-   *  absent once the cache is lost: restoreEvmK256Grantee derives them
-   *  again from the wallet. */
+  /** The cached grantee blind, hex. A secret (it links this wallet to its
+   *  grants from the account): it stays in the client's local storage and
+   *  is never sent. Absent once the cache is lost: restoreEvmK256Grantee
+   *  derives it again from the wallet. The record never holds the read
+   *  seed, which opens the grants' records: it is kept in memory only. */
   blind?: string;
-  readSeed?: string;
 }
 
-/** A grantee record, checked: its parts and, when cached, its blind and read
- *  seed (both or neither). */
+/** A grantee record, checked: its parts and, when cached, its blind. A
+ *  record that carries a read seed is refused: the seed is never stored. */
 function parseGranteeRecord(rec: EvmK256GranteeRecord) {
   const common = recordCommon(rec);
   if (rec.role !== 'grantee') throw new Error('evm_k256: not a grantee record');
+  if (Object.prototype.hasOwnProperty.call(rec, 'readSeed')) throw new Error('evm_k256: a grantee record never holds the read seed');
   if (typeof rec.issuingAccount !== 'string' || !HEX64.test(rec.issuingAccount)) throw new Error('evm_k256: a record\'s issuing account is 32 bytes of lower-case hex');
-  const blind = recordSecret(rec.blind, 'blind'), readSeed = recordSecret(rec.readSeed, 'read seed');
-  if ((blind === undefined) !== (readSeed === undefined)) throw new Error('evm_k256: a grantee record caches its blind and read seed together');
-  return { ...common, issuingAccount: unhex(rec.issuingAccount), blind, readSeed };
+  return { ...common, issuingAccount: unhex(rec.issuingAccount), blind: recordSecret(rec.blind, 'blind') };
 }
 
 /** What a grantee restore starts from, for the grant `label`, `slot`: the
@@ -1120,7 +1172,10 @@ export type EvmK256GranteeRestoreRequest = { wallet: EvmWallet; label: Uint8Arra
 /** Restores a grantee through blind.ts restoreBlind, as restoreEvmK256Device
  *  restores a device, from the grantee request of its issuing account;
  *  without a match, the message says no grant was found and that the
- *  issuing account's owner can issue a new grant to this wallet. */
+ *  issuing account's owner can issue a new grant to this wallet. A grantee
+ *  restored from its cached blind holds no read seed (its first read asks
+ *  one signature, readKeyFromWallet); one whose blind was derived again
+ *  holds the seed of that signature for the session. */
 export async function restoreEvmK256Grantee(req: EvmK256GranteeRestoreRequest): Promise<EvmK256Restore<EvmK256Grantee>> {
   const { wallet, label, slot } = req;
   const rec = 'record' in req && req.record !== undefined ? parseGranteeRecord(req.record) : undefined;
@@ -1134,7 +1189,7 @@ export async function restoreEvmK256Grantee(req: EvmK256GranteeRestoreRequest): 
   if (address.length !== 20) throw new Error('blind: the wallet address is 20 bytes');
   const issuer = { network, issuingAccount };
   let pk: Secp256k1Point | undefined;
-  let readSeed: Uint8Array | undefined = rec?.readSeed;
+  let readSeed: Uint8Array | undefined;
   const r = await restoreBlind({
     scheme: 'evm_k256', role: 'grantee',
     stored: rec ? { format: rec.format, blind: rec.blind } : undefined,

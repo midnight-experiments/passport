@@ -161,9 +161,11 @@ signature over the blind request in that format, so only a wallet
 that signs that format deterministically with the same key derives it
 again. Clients store per device its arm, its format, its network and
 its account index (none of them secret), and per grant a wallet holds
-the issuing account; they MAY cache the blind (and a grantee's read
-seed) with that record in local storage, protected as the wallet's
-session data, and MUST NOT send it anywhere. On restore a client MUST
+the issuing account; they MAY cache the blind with that record in
+local storage, protected as the wallet's session data, and MUST NOT
+send it anywhere. A grantee's read seed MUST NOT be stored: it is kept
+in memory for the session and derived again from one signature of the
+grantee request, which must give the cached blind again. On restore a client MUST
 use the cached blind if present, else derive the blind in the stored
 format from a signature by the stored address, else (no record)
 derive it in every format the wallet can sign and test it against the
