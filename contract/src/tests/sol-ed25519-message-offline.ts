@@ -4,8 +4,11 @@
 // independent TypeScript renderer (src/wallet/sol-ed25519-message.ts), byte
 // for byte, over a corpus covering all 15 layouts, both roles, every target
 // class, and edge values (0, 1, 2^64 - 1, 2^128 - 1, 18 decimals, 8-character
-// symbols, 32-byte labels). Also: every layout has one fixed length below
-// the Solana parse bound; every line starts with circuit-fixed text; a site
+// symbols, 32-byte labels). Also: every layout has one fixed length; every
+// raw message (the raw head, then the text) and every raw blind request is
+// below the Solana parse bound and parses as no Solana transaction or
+// message; every off-chain message parses as an off-chain message v1 naming
+// the signing key, and as no transaction; every line starts with circuit-fixed text; a site
 // label changes only the Site line; display inputs that do not describe the
 // value are refused by the circuit (runtime) and by the renderer (client).
 // The corpus is frozen in src/tests/vectors/sol-ed25519-messages-v1.json:
@@ -21,9 +24,10 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { pureCircuits } from '../wallet/contract.js';
 import { NEVER_TEXT, NOT_APPLICABLE_TEXT } from '../wallet/rendering.js';
 import { COORDINATE_DISPLAY_ORDER, coordinateHex } from '../wallet/descriptors.js';
-import { solDeviceMessageCircuit, solGranteeMessageCircuit } from '../wallet/signer-sol-ed25519.js';
+import { solBlindMessage, solDeviceMessageCircuit, solGranteeMessageCircuit } from '../wallet/signer-sol-ed25519.js';
+import { granteeBlindMessageBytes } from '../wallet/blind.js';
 import {
-  SOL_PARSE_BOUND, assertSafeSolMessage, claimText, digitsOf, labelBytes, nibblesOf, solAmountShow, solBase58, solCoinShow, solDeviceMessageText, solFrameNibbles,
+  SOL_HEAD_LENGTH, SOL_OFFCHAIN_DOMAIN, SOL_PARSE_BOUND, SOL_RAW_HEAD, assertSafeSolMessage, assertSolOffchainMessage, solSignedMessage, claimText, digitsOf, labelBytes, nibblesOf, solAmountShow, solBase58, solCoinShow, solDeviceMessageText, solFrameNibbles,
   solGranteeArg, solGranteeMessageText, solGranteeShow, solGrantShow, solMessageBytes, solScopeShow, solShow,
   solTargetArg, solTargetShow, type SolAmount, type SolCoin, type SolDeviceContext, type SolDeviceOperation,
   type SolGranteeContext, type SolGranteeFields, type SolGranteeOperation, type SolTargetFields,
@@ -243,20 +247,47 @@ const LINE_STARTS = [
   'Grant issued at nonce: ', 'Grant use nonce: ',
 ];
 const lengths: Record<string, number> = {};
+// What the wallets sign for each corpus text: the raw message and the
+// off-chain message (the signer is the text's own signing key).
+const rawOf = (c: Built) => solSignedMessage('raw', c.key, c.circuit);
+const offOf = (c: Built) => solSignedMessage('offchain', c.key, c.circuit);
+// The raw blind requests (unchanged texts, signed as they are) at their
+// longest: a 32-character network name, the largest account index, a key
+// whose base58 text is 44 characters, the issuing account in full hex.
+const LONG_NETWORK = 'n'.repeat(32), MAX_INDEX = 0xffffffffn;
+const key44 = (() => { for (let i = 0; ; i++) { const k = ed25519.getPublicKey(det(`blind-request-key-${i}`, 32)); if (base58Len(k) === 44) return k; } })();
+function base58Len(k: Uint8Array): number { let v = 0n; for (const b of k) v = (v << 8n) | BigInt(b); let n = 0; while (v > 0n) { v /= 58n; n++; } let z = 0; while (z < k.length && k[z] === 0) z++; return n + z; }
+const blindRequests: { name: string; bytes: Uint8Array }[] = [
+  { name: 'device blind request, longest', bytes: solBlindMessage(key44, { network: LONG_NETWORK, accountIndex: MAX_INDEX }).bytes },
+  { name: 'device blind request, undeployed, index 0', bytes: solBlindMessage(key44, { network: 'undeployed', accountIndex: 0 }).bytes },
+  { name: 'grantee blind request, longest', bytes: granteeBlindMessageBytes({ scheme: 'sol_ed25519', network: LONG_NETWORK, identity: key44, issuingAccount: det('issuer', 32) }) },
+];
 {
   const G = '2 lengths, parse bound, line starts';
   let fixed = true, safe = true, starts = true;
   for (const c of corpus) {
     const key = c.op + (c.op.endsWith('_with_grant') ? '' : '');
     if (lengths[key] === undefined) lengths[key] = c.text.length; else if (lengths[key] !== c.text.length) { fixed = false; ok(G, `fixed length ${c.name}`, false, `${c.text.length} vs ${lengths[key]}`); }
-    try { assertSafeSolMessage(c.circuit); solMessageBytes(c.text); } catch (e: any) { safe = false; ok(G, `parse-safe ${c.name}`, false, e.message); }
+    try { assertSafeSolMessage(rawOf(c)); assertSolOffchainMessage(offOf(c), c.key); solMessageBytes(c.text); } catch (e: any) { safe = false; ok(G, `parse-safe ${c.name}`, false, e.message); }
     for (const line of c.text.split('\n')) if (!LINE_STARTS.some((p) => line.startsWith(p))) { starts = false; ok(G, `line start in ${c.name}`, false, JSON.stringify(line.slice(0, 50))); }
   }
   ok(G, `one fixed length per layout (${Object.keys(lengths).length} layouts)`, fixed && Object.keys(lengths).length === 15);
   const max = Math.max(...Object.values(lengths));
-  ok(G, `every layout below the parse bound (max ${max} < ${SOL_PARSE_BOUND})`, safe && max < SOL_PARSE_BOUND);
+  const maxRaw = Math.max(...corpus.map((c) => rawOf(c).length));
+  ok(G, `every raw message is the raw head, then the text, below the parse bound (longest ${SOL_HEAD_LENGTH} + ${max} = ${maxRaw} < ${SOL_PARSE_BOUND})`,
+    safe && maxRaw === SOL_HEAD_LENGTH + max && maxRaw < SOL_PARSE_BOUND && corpus.every((c) => Buffer.from(rawOf(c).subarray(0, SOL_HEAD_LENGTH)).toString('latin1') === SOL_RAW_HEAD));
+  const maxBlind = Math.max(...blindRequests.map((r) => r.bytes.length));
+  ok(G, `every raw blind request starts with "Midn" and is below the parse bound (longest ${maxBlind} < ${SOL_PARSE_BOUND})`,
+    blindRequests.every((r) => Buffer.from(r.bytes.subarray(0, 4)).toString('latin1') === 'Midn') && maxBlind < SOL_PARSE_BOUND);
   ok(G, 'every line of every message starts with circuit-fixed text', starts);
   ok(G, 'the parse bound is 3 + 1 + 110*32 + 32 + 1 = 3,557 for a message starting "Midn"', SOL_PARSE_BOUND === 3557 && 'Midn'.charCodeAt(3) === 110);
+  ok(G, 'the raw head is 50 ASCII bytes starting "Midn" and ending in LF', SOL_RAW_HEAD.length === SOL_HEAD_LENGTH && SOL_RAW_HEAD.startsWith('Midn') && SOL_RAW_HEAD.endsWith('\n')
+    && Buffer.from(SOL_RAW_HEAD, 'latin1').toString('hex') === '4d69646e696768742050617373706f72742c20536f6c616e61207369676e4d65737361676520666f726d617420287631290a');
+  ok(G, 'every off-chain message is ff "solana offchain" 01 01, the signing key, then the text (50-byte head)', corpus.every((c) => {
+    const b = offOf(c);
+    return Buffer.from(b.subarray(0, 18)).toString('hex') === 'ff736f6c616e61206f6666636861696e0101' && Buffer.from(b.subarray(18, 50)).equals(Buffer.from(c.key))
+      && Buffer.from(b.subarray(50)).equals(Buffer.from(c.circuit));
+  }));
 }
 
 // ── 2b. An independent parse of Solana's wire formats ───────────────────────
@@ -300,11 +331,29 @@ function parsesAsTransaction(b: Uint8Array): boolean {
   const i = n[1] + n[0] * 64; if (i >= b.length) return false;
   return (b[i] & 0x80) ? false : parseLegacyMessage(b, i).ok;
 }
+// Off-chain message v1: the signing domain (0xff "solana offchain"), the
+// version byte, the signer count, the signers (32 bytes each), then the
+// message, with nothing else.
+function parseOffchainV1(b: Uint8Array): { ok: boolean; signers: Uint8Array[]; message: Uint8Array } {
+  const d = SOL_OFFCHAIN_DOMAIN.length;
+  if (b.length < d + 2 || !SOL_OFFCHAIN_DOMAIN.every((x, i) => b[i] === x) || b[d] !== 1) return { ok: false, signers: [], message: new Uint8Array() };
+  const n = b[d + 1], start = d + 2 + 32 * n;
+  if (n === 0 || b.length <= start) return { ok: false, signers: [], message: new Uint8Array() };
+  return { ok: true, signers: Array.from({ length: n }, (_, i) => b.subarray(d + 2 + 32 * i, d + 34 + 32 * i)), message: b.subarray(start) };
+}
 {
   const G = '2b Solana wire formats (independent parser)';
-  ok(G, 'no corpus message parses as a legacy message, a versioned message or a transaction', corpus.every((c) =>
-    !parseLegacyMessage(c.circuit).ok && !(c.circuit[0] & 0x80) && !parsesAsTransaction(c.circuit) && c.circuit[0] !== 0xff));
-  const first = corpus[0].circuit.subarray(0, 4);
+  const raws = [...corpus.map(rawOf), ...blindRequests.map((r) => r.bytes)];
+  ok(G, `no raw message (${corpus.length}) and no raw blind request (${blindRequests.length}) parses as a legacy message, a versioned message or a transaction`, raws.every((m) =>
+    !parseLegacyMessage(m).ok && !(m[0] & 0x80) && !parsesAsTransaction(m) && m[0] !== 0xff));
+  const offs = corpus.map(offOf);
+  ok(G, `every off-chain message (${offs.length}) parses as an off-chain message v1 with one signer, the signing key, and the text as its message`, corpus.every((c, i) => {
+    const r = parseOffchainV1(offs[i]);
+    return r.ok && r.signers.length === 1 && Buffer.from(r.signers[0]).equals(Buffer.from(c.key)) && Buffer.from(r.message).equals(Buffer.from(c.circuit));
+  }));
+  ok(G, 'no off-chain message parses as a transaction (its first two bytes claim 14,847 signatures) or as a legacy message; as a message its first byte is a version-127 prefix',
+    offs.every((m) => !parsesAsTransaction(m) && !parseLegacyMessage(m).ok && (m[0] & 0x80) && (m[0] & 0x7f) === 127) && cu16(offs[0], 0)![0] === 14847);
+  const first = rawOf(corpus[0]).subarray(0, 4);
   const at = (n: number) => { const b = new Uint8Array(n); b.set(first); return b; };
   ok(G, `the bound is tight: a "Midn" buffer of ${SOL_PARSE_BOUND} bytes parses as a legacy message, ${SOL_PARSE_BOUND - 1} bytes does not`,
     parseLegacyMessage(at(SOL_PARSE_BOUND)).ok && !parseLegacyMessage(at(SOL_PARSE_BOUND - 1)).ok);

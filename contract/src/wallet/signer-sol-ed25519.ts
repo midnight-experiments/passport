@@ -9,6 +9,11 @@
 // on the curve, in the prime-order subgroup, not the identity
 // (descriptors.ts `parseSolanaPublicKey`).
 //
+// THE FORMAT. A wallet signs an approval text in one of two formats
+// (sol-ed25519-message.ts `solSignedMessage`): raw (`signMessage`) or the
+// Solana off-chain message v1. A device signs in its own format; the
+// authorisation passes the circuit the matching private flag `offchain`.
+//
 // THE BLIND. Entries and grant ids bind a per-account
 // secret that the wallet re-derives: the wallet signs the readable request
 // message of blind.ts (raw bytes, Solana `signMessage`), twice; both
@@ -28,9 +33,9 @@ import { pureCircuits } from './contract.js';
 import { DESCRIPTOR_TAGS, base58Encode, checkDescriptor, grantOriginHash, grantScopeSalt, parseSolanaPublicKey, solDescriptor, type Descriptor, type SolDescriptor } from './descriptors.js';
 import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind, granteeBlindMessageBytes } from './blind.js';
 import {
-  assertSafeSolMessage, digitsOf, labelBytes, nibblesOf, solFrameNibbles, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
-  solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solTargetArg,
-  solTargetShow, solTargetPointArg, solUnusedKey, type SolAmount, type SolDeviceOperation, type SolGranteeFields, type SolGranteeOperation, type SolTargetFields,
+  digitsOf, labelBytes, nibblesOf, solFrameNibbles, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
+  solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solSignedMessage, solTargetArg,
+  solTargetShow, solTargetPointArg, solUnusedKey, SOL_FORMATS, type SolAmount, type SolDeviceOperation, type SolFormat, type SolGranteeFields, type SolGranteeOperation, type SolTargetFields,
 } from './sol-ed25519-message.js';
 import type { GrantOpening } from './signer.js';
 
@@ -119,8 +124,8 @@ export function decodeSolSignature(signature: Uint8Array): SolSignatureArg {
  * mixed-order key that the circuit refuses; only together with the torsion
  * checks before it does it equal the circuit's cofactorless rule. Never
  * reduce this to the noble call alone. Throws with a reason; a wallet that
- * signed other bytes, with another key, or in a wrapped format (a Ledger's
- * off-chain envelope) fails here before any proof.
+ * signed other bytes, with another key, or in another format than the one
+ * asked for fails here before any proof.
  */
 export function verifySolSignature(message: Uint8Array, signature: Uint8Array, key: Uint8Array | string): SolSignatureArg {
   const A = parseSolanaPublicKey(key);
@@ -215,6 +220,9 @@ export interface SolDeviceOptions {
   blind: Uint8Array;
   /** The wallet's signMessage; absent for a key known by its public half only. */
   sign?: SolSignFn;
+  /** The format the wallet signs approvals in: 'raw' (`signMessage`, the
+   *  default) or 'offchain' (the Solana off-chain message v1). */
+  format?: SolFormat;
 }
 
 export class SolEd25519Device {
@@ -224,6 +232,8 @@ export class SolEd25519Device {
   /** The circuit's point for the key. */
   readonly pk: Curve25519Point;
   readonly blind: Uint8Array;
+  /** The format this device signs approvals in. */
+  readonly format: SolFormat;
   private readonly signFn?: SolSignFn;
 
   constructor(opts: SolDeviceOptions) {
@@ -231,13 +241,16 @@ export class SolEd25519Device {
     this.pk = solPublicKeyPoint(this.key);
     if (!(opts.blind instanceof Uint8Array) || opts.blind.length !== 32) throw new Error('sol_ed25519: a blind is 32 bytes');
     this.blind = new Uint8Array(opts.blind);
+    this.format = opts.format ?? 'raw';
+    if (!SOL_FORMATS.includes(this.format)) throw new Error(`sol_ed25519: unknown format ${String(this.format)}`);
     this.signFn = opts.sign;
   }
 
-  /** A device from a software signer and its blind record. */
-  static fromSigner(signer: SolSigner, record: SolBlindRecord): SolEd25519Device {
+  /** A device from a software signer and its blind record, signing in
+   *  `format` (raw by default). */
+  static fromSigner(signer: SolSigner, record: SolBlindRecord, format: SolFormat = 'raw'): SolEd25519Device {
     if (!equalBytes(parseSolanaPublicKey(signer.publicKey), record.key)) throw new Error('sol_ed25519: the blind record is for another key');
-    return new SolEd25519Device({ publicKey: record.key, blind: record.blind, sign: signer.sign });
+    return new SolEd25519Device({ publicKey: record.key, blind: record.blind, sign: signer.sign, format });
   }
 
   /** The base58 address a Solana wallet shows. */
@@ -271,7 +284,17 @@ export class SolEd25519Device {
     return [this.pk, h.pk_bytes, h.pk_x, new Uint8Array(salt), this.blind];
   }
 
-  /** Asks the wallet to sign raw bytes and runs the pre-check on the result. */
+  /** Asks the wallet to sign an approval text in this device's format (the
+   *  format's head, then the text) and runs the pre-check over exactly the
+   *  bytes signed, which it returns as `message`. */
+  async signApproval(text: Uint8Array): Promise<{ signature: Uint8Array; sig: SolSignatureArg; message: Uint8Array }> {
+    const message = solSignedMessage(this.format, this.key, text);
+    return { ...(await this.signBytes(message)), message };
+  }
+
+  /** Asks the wallet to sign exactly `message` and runs the pre-check on the
+   *  result. An approval goes through signApproval, which builds the bytes of
+   *  the device's format. */
   async signBytes(message: Uint8Array): Promise<{ signature: Uint8Array; sig: SolSignatureArg }> {
     if (!this.signFn) throw new Error('sol_ed25519: this device has no signer');
     const signature = new Uint8Array(await this.signFn(new Uint8Array(message)));
@@ -324,11 +347,16 @@ export interface SolEd25519Authorisation {
   blind: Uint8Array;
   /** The device's current use counter: the rolling-entry position (AUTH-9). */
   use_counter: bigint;
+  /** The circuit's private format flag: true when the signature is over the
+   *  off-chain message v1, false for raw. */
+  offchain: boolean;
   sig: SolSignatureArg;
   /** The message's display inputs, in the circuit's argument order. */
   showArgs: unknown[];
-  /** Exactly what the wallet showed and signed. Not a circuit argument. */
+  /** Exactly what the wallet signed: the format's head, then the text. Not a
+   *  circuit argument. */
   message: Uint8Array;
+  /** The approval text the circuit renders. */
   text: string;
 }
 
@@ -338,6 +366,8 @@ export interface SolEd25519GrantAuthorisation {
   pk: Curve25519Point;
   blind: Uint8Array;
   label: Uint8Array;
+  /** The circuit's private format flag, as for a device. */
+  offchain: boolean;
   sig: SolSignatureArg;
   showArgs: unknown[];
   message: Uint8Array;
@@ -354,7 +384,7 @@ export function solSignatureHints(sig: SolSignatureArg): { r_bytes: bigint[]; r_
 
 /** The trailing circuit arguments of a device-gated call. */
 export function solEd25519AuthArgs(a: SolEd25519Authorisation): unknown[] {
-  return [...a.showArgs, { pk: a.pk, ...solKeyHints(a.pk), blind: a.blind, use_counter: a.use_counter, sig: a.sig, ...solSignatureHints(a.sig) }];
+  return [...a.showArgs, { pk: a.pk, ...solKeyHints(a.pk), blind: a.blind, use_counter: a.use_counter, offchain: a.offchain, sig: a.sig, ...solSignatureHints(a.sig) }];
 }
 
 /** The trailing circuit arguments of a grantee twin: the grant openings
@@ -362,7 +392,7 @@ export function solEd25519AuthArgs(a: SolEd25519Authorisation): unknown[] {
  *  the display inputs, then the authorising material. */
 export function solEd25519GrantAuthArgs(o: GrantOpening, a: SolEd25519GrantAuthorisation): unknown[] {
   return [o.slot, o.scopeSalt, o.recipientKind, o.pinnedRecipient, o.maxCoinValue, o.spentPrev,
-    ...a.showArgs, { pk: a.pk, ...solKeyHints(a.pk), blind: a.blind, label: a.label, sig: a.sig, ...solSignatureHints(a.sig) }];
+    ...a.showArgs, { pk: a.pk, ...solKeyHints(a.pk), blind: a.blind, label: a.label, offchain: a.offchain, sig: a.sig, ...solSignatureHints(a.sig) }];
 }
 
 // ── Messages through the contract's own circuits ──────────────────────────
@@ -449,19 +479,19 @@ export function solGranteeMessageCircuit(key: Uint8Array, ctx: SolGrantCallConte
 const asText = (b: Uint8Array) => String.fromCharCode(...b);
 
 /**
- * Authorises one device-gated call: renders the message with the contract's
- * circuit AND the independent renderer and refuses any difference; refuses a
- * message that could be read as a Solana transaction or off-chain message;
- * asks the wallet; runs the pre-check (strict R, s < L, R != O, the signature
- * verifies over exactly these bytes).
+ * Authorises one device-gated call: renders the text with the contract's
+ * circuit AND the independent renderer and refuses any difference; builds
+ * the bytes of the device's format, refusing a raw message that could be
+ * read as a Solana transaction or off-chain message and an off-chain message
+ * that names another signer; asks the wallet; runs the pre-check (strict R,
+ * s < L, R != O, the signature verifies over exactly these bytes).
  */
 export async function authoriseSolDevice(device: SolEd25519Device, ctx: SolCallContext, site: string, o: SolDeviceOperation, useCounter: bigint): Promise<SolEd25519Authorisation> {
   const { bytes, showArgs } = solDeviceMessageCircuit(device.key, ctx, site, o);
   const text = solDeviceMessageText({ site, account: ctx.contractAddress, key: device.key, nonce: ctx.authNonce }, o);
   if (asText(bytes) !== text) throw new Error('sol_ed25519: the contract and the renderer disagree on the message; refused');
-  assertSafeSolMessage(bytes);
-  const { sig } = await device.signBytes(bytes);
-  return { arm: 'sol_ed25519', pk: device.pk, blind: device.blind, use_counter: useCounter, sig, showArgs, message: bytes, text };
+  const { sig, message } = await device.signApproval(bytes);
+  return { arm: 'sol_ed25519', pk: device.pk, blind: device.blind, use_counter: useCounter, offchain: device.format === 'offchain', sig, showArgs, message, text };
 }
 
 /** The same for a grantee twin. */
@@ -469,9 +499,8 @@ export async function authoriseSolGrantee(device: SolEd25519Device, ctx: SolGran
   const { bytes, showArgs } = solGranteeMessageCircuit(device.key, ctx, site, o);
   const text = solGranteeMessageText({ site, account: ctx.contractAddress, key: device.key, label: ctx.label, slot: ctx.slot, issuedAt: ctx.issuedAt, nonce: ctx.grantNonce }, o);
   if (asText(bytes) !== text) throw new Error('sol_ed25519: the contract and the renderer disagree on the message; refused');
-  assertSafeSolMessage(bytes);
-  const { sig } = await device.signBytes(bytes);
-  return { arm: 'sol_ed25519', pk: device.pk, blind: device.blind, label: labelBytes(ctx.label), sig, showArgs, message: bytes, text };
+  const { sig, message } = await device.signApproval(bytes);
+  return { arm: 'sol_ed25519', pk: device.pk, blind: device.blind, label: labelBytes(ctx.label), offchain: device.format === 'offchain', sig, showArgs, message, text };
 }
 
 // ── CustodyAccount helpers ─────────────────────────────────────────────────
@@ -841,10 +870,11 @@ export class SolEd25519Grantee {
     this.label = label;
   }
 
-  /** Enrolment as a grantee of `issuingAccount`: the grantee blind. */
-  static async enrol(signer: SolSigner, req: SolGranteeBlindRequest, label: string): Promise<SolEd25519Grantee> {
+  /** Enrolment as a grantee of `issuingAccount`: the grantee blind; the
+   *  grantee signs its approvals in `format` (raw by default). */
+  static async enrol(signer: SolSigner, req: SolGranteeBlindRequest, label: string, format: SolFormat = 'raw'): Promise<SolEd25519Grantee> {
     const blind = await deriveSolGranteeBlind(signer, req);
-    return new SolEd25519Grantee(new SolEd25519Device({ publicKey: signer.publicKey, blind, sign: signer.sign }), label);
+    return new SolEd25519Grantee(new SolEd25519Device({ publicKey: signer.publicKey, blind, sign: signer.sign, format }), label);
   }
 
   get key(): Uint8Array { return this.device.key; }

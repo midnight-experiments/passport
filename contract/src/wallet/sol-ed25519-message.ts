@@ -1,9 +1,15 @@
 // Arm `sol_ed25519`: the signed messages, format sol v1, rendered
 // independently of the contract.
 //
-// The contract renders every message in-circuit (`sol_message_<operation>`
-// in contracts/account-sol-ed25519.compact) and verifies the wallet's
-// signature over exactly those bytes. This module renders the same bytes
+// The contract renders every approval text in-circuit
+// (`sol_message_<operation>` in contracts/account-sol-ed25519.compact) and
+// verifies the wallet's signature over that text after the 50-byte head of
+// the signing format (contracts/modules/SolanaFormats): `raw`, what a
+// wallet's `signMessage` signs, puts a line naming the format first;
+// `offchain`, the Solana off-chain message v1 that hardware wallets and
+// `signOffchainMessage` sign, puts the off-chain envelope naming the signing
+// key first. `solSignedMessage` builds those bytes. This module renders the
+// same text
 // from the same values with plain TypeScript (its own hex, decimal and label
 // code), and builds the display inputs the circuits check (decimal digits,
 // the site's label and amount claims). The offline suite holds the two
@@ -46,6 +52,21 @@ export const SOL_FIRST_LINE = 'Midnight Passport approval (sol v1)';
  *  legacy Solana transaction message: header (3) + key count (1) + 110 keys
  *  (32 each) + blockhash (32) + instruction count (1). */
 export const SOL_PARSE_BOUND = 3 + 1 + 110 * 32 + 32 + 1;
+
+/** The two signing formats of an approval: `raw` (a wallet's
+ *  `signMessage`) and `offchain` (the Solana off-chain message v1). */
+export type SolFormat = 'raw' | 'offchain';
+export const SOL_FORMATS: readonly SolFormat[] = ['raw', 'offchain'];
+/** Every format's head is 50 bytes. */
+export const SOL_HEAD_LENGTH = 50;
+/** The raw head: a line naming the format, then LF (50 ASCII bytes). */
+export const SOL_RAW_HEAD = 'Midnight Passport, Solana signMessage format (v1)\n';
+/** The off-chain message's signing domain: 0xff, then "solana offchain". */
+export const SOL_OFFCHAIN_DOMAIN: Uint8Array = Uint8Array.of(0xff, ...new TextEncoder().encode('solana offchain'));
+/** The off-chain message's version and signer count: version 1, one signer
+ *  (the signing key). */
+export const SOL_OFFCHAIN_VERSION = 1;
+export const SOL_OFFCHAIN_SIGNERS = 1;
 
 const enc = new TextEncoder();
 const hex = (b: Uint8Array, n: number, what: string): string => {
@@ -340,23 +361,68 @@ export function solGranteeMessageText(c: SolGranteeContext, o: SolGranteeOperati
   }
 }
 
-/** The bytes of a message (ASCII), refused if it could be read as anything
- *  else a Solana wallet signs. */
+/** The bytes of an approval text (ASCII), refused if it is not one, or if
+ *  its raw message could be read as anything else a Solana wallet signs. */
 export function solMessageBytes(text: string): Uint8Array {
-  if (!/^[\x20-\x7e\n]*$/.test(text)) throw new Error('sol message: not printable ASCII');
   const b = enc.encode(text);
-  assertSafeSolMessage(b);
+  assertSolText(b);
+  assertSafeSolMessage(solSignedMessage('raw', new Uint8Array(32), b));
   return b;
 }
 
-/** Never a Solana transaction, versioned message, off-chain message
- *  or Sign-In With Solana request. */
+/** An approval text: the format line first, printable ASCII and LF only,
+ *  never the Sign-In With Solana statement. */
+export function assertSolText(b: Uint8Array): void {
+  const text = new TextDecoder().decode(b);
+  if (!/^[\x20-\x7e\n]*$/.test(text)) throw new Error('sol message: not printable ASCII');
+  if (!text.startsWith(SOL_FIRST_LINE)) throw new Error('sol message: does not start with the format line');
+  if (/wants you to sign in with your Solana account/.test(text)) throw new Error('sol message: reads as Sign-In With Solana');
+}
+
+/** The 50-byte head of a format: the raw head, or the off-chain envelope
+ *  (signing domain, version 1, one signer) naming `key`. */
+export function solMessageHead(format: SolFormat, key: Uint8Array): Uint8Array {
+  if (format === 'raw') return enc.encode(SOL_RAW_HEAD);
+  if (format !== 'offchain') throw new Error(`sol message: unknown format ${String(format)}`);
+  hex(key, 32, 'the signing key');
+  return Uint8Array.of(...SOL_OFFCHAIN_DOMAIN, SOL_OFFCHAIN_VERSION, SOL_OFFCHAIN_SIGNERS, ...key);
+}
+
+/** What a wallet signs for an approval text in a format: the format's head,
+ *  then the text. Refused unless the text is an approval text and the whole
+ *  passes its format's check (assertSafeSolMessage, assertSolOffchainMessage). */
+export function solSignedMessage(format: SolFormat, key: Uint8Array, text: Uint8Array): Uint8Array {
+  assertSolText(text);
+  const head = solMessageHead(format, key);
+  const b = new Uint8Array(head.length + text.length);
+  b.set(head); b.set(text, head.length);
+  if (format === 'raw') assertSafeSolMessage(b); else assertSolOffchainMessage(b, key);
+  return b;
+}
+
+/** A raw message (what `signMessage` signs: the raw head, then an approval
+ *  text): never a Solana transaction, versioned message, off-chain message
+ *  or Sign-In With Solana request. It starts with "Midn", so as a legacy
+ *  message it would need SOL_PARSE_BOUND bytes (SOL-ED25519.md, "Never a
+ *  Solana transaction or off-chain message"). */
 export function assertSafeSolMessage(b: Uint8Array): void {
-  const first = new TextDecoder().decode(b.subarray(0, SOL_FIRST_LINE.length));
-  if (first !== SOL_FIRST_LINE) throw new Error('sol message: does not start with the format line');
+  if (new TextDecoder().decode(b.subarray(0, SOL_HEAD_LENGTH)) !== SOL_RAW_HEAD) throw new Error('sol message: does not start with the raw head');
+  assertSolText(b.subarray(SOL_HEAD_LENGTH));
   if (b.length >= SOL_PARSE_BOUND) throw new Error(`sol message: ${b.length} bytes, at or above the parse bound ${SOL_PARSE_BOUND}`);
   if (b[0] >= 0x80 || b[0] === 0xff) throw new Error('sol message: versioned or off-chain prefix');
-  if (/wants you to sign in with your Solana account/.test(new TextDecoder().decode(b))) throw new Error('sol message: reads as Sign-In With Solana');
+}
+
+/** An off-chain message v1 (what an off-chain signer signs): the signing
+ *  domain, version 1, exactly one signer, which is `key`, then an approval
+ *  text. */
+export function assertSolOffchainMessage(b: Uint8Array, key: Uint8Array): void {
+  hex(key, 32, 'the signing key');
+  const d = SOL_OFFCHAIN_DOMAIN.length;
+  if (b.length < SOL_HEAD_LENGTH || !SOL_OFFCHAIN_DOMAIN.every((x, i) => b[i] === x)) throw new Error('sol message: not an off-chain message');
+  if (b[d] !== SOL_OFFCHAIN_VERSION) throw new Error(`sol message: off-chain message version ${b[d]}, not ${SOL_OFFCHAIN_VERSION}`);
+  if (b[d + 1] !== SOL_OFFCHAIN_SIGNERS) throw new Error(`sol message: ${b[d + 1]} off-chain signers, not ${SOL_OFFCHAIN_SIGNERS}`);
+  if (!key.every((x, i) => b[d + 2 + i] === x)) throw new Error('sol message: the off-chain envelope names another signer');
+  assertSolText(b.subarray(SOL_HEAD_LENGTH));
 }
 
 // ── The circuits' display inputs and target structs ────────────────────────
