@@ -9,19 +9,30 @@
 // on the curve, in the prime-order subgroup, not the identity
 // (descriptors.ts `parseSolanaPublicKey`).
 //
-// THE FORMAT. A wallet signs an approval text in one of two formats
-// (sol-ed25519-message.ts `solSignedMessage`): raw (`signMessage`) or the
-// Solana off-chain message v1. A device signs in its own format; the
-// authorisation passes the circuit the matching private flag `offchain`.
+// THE FORMAT. A wallet signs in one of two formats (sol-ed25519-message.ts):
+// raw (`signMessage`) or the Solana off-chain message v1. Which ones a wallet
+// can sign is the wallet's (sol-ed25519-wallet.ts `solWalletFormats`): a
+// signer lists them, and the client never asks a wallet for another one. A
+// device signs approvals in one format; the authorisation passes the circuit
+// the matching private flag `offchain`.
 //
-// THE BLIND. Entries and grant ids bind a per-account
-// secret that the wallet re-derives: the wallet signs the readable request
-// message of blind.ts (raw bytes, Solana `signMessage`), twice; both
-// signatures must verify and be identical (RFC 8032 signing is
-// deterministic, so a wallet that is not, for example an MPC or a hedged
-// signer, would lose its accounts on restore and is refused at enrolment);
-// blind = SHA-256(pad32("midnight:account:blind:sol:v1") || signature). The
-// client keeps (network, account index, key, blind) per device in its roster.
+// THE BLIND. Entries and grant ids bind a per-account secret that the wallet
+// re-derives: the wallet signs the readable request message of blind.ts in a
+// format (raw: the request's bytes; off-chain: the off-chain v1 head naming
+// the key, then the same bytes), twice; both signatures must come from the
+// key and be identical (RFC 8032 signing is deterministic, so a wallet that
+// is not, for example an MPC or a hedged signer, would lose its accounts on
+// restore and is refused at enrolment);
+// blind = SHA-256(pad32("midnight:account:blind:sol:v1") || signature). One
+// key gives one blind per format, so a device is usable only with the blind
+// of the format it was enrolled in. The client keeps (network, account index,
+// key, format) per device in its roster, with the blind as a cache, and finds
+// a lost blind again through blind.ts `restoreBlind`.
+//
+// THE SIGNER CHECK. Every signature a wallet returns is checked against the
+// key it must come from, over exactly the bytes the wallet was asked to sign,
+// before anything is proved (blind.ts `checkSigner`): a wallet may answer
+// with another key than the one it reports.
 //
 // Platform-neutral: no node:crypto, so the same code runs in a browser page.
 
@@ -34,12 +45,15 @@ import {
   DESCRIPTOR_TAGS, base58Encode, checkDescriptor, grantOriginHash, grantScopeSalt, parseSolanaPublicKey, solDescriptor,
   type Descriptor, type Ed25519Descriptor, type JubjubDescriptor, type K256Descriptor, type P256Descriptor, type SolDescriptor, type W52Descriptor,
 } from './descriptors.js';
-import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind, granteeBlindMessageBytes } from './blind.js';
+import {
+  blindMessage, blindMessageBytes, canonicalEd25519Signature, checkBlindFormat, checkSigner, deriveBlind, granteeBlindMessage, granteeBlindMessageBytes,
+  restoreBlind, type BlindRestore, type StoredBlind,
+} from './blind.js';
 import {
   digitsOf, labelBytes, nibblesOf, solFrameNibbles, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
   solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solSignedMessage, solTargetArg,
-  solKindOfScheme, solTargetShow, solTargetPointArg, solUnusedKey, SOL_FORMATS, type SolAmount, type SolDeviceOperation, type SolFormat, type SolGranteeFields,
-  type SolGranteeOperation, type SolKind, type SolTargetFields,
+  solBlindSignedMessage, solFormatOfSigned, solKindOfScheme, solTargetShow, solTargetPointArg, solUnusedKey, SOL_FORMATS,
+  type SolAmount, type SolDeviceOperation, type SolFormat, type SolGranteeFields, type SolGranteeOperation, type SolKind, type SolTargetFields,
 } from './sol-ed25519-message.js';
 import type { GrantOpening } from './signer.js';
 
@@ -140,20 +154,74 @@ export function verifySolSignature(message: Uint8Array, signature: Uint8Array, k
   return sig;
 }
 
+/** The pre-check as a yes or no: whether `signature` verifies under `key`
+ *  over exactly `message` (verifySolSignature without the reason). */
+export function solSignatureVerifies(message: Uint8Array, signature: Uint8Array, key: Uint8Array | string): boolean {
+  try { verifySolSignature(message, signature, key); return true; } catch { return false; }
+}
+
+/**
+ * The signer check before anything is proved: the signature is decoded
+ * strictly first (a malformed signature is refused with its reason, under
+ * any key), then it must verify under `expected` over exactly `message`,
+ * the bytes the wallet was asked to sign. Otherwise blind.ts `checkSigner`
+ * refuses it with a SignerMismatchError that names another key only when
+ * the signature verifies under it (`others`: for example the keys other
+ * connected wallets report), and else says the signer is unknown.
+ */
+export function checkSolSignature(message: Uint8Array, signature: Uint8Array, expected: Uint8Array | string, others: readonly Uint8Array[] = []): SolSignatureArg {
+  const sig = decodeSolSignature(signature);
+  checkSigner('sol_ed25519', parseSolanaPublicKey(expected), (id) => solSignatureVerifies(message, signature, id), others);
+  return sig;
+}
+
 // ── Signers ─────────────────────────────────────────────────────────────────
 
-/** Signs raw bytes and returns the 64-byte signature. Phantom:
- *  `async (m) => (await provider.signMessage(m, 'utf8')).signature`. */
+/** Signs exactly `message` and returns the 64-byte signature. The bytes are
+ *  already in a format (solFormatOfSigned); a wallet adapter
+ *  (sol-ed25519-wallet.ts) asks the wallet for that format. */
 export type SolSignFn = (message: Uint8Array) => Promise<Uint8Array> | Uint8Array;
 
-export interface SolSigner { publicKey: Uint8Array; sign: SolSignFn }
+export interface SolSigner {
+  publicKey: Uint8Array;
+  sign: SolSignFn;
+  /** The formats this wallet can sign, preferred first (solWalletFormats);
+   *  the client never asks it for any other. */
+  formats: readonly SolFormat[];
+  /** Keys other connected wallets report: when a signature does not come
+   *  from `publicKey`, the refusal names the one it verifies under, if any. */
+  others?: () => readonly Uint8Array[];
+}
+
+/** The formats a signer lists, checked: a non-empty list of distinct formats
+ *  of the arm. */
+export function solSignerFormats(signer: SolSigner): SolFormat[] {
+  const f = signer?.formats;
+  if (!Array.isArray(f) || f.length === 0) throw new Error('sol_ed25519: the signer lists no format it can sign');
+  const out = f.map((x) => checkBlindFormat('sol_ed25519', x) as SolFormat);
+  if (new Set(out).size !== out.length) throw new Error('sol_ed25519: the signer lists a format twice');
+  return out;
+}
+
+/** Refuses, before the wallet is asked, a format the signer cannot sign. */
+function requireSignable(signer: SolSigner, format: SolFormat, what: string): SolFormat {
+  const formats = solSignerFormats(signer);
+  checkBlindFormat('sol_ed25519', format);
+  if (!formats.includes(format)) {
+    throw new Error(`sol_ed25519: this wallet cannot sign the ${format} format (it signs ${formats.join(', ')}); ${what} not asked`);
+  }
+  return format;
+}
 
 /** A software signer from a 32-byte RFC 8032 seed (the scheme a Solana
- *  wallet uses). Test keys only. */
-export function solSoftwareSigner(seed: Uint8Array): SolSigner {
+ *  wallet uses): it signs any bytes, so both formats, raw first. Test keys
+ *  only. */
+export function solSoftwareSigner(seed: Uint8Array, formats: readonly SolFormat[] = SOL_FORMATS): SolSigner {
   if (seed.length !== 32) throw new Error('sol_ed25519: a seed is 32 bytes');
   const s = new Uint8Array(seed);
-  return { publicKey: ed25519.getPublicKey(s), sign: (m) => ed25519.sign(m, s) };
+  const signer: SolSigner = { publicKey: ed25519.getPublicKey(s), sign: (m) => ed25519.sign(m, s), formats: [...formats] };
+  solSignerFormats(signer);
+  return signer;
 }
 
 /** The point of a seed through the CONTRACT's own pure circuit (SHA-512,
@@ -173,15 +241,27 @@ export interface SolBlindRequest {
   network: string;
   /** 0 for the wallet's first Passport account on this network, then 1, 2, ... */
   accountIndex: bigint | number;
+  /** The format the wallet signs the request in; by default the signer's
+   *  first (its preferred) format. Enrolment uses that default; a restore
+   *  passes the stored format. */
+  format?: SolFormat;
 }
 
+/** A device's blind as enrolment derives it: the device's identity and
+ *  account index (not secret), the format the blind was derived in, and the
+ *  blind. */
 export interface SolBlindRecord {
   scheme: 'sol_ed25519';
   network: string;
   accountIndex: bigint;
   key: Uint8Array;
+  format: SolFormat;
   blind: Uint8Array;
 }
+
+/** A stored device record: the blind is a cache, absent once lost (it is
+ *  then found again with restoreSolBlind, from the stored format). */
+export type SolStoredRecord = Omit<SolBlindRecord, 'blind'> & { blind?: Uint8Array };
 
 /** The request message's text and bytes for a key (blind.ts, v1). */
 export function solBlindMessage(key: Uint8Array | string, req: SolBlindRequest): { text: string; bytes: Uint8Array } {
@@ -190,29 +270,71 @@ export function solBlindMessage(key: Uint8Array | string, req: SolBlindRequest):
   return { text: blindMessage(r), bytes: blindMessageBytes(r) };
 }
 
+/** What the wallet signs for the device blind request in `format`: the
+ *  request message's bytes (raw), or the off-chain v1 head naming the key,
+ *  then the same bytes. */
+export function solBlindSignedBytes(key: Uint8Array | string, req: SolBlindRequest, format: SolFormat): Uint8Array {
+  const k = parseSolanaPublicKey(key);
+  return solBlindSignedMessage(format, k, solBlindMessage(k, req).bytes);
+}
+
+/** The sign-twice check over `bytes`, which are in a format the signer
+ *  signs: each signature must come from the key (the signer check), and the
+ *  two canonical signatures must be byte-identical. Returns the blind of the
+ *  canonical signature, cross-checked against the contract's own
+ *  derivation. */
+async function signTwice(signer: SolSigner, key: Uint8Array, bytes: Uint8Array, what: string): Promise<Uint8Array> {
+  const others = signer.others?.() ?? [];
+  const first = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
+  checkSolSignature(bytes, first, key, others);
+  const second = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
+  checkSolSignature(bytes, second, key, others);
+  const a = canonicalEd25519Signature(first);
+  const b = canonicalEd25519Signature(second);
+  if (!equalBytes(a, b)) {
+    throw new Error(`sol_ed25519: the wallet signed the same ${what} twice with different signatures (not deterministic); refused, it could not restore its accounts`);
+  }
+  const blind = deriveBlind('sol_ed25519', a);
+  const viaContract: Uint8Array = pureCircuits.derive_blind_with_sol_ed25519(a);
+  if (!equalBytes(blind, viaContract)) throw new Error('sol_ed25519: blind differs from the contract derivation');
+  return blind;
+}
+
 /**
- * Enrolment and restore: the wallet signs the request message twice; each
- * signature must pass the pre-check, and the two must be byte-identical
- * (the sign-twice check). The blind is SHA-256 of the blind tag and the raw
+ * Enrolment and restore: the wallet signs the device blind request twice in
+ * one format (`req.format`, by default the signer's first), which must be a
+ * format the wallet can sign (refused before it is asked otherwise); each
+ * signature must come from the key, and the two must be byte-identical (the
+ * sign-twice check). The blind is SHA-256 of the blind tag and the raw
  * 64-byte signature, computed here and checked against the contract's own
  * `derive_blind_with_sol_ed25519`.
  */
 export async function deriveSolBlind(signer: SolSigner, req: SolBlindRequest): Promise<SolBlindRecord> {
   const key = parseSolanaPublicKey(signer.publicKey);
-  const { bytes } = solBlindMessage(key, req);
-  const first = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
-  verifySolSignature(bytes, first, key);
-  const second = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
-  verifySolSignature(bytes, second, key);
-  const a = canonicalEd25519Signature(first);
-  const b = canonicalEd25519Signature(second);
-  if (!equalBytes(a, b)) {
-    throw new Error('sol_ed25519: the wallet signed the same message twice with different signatures (not deterministic); refused, it could not restore its accounts');
-  }
-  const blind = deriveBlind('sol_ed25519', a);
-  const viaContract: Uint8Array = pureCircuits.derive_blind_with_sol_ed25519(a);
-  if (!equalBytes(blind, viaContract)) throw new Error('sol_ed25519: blind differs from the contract derivation');
-  return { scheme: 'sol_ed25519', network: req.network, accountIndex: BigInt(req.accountIndex), key, blind };
+  const format = requireSignable(signer, req.format ?? solSignerFormats(signer)[0], 'the blind request');
+  const bytes = solBlindSignedBytes(key, req, format);
+  const blind = await signTwice(signer, key, bytes, 'message');
+  return { scheme: 'sol_ed25519', network: req.network, accountIndex: BigInt(req.accountIndex), key, format, blind };
+}
+
+/**
+ * Finds a device's blind again (blind.ts `restoreBlind`): the cached blind
+ * of `stored`; else the blind derived in the stored format, if this wallet
+ * can sign it; else, without a record, the blind derived in every format the
+ * wallet can sign, each tested with `finds` (for example solDeviceFinds).
+ * Never a format the wallet cannot sign, never another format than the
+ * stored one. A failure carries the message to show.
+ */
+export function restoreSolBlind(signer: SolSigner, req: {
+  network: string; accountIndex: bigint | number; stored?: StoredBlind; finds: (blind: Uint8Array, format: string) => Promise<boolean>;
+}): Promise<BlindRestore> {
+  const key = parseSolanaPublicKey(signer.publicKey);
+  solBlindMessage(key, req);
+  return restoreBlind({
+    scheme: 'sol_ed25519', role: 'device', stored: req.stored, walletFormats: solSignerFormats(signer),
+    derive: async (format) => (await deriveSolBlind(signer, { network: req.network, accountIndex: req.accountIndex, format: format as SolFormat })).blind,
+    finds: req.finds,
+  });
 }
 
 // ── The device ──────────────────────────────────────────────────────────────
@@ -222,10 +344,13 @@ export interface SolDeviceOptions {
   publicKey: Uint8Array | string;
   /** The account's blind (deriveSolBlind). */
   blind: Uint8Array;
-  /** The wallet's signMessage; absent for a key known by its public half only. */
-  sign?: SolSignFn;
-  /** The format the wallet signs approvals in: 'raw' (`signMessage`, the
-   *  default) or 'offchain' (the Solana off-chain message v1). */
+  /** The wallet; absent for a key known by its public half only. Its key
+   *  must be `publicKey`. */
+  signer?: SolSigner;
+  /** The format the wallet signs approvals in: by default the signer's first
+   *  format ('raw' without a signer); always one the signer can sign. It may
+   *  differ from the format the blind was derived in (a cached blind used
+   *  from a wallet of the other format). */
   format?: SolFormat;
 }
 
@@ -238,23 +363,29 @@ export class SolEd25519Device {
   readonly blind: Uint8Array;
   /** The format this device signs approvals in. */
   readonly format: SolFormat;
-  private readonly signFn?: SolSignFn;
+  private readonly signer?: SolSigner;
 
   constructor(opts: SolDeviceOptions) {
     this.key = parseSolanaPublicKey(opts.publicKey);
     this.pk = solPublicKeyPoint(this.key);
     if (!(opts.blind instanceof Uint8Array) || opts.blind.length !== 32) throw new Error('sol_ed25519: a blind is 32 bytes');
     this.blind = new Uint8Array(opts.blind);
-    this.format = opts.format ?? 'raw';
-    if (!SOL_FORMATS.includes(this.format)) throw new Error(`sol_ed25519: unknown format ${String(this.format)}`);
-    this.signFn = opts.sign;
+    if (opts.signer !== undefined && !equalBytes(parseSolanaPublicKey(opts.signer.publicKey), this.key)) throw new Error('sol_ed25519: the signer is for another key');
+    const format = opts.format ?? (opts.signer ? solSignerFormats(opts.signer)[0] : 'raw');
+    if (!SOL_FORMATS.includes(format)) throw new Error(`sol_ed25519: unknown format ${String(format)}`);
+    this.format = opts.signer ? requireSignable(opts.signer, format, 'its approvals') : format;
+    this.signer = opts.signer;
   }
 
-  /** A device from a software signer and its blind record, signing in
-   *  `format` (raw by default). */
-  static fromSigner(signer: SolSigner, record: SolBlindRecord, format: SolFormat = 'raw'): SolEd25519Device {
+  /** A device from a signer and its blind record. It signs approvals in
+   *  `format`, by default the record's format when the signer can sign it,
+   *  else the signer's first format. */
+  static fromSigner(signer: SolSigner, record: SolBlindRecord, format?: SolFormat): SolEd25519Device {
     if (!equalBytes(parseSolanaPublicKey(signer.publicKey), record.key)) throw new Error('sol_ed25519: the blind record is for another key');
-    return new SolEd25519Device({ publicKey: record.key, blind: record.blind, sign: signer.sign, format });
+    if (!(record.blind instanceof Uint8Array)) throw new Error('sol_ed25519: the record holds no blind; restore it first (restoreSolBlind)');
+    const formats = solSignerFormats(signer);
+    const chosen = format ?? (formats.includes(record.format) ? record.format : formats[0]);
+    return new SolEd25519Device({ publicKey: record.key, blind: record.blind, signer, format: chosen });
   }
 
   /** The base58 address a Solana wallet shows. */
@@ -296,13 +427,16 @@ export class SolEd25519Device {
     return { ...(await this.signBytes(message)), message };
   }
 
-  /** Asks the wallet to sign exactly `message` and runs the pre-check on the
-   *  result. An approval goes through signApproval, which builds the bytes of
+  /** Asks the wallet to sign exactly `message` (refused before asking when
+   *  its format is one the wallet cannot sign) and runs the signer check on
+   *  the result: the signature must come from this device's key over these
+   *  bytes. An approval goes through signApproval, which builds the bytes of
    *  the device's format. */
   async signBytes(message: Uint8Array): Promise<{ signature: Uint8Array; sig: SolSignatureArg }> {
-    if (!this.signFn) throw new Error('sol_ed25519: this device has no signer');
-    const signature = new Uint8Array(await this.signFn(new Uint8Array(message)));
-    return { signature, sig: verifySolSignature(message, signature, this.key) };
+    if (!this.signer) throw new Error('sol_ed25519: this device has no signer');
+    requireSignable(this.signer, solFormatOfSigned(message), 'the message');
+    const signature = new Uint8Array(await this.signer.sign(new Uint8Array(message)));
+    return { signature, sig: checkSolSignature(message, signature, this.key, this.signer.others?.() ?? []) };
   }
 }
 
@@ -313,27 +447,36 @@ export interface SolRosterEntryJson {
   network: string;
   accountIndex: string;
   key: string;
-  blind: string;
+  /** The format the device's blind was derived in ('raw' or 'offchain'). */
+  format: string;
+  /** The blind, while the cache survives (hex). It never leaves the client. */
+  blind?: string;
   /** The account's contract address, once deployed (hex). */
   account?: string;
 }
 
-/** Serialises a blind record (plus the account, once known) for storage. */
-export function solRosterEntry(record: SolBlindRecord, account?: Uint8Array): SolRosterEntryJson {
+/** Serialises a device record (plus the account, once known) for storage;
+ *  `cacheBlind: false` stores it without the blind. */
+export function solRosterEntry(record: SolStoredRecord, account?: Uint8Array, opts: { cacheBlind?: boolean } = {}): SolRosterEntryJson {
+  const format = checkBlindFormat('sol_ed25519', record.format);
+  if (record.blind !== undefined && (!(record.blind instanceof Uint8Array) || record.blind.length !== 32)) throw new Error('sol_ed25519: a blind is 32 bytes');
+  const blind = opts.cacheBlind === false || record.blind === undefined ? {} : { blind: toHex(record.blind) };
   return {
     scheme: 'sol_ed25519', network: record.network, accountIndex: record.accountIndex.toString(),
-    key: toHex(record.key), blind: toHex(record.blind), ...(account ? { account: toHex(account) } : {}),
+    key: toHex(record.key), format, ...blind, ...(account ? { account: toHex(account) } : {}),
   };
 }
 
-/** Parses a stored roster entry strictly. */
-export function parseSolRosterEntry(json: SolRosterEntryJson): SolBlindRecord & { account?: Uint8Array } {
+/** Parses a stored roster entry strictly; the format is required, the blind
+ *  is the cache. */
+export function parseSolRosterEntry(json: SolRosterEntryJson): SolStoredRecord & { account?: Uint8Array } {
   if (json?.scheme !== 'sol_ed25519') throw new Error('sol_ed25519: not a sol_ed25519 roster entry');
   if (!/^(0|[1-9][0-9]{0,9})$/.test(json.accountIndex) || BigInt(json.accountIndex) > 0xffffffffn) throw new Error('sol_ed25519: bad account index');
-  const record: SolBlindRecord & { account?: Uint8Array } = {
+  const record: SolStoredRecord & { account?: Uint8Array } = {
     scheme: 'sol_ed25519', network: json.network, accountIndex: BigInt(json.accountIndex),
-    key: parseSolanaPublicKey(fromHex(json.key, 32, 'key')), blind: fromHex(json.blind, 32, 'blind'),
+    key: parseSolanaPublicKey(fromHex(json.key, 32, 'key')), format: checkBlindFormat('sol_ed25519', json.format) as SolFormat,
   };
+  if (json.blind !== undefined) record.blind = fromHex(json.blind, 32, 'blind');
   solBlindMessage(record.key, record);
   if (json.account !== undefined) record.account = fromHex(json.account, 32, 'account');
   return record;
@@ -543,6 +686,19 @@ export async function resolveSolEd25519Counter(account: SolEd25519AccountSurface
     if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k))) return k;
   }
   throw new Error('sol_ed25519: no live entry for this device (rescan limit reached)');
+}
+
+/** A restore's test for a device blind (restoreSolBlind `finds`): whether
+ *  the key with that blind has a live entry on `account` at the current
+ *  epoch, at any counter below the scan bound. */
+export function solDeviceFinds(account: SolEd25519AccountSurface, key: Uint8Array | string, limit = SOL_ED25519_COUNTER_SCAN): (blind: Uint8Array) => Promise<boolean> {
+  const k = parseSolanaPublicKey(key);
+  return async (blind) => {
+    const device = new SolEd25519Device({ publicKey: k, blind });
+    const l = await account.ledgerState();
+    for (let c = 0n; c < limit; c++) if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, c))) return true;
+    return false;
+  };
 }
 
 /** Authorises the next device-gated call of `device` on `account`: the
@@ -854,22 +1010,59 @@ export async function recoverCancelWithSolEd25519(account: SolEd25519LifecycleSu
 // (blind.ts granteeBlindMessage), signed twice, under the same
 // blind tag.
 
-export interface SolGranteeBlindRequest { network: string; issuingAccount: Uint8Array }
+export interface SolGranteeBlindRequest {
+  network: string;
+  issuingAccount: Uint8Array;
+  /** The format the wallet signs the grantee request in; by default the
+   *  signer's first format. */
+  format?: SolFormat;
+}
 
-/** The grantee blind for one issuing account (sign-twice check, the
- *  contract's own derivation cross-checked). */
-export async function deriveSolGranteeBlind(signer: SolSigner, req: SolGranteeBlindRequest): Promise<Uint8Array> {
+/** A grantee blind: the issuing account, the format it was derived in and
+ *  the blind (the record a client keeps per grant its wallet holds). */
+export interface SolGranteeBlindRecord {
+  scheme: 'sol_ed25519';
+  network: string;
+  issuingAccount: Uint8Array;
+  key: Uint8Array;
+  format: SolFormat;
+  blind: Uint8Array;
+}
+
+/** What the wallet signs for the grantee blind request in `format`. */
+export function solGranteeBlindSignedBytes(key: Uint8Array | string, req: SolGranteeBlindRequest, format: SolFormat): Uint8Array {
+  const k = parseSolanaPublicKey(key);
+  return solBlindSignedMessage(format, k, granteeBlindMessageBytes({ scheme: 'sol_ed25519', network: req.network, identity: k, issuingAccount: req.issuingAccount }));
+}
+
+/** The grantee request's text for a key (blind.ts granteeBlindMessage). */
+export function solGranteeBlindMessage(key: Uint8Array | string, req: SolGranteeBlindRequest): string {
+  return granteeBlindMessage({ scheme: 'sol_ed25519', network: req.network, identity: parseSolanaPublicKey(key), issuingAccount: req.issuingAccount });
+}
+
+/** The grantee blind for one issuing account, in one format the wallet can
+ *  sign (the signer check and the sign-twice check, the contract's own
+ *  derivation cross-checked). */
+export async function deriveSolGranteeBlind(signer: SolSigner, req: SolGranteeBlindRequest): Promise<SolGranteeBlindRecord> {
   const key = parseSolanaPublicKey(signer.publicKey);
-  const bytes = granteeBlindMessageBytes({ scheme: 'sol_ed25519', network: req.network, identity: key, issuingAccount: req.issuingAccount });
-  const first = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
-  verifySolSignature(bytes, first, key);
-  const second = new Uint8Array(await signer.sign(new Uint8Array(bytes)));
-  verifySolSignature(bytes, second, key);
-  const a = canonicalEd25519Signature(first), b = canonicalEd25519Signature(second);
-  if (!equalBytes(a, b)) throw new Error('sol_ed25519: the wallet signed the grantee request twice with different signatures (not deterministic); refused');
-  const blind = deriveBlind('sol_ed25519', a);
-  if (!equalBytes(blind, pureCircuits.derive_blind_with_sol_ed25519(a))) throw new Error('sol_ed25519: blind differs from the contract derivation');
-  return blind;
+  const format = requireSignable(signer, req.format ?? solSignerFormats(signer)[0], 'the grantee request');
+  const bytes = solGranteeBlindSignedBytes(key, req, format);
+  const blind = await signTwice(signer, key, bytes, 'grantee request');
+  return { scheme: 'sol_ed25519', network: req.network, issuingAccount: new Uint8Array(req.issuingAccount), key, format, blind };
+}
+
+/** Finds a grantee blind again, as restoreSolBlind does for a device: the
+ *  cache, the stored format, or every format the wallet can sign, tested
+ *  with `finds` (for example whether the grant id is live). */
+export function restoreSolGranteeBlind(signer: SolSigner, req: {
+  network: string; issuingAccount: Uint8Array; stored?: StoredBlind; finds: (blind: Uint8Array, format: string) => Promise<boolean>;
+}): Promise<BlindRestore> {
+  solGranteeBlindMessage(signer.publicKey, req);
+  return restoreBlind({
+    scheme: 'sol_ed25519', role: 'grantee', stored: req.stored, walletFormats: solSignerFormats(signer),
+    derive: async (format) => (await deriveSolGranteeBlind(signer, { network: req.network, issuingAccount: req.issuingAccount, format: format as SolFormat })).blind,
+    finds: req.finds,
+  });
 }
 
 export class SolEd25519Grantee {
@@ -877,18 +1070,23 @@ export class SolEd25519Grantee {
   /** The signing key with its GRANTEE blind (never its device blind). */
   readonly device: SolEd25519Device;
   readonly label: string;
+  /** The format the grantee blind was derived in, when known. */
+  readonly blindFormat?: SolFormat;
 
-  constructor(device: SolEd25519Device, label: string) {
+  constructor(device: SolEd25519Device, label: string, blindFormat?: SolFormat) {
     labelBytes(label);
+    if (blindFormat !== undefined) checkBlindFormat('sol_ed25519', blindFormat);
     this.device = device;
     this.label = label;
+    this.blindFormat = blindFormat;
   }
 
-  /** Enrolment as a grantee of `issuingAccount`: the grantee blind; the
-   *  grantee signs its approvals in `format` (raw by default). */
-  static async enrol(signer: SolSigner, req: SolGranteeBlindRequest, label: string, format: SolFormat = 'raw'): Promise<SolEd25519Grantee> {
-    const blind = await deriveSolGranteeBlind(signer, req);
-    return new SolEd25519Grantee(new SolEd25519Device({ publicKey: signer.publicKey, blind, sign: signer.sign, format }), label);
+  /** Enrolment as a grantee of `issuingAccount`: the grantee blind, in
+   *  `req.format` (by default the signer's first format); the grantee signs
+   *  its approvals in `format` (by default the blind's format). */
+  static async enrol(signer: SolSigner, req: SolGranteeBlindRequest, label: string, format?: SolFormat): Promise<SolEd25519Grantee> {
+    const record = await deriveSolGranteeBlind(signer, req);
+    return new SolEd25519Grantee(new SolEd25519Device({ publicKey: signer.publicKey, blind: record.blind, signer, format: format ?? record.format }), label, record.format);
   }
 
   get key(): Uint8Array { return this.device.key; }

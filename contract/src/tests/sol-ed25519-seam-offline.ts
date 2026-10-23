@@ -297,7 +297,7 @@ const G5 = '5 verification inputs';
 // `offchain` names the format.
 const G6 = '6 signing formats';
 {
-  const devOff = new SolEd25519Device({ publicKey: devA.key, blind: devA.blind, sign: signerA.sign, format: 'offchain' });
+  const devOff = new SolEd25519Device({ publicKey: devA.key, blind: devA.blind, signer: signerA, format: 'offchain' });
   const simF = await deploy(devA);
   const kF = rnd(32);
   const aRaw = await authoriseSolDevice(devA, ctxOf(simF), SITE, { op: 'rotate_enc_key', newKey: kF }, 0n);
