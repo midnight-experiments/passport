@@ -30,12 +30,16 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { curve25519FromProjective, isValidCurve25519Point, type Curve25519Point } from '@midnight-ntwrk/compact-runtime';
 
 import { pureCircuits } from './contract.js';
-import { DESCRIPTOR_TAGS, base58Encode, checkDescriptor, grantOriginHash, grantScopeSalt, parseSolanaPublicKey, solDescriptor, type Descriptor, type SolDescriptor } from './descriptors.js';
+import {
+  DESCRIPTOR_TAGS, base58Encode, checkDescriptor, grantOriginHash, grantScopeSalt, parseSolanaPublicKey, solDescriptor,
+  type Descriptor, type Ed25519Descriptor, type JubjubDescriptor, type K256Descriptor, type P256Descriptor, type SolDescriptor, type W52Descriptor,
+} from './descriptors.js';
 import { blindMessage, blindMessageBytes, canonicalEd25519Signature, deriveBlind, granteeBlindMessageBytes } from './blind.js';
 import {
   digitsOf, labelBytes, nibblesOf, solFrameNibbles, solAmountShow, solCoinShow, solDeviceHexValues, solDeviceMessageText,
   solGranteeArg, solGranteeHexValues, solGranteeShow, solGrantShow, solGranteeMessageText, solScopeShow, solShow, solSignedMessage, solTargetArg,
-  solTargetShow, solTargetPointArg, solUnusedKey, SOL_FORMATS, type SolAmount, type SolDeviceOperation, type SolFormat, type SolGranteeFields, type SolGranteeOperation, type SolTargetFields,
+  solKindOfScheme, solTargetShow, solTargetPointArg, solUnusedKey, SOL_FORMATS, type SolAmount, type SolDeviceOperation, type SolFormat, type SolGranteeFields,
+  type SolGranteeOperation, type SolKind, type SolTargetFields,
 } from './sol-ed25519-message.js';
 import type { GrantOpening } from './signer.js';
 
@@ -615,35 +619,39 @@ const txIdOf = (r: any): string => {
   return id;
 };
 
-/** The message-level target of a readable descriptor (the circuit's
- *  SolTarget): the target scheme's registered device tag and its key fields,
- *  coordinates little-endian as the recipes bind them (the message shows
- *  secp256k1 and P-256 big-endian). A passkey target needs its policy. */
-/** The five registered descriptor schemes; anything else is refused before
- *  any message is built (the base's checkDescriptor returns nothing for an
- *  unknown scheme, so the facade must not rely on it to throw). */
-const SOL_REGISTERED_SCHEMES: readonly string[] = ['jubjub', 'k256', 'p256', 'evm_k256', 'sol_ed25519'];
-function requireRegisteredScheme<T>(d: T): T {
+/** The kind of a descriptor this arm enrols (SOL_KINDS); anything else is
+ *  refused before any message is built (the base's checkDescriptor returns
+ *  nothing for an unknown scheme, so the facade must not rely on it to
+ *  throw). */
+function requireKind(d: unknown): SolKind {
   const scheme = (d as any)?.scheme;
-  if (typeof scheme !== 'string' || !SOL_REGISTERED_SCHEMES.includes(scheme)) {
-    throw new Error(`sol_ed25519: not a registered descriptor scheme (${String(scheme)})`);
-  }
+  const kind = typeof scheme === 'string' ? solKindOfScheme(scheme) : undefined;
+  if (kind === undefined) throw new Error(`sol_ed25519: not a registered descriptor scheme (${String(scheme)})`);
+  return kind;
+}
+function requireRegisteredScheme<T>(d: T): T {
+  requireKind(d);
   return d;
 }
 
+/** The message-level target of a readable descriptor (the circuit's
+ *  SolTarget): the registered device tag of its kind and the key fields of
+ *  the kind's class, coordinates little-endian as the recipes bind them (the
+ *  message shows secp256k1 and P-256 big-endian). A passkey target needs its
+ *  policy. */
 export function solTargetOf(d: Descriptor): SolTargetFields {
-  requireRegisteredScheme(d);
+  const kind = requireKind(d);
   const tag = DESCRIPTOR_TAGS.device[d.scheme];
-  switch (d.scheme) {
-    case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y) };
-    case 'k256': return { tag, a: le32(d.x), b: le32(d.y), envelope: BigInt(d.envelope) };
-    case 'p256': {
-      if (!d.policy) throw new Error('sol_ed25519: a passkey target needs its policy (RP hash and origin)');
-      return { tag, a: le32(d.x), b: le32(d.y), c: new Uint8Array(d.policy.rpIdHash), origin: new Uint8Array(d.policy.origin) };
+  switch (kind.keyClass) {
+    case 'w52': { const r = d as W52Descriptor; return { tag, address: new Uint8Array(r.address), a: new Uint8Array(r.blind) }; }
+    case 'w64': { const j = d as JubjubDescriptor; return { tag, a: le32(j.x), b: le32(j.y) }; }
+    case 'ed25519': { const e = d as Ed25519Descriptor; return { tag, a: new Uint8Array(e.key), b: new Uint8Array(e.blind) }; }
+    case 'w65': { const k = d as K256Descriptor; return { tag, a: le32(k.x), b: le32(k.y), envelope: BigInt(k.envelope) }; }
+    case 'passkey': {
+      const p = d as P256Descriptor;
+      if (!p.policy) throw new Error('sol_ed25519: a passkey target needs its policy (RP hash and origin)');
+      return { tag, a: le32(p.x), b: le32(p.y), c: new Uint8Array(p.policy.rpIdHash), origin: new Uint8Array(p.policy.origin) };
     }
-    case 'evm_k256': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind) };
-    case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind) };
-    default: throw new Error(`sol_ed25519: not a registered descriptor scheme (${String((d as any).scheme)})`);
   }
 }
 
@@ -686,7 +694,9 @@ export async function removeUnknownDeviceWithSolEd25519(account: SolEd25519Lifec
 // RP is a scope field), a k256 or JubJub grantee by the labelled origin hash
 // of its client id. A Solana grantee also passes its point.
 
-/** Where a grant's origin_hash comes from (one per grantee class). */
+/** Where a grant's origin_hash comes from (by the grantee kind's class: a
+ *  readable class's site label, a passkey's origin, otherwise the labelled
+ *  hash itself). */
 export type SolGranteeSite = { label: string } | { origin: Uint8Array } | { originHash: Uint8Array };
 
 /** The message-level grantee of a readable descriptor at a site and slot. */
@@ -694,26 +704,30 @@ export function solGranteeOf(descriptor: Descriptor, site: SolGranteeSite, slot:
   // the strict parsers (a point on its curve, a Solana key that decodes, a
   // passkey origin of visible ASCII), as the device facade does
   const d = checkDescriptor(requireRegisteredScheme(descriptor));
+  const kind = requireKind(d);
   const tag = DESCRIPTOR_TAGS['grant-id'][d.scheme];
   const need = <K extends string>(k: K): any => {
     if (!(k in site)) throw new Error(`sol_ed25519: a ${d.scheme} grantee is identified by its ${k}`);
     return (site as any)[k];
   };
-  switch (d.scheme) {
-    case 'evm_k256': return { tag, address: new Uint8Array(d.address), a: new Uint8Array(d.blind), label: need('label'), slot };
-    case 'sol_ed25519': return { tag, a: new Uint8Array(d.key), b: new Uint8Array(d.blind), label: need('label'), slot };
-    case 'jubjub': return { tag, a: le32(d.x), b: le32(d.y), originHash: new Uint8Array(need('originHash')), slot };
-    case 'k256': return { tag, a: le32(d.x), b: le32(d.y), envelope: BigInt(d.envelope), originHash: new Uint8Array(need('originHash')), slot };
-    case 'p256': {
+  switch (kind.keyClass) {
+    case 'w52': { const r = d as W52Descriptor; return { tag, address: new Uint8Array(r.address), a: new Uint8Array(r.blind), label: need('label'), slot }; }
+    case 'ed25519': { const e = d as Ed25519Descriptor; return { tag, a: new Uint8Array(e.key), b: new Uint8Array(e.blind), label: need('label'), slot }; }
+    case 'w64': { const j = d as JubjubDescriptor; return { tag, a: le32(j.x), b: le32(j.y), originHash: new Uint8Array(need('originHash')), slot }; }
+    case 'w65': {
+      const k = d as K256Descriptor;
+      return { tag, a: le32(k.x), b: le32(k.y), envelope: BigInt(k.envelope), originHash: new Uint8Array(need('originHash')), slot };
+    }
+    case 'passkey': {
       // the grantee's site origin passes the base's passkey-origin rule (21
       // bytes, visible ASCII without quotes or backslashes),
       // checked through checkDescriptor's policy branch (the RP hash is a
       // scope field, so a placeholder stands in for it here)
+      const p = d as P256Descriptor;
       const origin = new Uint8Array(need('origin'));
-      checkDescriptor({ scheme: 'p256', x: d.x, y: d.y, policy: { rpIdHash: new Uint8Array(32), origin } } as Descriptor);
-      return { tag, a: le32(d.x), b: le32(d.y), origin, slot };
+      checkDescriptor({ scheme: p.scheme, x: p.x, y: p.y, policy: { rpIdHash: new Uint8Array(32), origin } } as Descriptor);
+      return { tag, a: le32(p.x), b: le32(p.y), origin, slot };
     }
-    default: throw new Error(`sol_ed25519: not a registered descriptor scheme (${String((d as any).scheme)})`);
   }
 }
 

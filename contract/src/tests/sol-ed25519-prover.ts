@@ -245,12 +245,12 @@ const COLOUR = 'held coin colour does not match the withdrawn colour';
 const ABOVE = "amount above the spent coin's value";
 const INSUFFICIENT = 'insufficient balance';
 const NOTREG = 'descriptor: not a registered device tag';
-const W117 = 'descriptor: not a 117-byte device tag';
+const W52 = 'descriptor: not a 52-byte device tag';
 const AUTHORISING = 'cannot remove the authorising device';
 const LAST = 'cannot remove last device';
 const IDENTITY_KEY = 'ed25519: the key is the identity';
 const KEY_IS_IDENTITY = 'descriptor: the Ed25519 key is the identity';
-const NOT_POINT = "descriptor: the Solana key is not the point's encoding";
+const NOT_POINT = "descriptor: the Ed25519 key is not the point's encoding";
 // the Ed25519 core's encoding check, for keys and for R alike
 const KEYY = "ed25519: the encoding does not match the point's y";
 const KEYX = "ed25519: the x bytes do not match the point's x";
@@ -265,7 +265,7 @@ const B58ALIGN = 'display: not a left-aligned base58 text';
 const DATE = 'display: the date and time do not match the value';
 const SPLIT = 'display: the year split is not canonical';
 const NOTREG_GRANT = 'descriptor: not a registered grant-id tag';
-const W64G = 'descriptor: not a 64-byte grant-id tag';
+const W52G = 'descriptor: not a 52-byte grant-id tag';
 const EMPTY_DECIMAL = 'display: empty decimal';
 const UNKNOWN_KIND = 'display: unknown recipient kind';
 const ENVELOPE = 'display: unknown signing envelope';
@@ -996,16 +996,19 @@ async function sectionDevices() {
     await consRem({ op: 'remove_device', literal: true, entry: jub.entryAt(A1.addressBytes, ep1, 0n) }, oRemJ), INVALID, [INVALID], ctlRem);
   // guards under a VALID signature
   {
-    // an unregistered tag: the message shows the class's tag text (the
-    // passkey's), signed only with the tag check bypassed in the copy's pure circuit
-    const mTag = await copyFor([NOTREG, W117]);
-    const badArg = { ...msg.solTargetArg(tP), tag: padTag('midnight:account:device:zz:v9') };
-    const shown = shownFor(A0, { op: 'add_device', target: tP });
+    // an unregistered tag: past the arm's registration check no kind is
+    // named, so the message shows the first kind's tag text and key lines
+    // (evm_k256's) and the entry takes its recipe (w52), whose admission
+    // refuses the tag too; signed with both checks bypassed in the copy's
+    // pure circuit, over an evm_k256-shaped target
+    const mTag = await copyFor([NOTREG, W52]);
+    const badArg = { ...msg.solTargetArg(tE), tag: padTag('midnight:account:device:zz:v9') };
+    const shown = shownFor(A0, { op: 'add_device', target: tE });
     const bytes = mTag.pureCircuits.sol_message_add_device({ bytes: A0.addressBytes }, S.key, ledgerOf(A0).auth_nonce, badArg, ...shown);
     const { sig } = await S.signApproval(bytes);
-    const au = { ...(await authFor(A0, { op: 'add_device', target: tP })), sig };
-    await negative('devices', 'guards: add_device, an unregistered tag under a valid signature (the message shows the passkey class text)', A0, ADD, [badArg, msg.solUnusedKey(), ...authArgs(au)], NOTREG, [NOTREG, W117],
-      { a: A0, args: addArgs(tP, await authFor(A0, { op: 'add_device', target: tP })) });
+    const au = { ...(await authFor(A0, { op: 'add_device', target: tE })), sig };
+    await negative('devices', "guards: add_device, an unregistered tag under a valid signature (the message shows the first kind's text)", A0, ADD, [badArg, msg.solUnusedKey(), ...authArgs(au)], NOTREG, [NOTREG, W52],
+      { a: A0, args: addArgs(tE, await authFor(A0, { op: 'add_device', target: tE })) });
   }
   {
     const odd = { ...msg.solTargetArg(tJ), envelope: 1n };
@@ -2003,20 +2006,20 @@ async function sectionModule() {
   const mO = sol.solDeviceMessageCircuit(S.key, ctxOf(A0), SITE, { op: 'issue_grant', grantee: gO, ...sU } as any);
   await negative('module', "issue_grant: the identity as a sol_ed25519 grantee (its encoding shown and signed): refused by the Ed25519 class's A != O in the grant-id derivation", A0, ISSUE,
     issueArgsOf(gO, sU, await signedOver(mO.bytes, mO.showArgs), keyOf(IDP)), KEY_IS_IDENTITY, [KEY_IS_IDENTITY], ctlIssue);
-  // an unregistered grant-id tag: the message shows the class's tag text
-  // (the passkey's); the arm's class check refuses the tag, and past it the
-  // module's width-64 grant-id recipe (the passkey class's) refuses it too
-  const pass = softwarePasskey();
-  const gP = sol.solGranteeOf({ scheme: 'p256', x: pass.pk.x, y: pass.pk.y } as any, { origin: pass.policy.origin }, 0n);
+  // an unregistered grant-id tag: the arm's registration check refuses the
+  // tag; past it no kind is named, so the message shows the first kind's tag
+  // text and key lines (evm_k256's) and the grant id takes its recipe (w52),
+  // whose admission refuses the tag too; over an evm_k256-shaped grantee
+  const gE = sol.solGranteeOf({ scheme: 'evm_k256', address: fill(20, 0x5e), blind: rnd() } as any, { label: 'Example dApp' }, 0n);
   const sRO = scopeOf({ read: true, readPk: rnd() });
-  const ctlP = { a: A0, args: issueArgsOf(gP, sRO, await authFor({ op: 'issue_grant', grantee: gP, ...sRO })) };
-  const badArg = { ...msg.solGranteeArg(gP), tag: padTag('midnight:account:grant:zz:v9') };
-  const mTag = await copyFor([NOTREG_GRANT, W64G]);
-  const shP = shownFor({ op: 'issue_grant', grantee: gP, ...sRO });
-  const tagArgs = issueArgsOf(gP, sRO, await signedOver(issueBytes(mTag.pureCircuits, badArg, sRO, shP), shP), msg.solUnusedKey());
+  const ctlE = { a: A0, args: issueArgsOf(gE, sRO, await authFor({ op: 'issue_grant', grantee: gE, ...sRO })) };
+  const badArg = { ...msg.solGranteeArg(gE), tag: padTag('midnight:account:grant:zz:v9') };
+  const mTag = await copyFor([NOTREG_GRANT, W52G]);
+  const shE = shownFor({ op: 'issue_grant', grantee: gE, ...sRO });
+  const tagArgs = issueArgsOf(gE, sRO, await signedOver(issueBytes(mTag.pureCircuits, badArg, sRO, shE), shE), msg.solUnusedKey());
   tagArgs[0] = badArg;
-  await negative('module', "issue_grant: an unregistered grant-id tag under a valid signature (the message shows the passkey class text): at runtime past the arm's class check, the module's width-64 grant-id recipe refuses it; at the proof server both", A0, ISSUE,
-    tagArgs, NOTREG_GRANT, [NOTREG_GRANT, W64G], ctlP, { simulatorModule: await copyFor([NOTREG_GRANT]), simulatorExpect: W64G });
+  await negative('module', "issue_grant: an unregistered grant-id tag under a valid signature (the message shows the first kind's text): at runtime past the arm's registration check, the module's w52 grant-id recipe refuses it; at the proof server both", A0, ISSUE,
+    tagArgs, NOTREG_GRANT, [NOTREG_GRANT, W52G], ctlE, { simulatorModule: await copyFor([NOTREG_GRANT]), simulatorExpect: W52G });
   // an unknown recipient kind: the module's renderer has no label for 4
   // (past its check the text would be the last label's)
   const mKind = await copyFor([UNKNOWN_KIND]);
