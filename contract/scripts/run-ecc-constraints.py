@@ -41,7 +41,14 @@ archive = subprocess.check_output(["git", "-C", str(args.zkir_repo), "archive", 
 with tempfile.TemporaryDirectory(prefix="passport-ecc-zkir-") as tmp:
     work = Path(tmp)
     with tarfile.open(fileobj=io.BytesIO(archive)) as source:
-        source.extractall(work, filter="data")
+        # Validate the complete archive before writing any member. Keep the
+        # extraction-time filter too, since earlier members can create links.
+        members = []
+        for member in source.getmembers():
+            validated = tarfile.data_filter(member, str(work))
+            if validated is not None:
+                members.append(validated)
+        source.extractall(work, members=members, filter="data")
     # The release commit bumps these two manifests without refreshing its lock.
     # Correct ONLY workspace package metadata; retain every dependency pin.
     lock = work / "Cargo.lock"
