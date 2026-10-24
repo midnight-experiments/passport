@@ -6,6 +6,10 @@
 //     checked (activation, the three device-seam bodies, the grant seam, and
 //     each operation's own hints): one byte flipped is refused with the check's
 //     message, and the ledger is unchanged;
+//   - a personal_sign (EIP-191) signature of an approval's 32-byte struct
+//     hash, passed with the digest hint of what it signs, is refused by the
+//     digest's check at the device seam and at the grant seam: the circuit
+//     verifies only the V1 digest;
 //   - the carry attack (one byte + 256, the next − 1, which rebuilds the same
 //     number) is refused by the runtime's own type check of a `Uint<8>`
 //     argument; the circuit's range check of the same byte is the prover
@@ -32,14 +36,15 @@ import { makeWitnesses, emptyCoinStore, type CoinStorePrivateState } from '../wa
 import { JubjubDevice, K256Device, grantAuthArgs, RECIPIENT_USER_ADDRESS, RECIPIENT_ZSWAP_COIN_PUBLIC_KEY, type GrantOpening } from '../wallet/signer.js';
 import {
   SoftwareEvmWallet, EvmK256Device, EvmK256Grantee, evmK256DescriptorInput, evmK256IssueArgs, evmK256GrantScopeSalt, ed25519Args, ed25519KeyOf,
+  parseEvmSignature, personalMessageDigest,
 } from '../wallet/signer-evm-k256.js';
-import { evmK256Messages, type Eip712TypedData, type IssueScope } from '../wallet/evm-k256-codec.js';
+import { evmK256Messages, hashStruct, type Eip712TypedData, type IssueScope } from '../wallet/evm-k256-codec.js';
 import { grantLabel } from '../wallet/descriptors.js';
 import {
   evmK256KeyHint, bytesHint, leHint, evmK256DescriptorHint, evmK256GranteeHint, evmK256AmountHint, evmK256CoinHint,
   evmK256IssueHint,
 } from '../wallet/evm-k256-hints.js';
-import { withExecutedHints, storeCoin, forgeHints, TEST_SITE } from './evm-k256-hint-fill.js';
+import { withExecutedHints, storeCoin, forgeHints, TEST_SITE, KEEP_HINTS } from './evm-k256-hint-fill.js';
 
 const rnd = (n = 32) => new Uint8Array(randomBytes(n));
 const ZERO32 = new Uint8Array(32);
@@ -139,6 +144,23 @@ async function eachForged(label: string, circuit: string, args: () => Promise<un
       () => call(circuit, forged(circuit, a, authIndex, where, path, 'carry')), CARRY);
   }
 }
+/** The exact args with the approval's signature replaced by the wallet's
+ *  personal_sign (EIP-191) signature over the message's 32-byte struct hash,
+ *  and the digest hint replaced by the digest that signature signs. A wallet
+ *  shows personal_sign of 32 bytes as opaque bytes; the circuit verifies only
+ *  the V1 digest (0x19 0x01 || separator || struct hash), so the digest's
+ *  check must refuse this hint. */
+async function personalSigned(circuit: string, args: unknown[], authIndex: number, wallet: { personalSign(m: Uint8Array): Promise<Uint8Array> },
+  td: Eip712TypedData): Promise<unknown[]> {
+  const { EIP712Domain: _domain, ...types } = td.types;
+  const structHash = hashStruct(td.primaryType, td.message, types);
+  const sig = parseEvmSignature(await wallet.personalSign(structHash));
+  const exact: any[] = [...withExecutedHints(pc, ctx(), circuit, args)];
+  const auth: any = { ...exact[authIndex], sig: { r: sig.r, s: sig.s }, hint: { ...exact[authIndex].hint, digest: bytesHint(personalMessageDigest(structHash)) } };
+  auth[KEEP_HINTS] = true;
+  exact[authIndex] = auth;
+  return exact;
+}
 /** The facade's hints (from the signed typed data) == the executed values' hints. */
 function facadeAgrees(label: string, circuit: string, args: unknown[], authIndex: number) {
   const exact: any = withExecutedHints(pc, ctx(), circuit, args);
@@ -194,6 +216,9 @@ await section('the device seam (one-type body): every seam hint, then the honest
     ['auth', ['nonce'], WORD], ['auth', ['key', 'x'], BYTE], ['auth', ['key', 'y'], BYTE], ['auth', ['key', 'key_hash'], HASH],
     ['auth', ['digest'], DIGEST],
   ], true);
+  const td = evmK256Messages.rotateEncKey(frame(), newKey);
+  await refused('rotate_enc_key: the device\'s personal_sign of the struct hash, with the digest hint of what it signs',
+    async () => call('rotate_enc_key_with_evm_k256', await personalSigned('rotate_enc_key_with_evm_k256', await args(), 1, E.wallet!, td)), DIGEST);
   await lands('rotate_enc_key', 'rotate_enc_key_with_evm_k256', await args(), 1);
 });
 
@@ -280,6 +305,9 @@ await section('the grant seam: every seam hint and the operation hints of the gr
     ['auth', ['label'], BYTE], ['auth', ['issued_at'], WORD], ['auth', ['grant_nonce'], WORD], ['auth', ['key', 'x'], BYTE], ['auth', ['key', 'key_hash'], HASH],
     ['auth', ['digest'], DIGEST], ['op', ['amount'], WORD], ['op', ['label'], LABEL],
   ], true);
+  const gtd = evmK256Messages.withdrawUnshieldedAsGrantee(gframe(), U_COLOR, 50n, RCPT, TEST_SITE);
+  await refused('withdraw_unshielded_with_grant: the grantee\'s personal_sign of the struct hash, with the digest hint of what it signs',
+    async () => call('withdraw_unshielded_with_grant_evm_k256', await personalSigned('withdraw_unshielded_with_grant_evm_k256', await tw(), 10, x.g.wallet!, gtd)), DIGEST);
   await lands('withdraw_unshielded_with_grant', 'withdraw_unshielded_with_grant_evm_k256', await tw(), 10);
 });
 
