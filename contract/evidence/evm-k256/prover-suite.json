@@ -2,205 +2,227 @@
  "suite": "evm-k256-prover (npm run test:evm_k256)",
  "build": {
   "branch": "wallet-arm-evm-eip712",
-  "commit": "8d553e1",
-  "keys": "a full key generation of a contract tree whose ZKIR is byte-identical to that commit's, circuit by circuit",
+  "commit": "0065058",
+  "keys": "the full key generation of that commit (every contract of the compile script)",
   "upstreamCircuits": "the 52 upstream account circuits byte-identical (ZKIR and verifier keys) to upstream 0d7bb0b",
   "compiler": "compactc 0.35.0 --feature-zkir-v3",
   "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8",
   "node": "2.1.0-rc.4",
-  "note": "The sections frame-lifecycle, grant-matrix, grants, hints, isolate, places, texts ran at 8d553e1. The others ran at earlier revisions of these tests (3c9647e, ace595b), before the commits of this history were cut; each of their cases equals the case of the same name in the DRY at 8d553e1 (kind, expected refusal, bypassed asserts, enforcement), and every proof-server request they made named the verifier key that the build above holds for its circuit, so no key they used has changed. None of them proves issue_grant_with_evm_k256, the one circuit whose key changed since those runs."
+  "note": "Every section ran at 0065058, each in its own run from a freshly restarted proof server, on the full key generation of that commit; each case equals the case of the same name in the DRY at 0065058 (kind, expected refusal, bypassed asserts, enforcement), and every proof-server request named the verifier key that build holds for its circuit."
  },
  "method": "Each negative runs twice: in the simulator (generated JavaScript, honest checks) and at the proof server with the JavaScript checks that would refuse it bypassed in a patched copy of the generated contract; every other assert still throws in that copy, so a case that names one assert isolates it. Every patched copy proves the honest call of its circuit through itself: the cases of the checked hints, the readable texts the isolating forgeries and the shared checks at every place a value enters (sections hints, texts, isolate, places) and most others prove it before their own attempt; elsewhere the negatives of one copy in a section share the first control proved through it, and each result names its control (control.with). A forged byte argument above 8 bits travels through a copy that lets it past the type check and encodes it as given; the circuit's range check refuses it. A case passes only when it is refused at the expected layer, every named assert fired in the copy, and the refusal is attributed to the circuit under test. Each section ran in its own run from a freshly started proof server; each section draws its own deterministic values, so a run of one section draws what the full suite draws.",
  "runs": [
   {
    "run": "activation",
-   "testsAt": "3c9647e",
+   "testsAt": "0065058",
    "sections": [
     "activation"
    ],
    "casesCounted": 5,
    "verdict": "PASS",
    "requests": 12,
-   "ranAt": "2026-10-18T16:56:41.658Z"
+   "ranAt": "2026-10-24T16:37:28.717Z"
   },
   {
    "run": "reactivation",
-   "testsAt": "3c9647e",
+   "testsAt": "0065058",
    "sections": [
     "reactivation"
    ],
    "casesCounted": 2,
    "verdict": "PASS",
    "requests": 5,
-   "ranAt": "2026-10-18T16:57:03.456Z"
+   "ranAt": "2026-10-24T16:37:42.997Z"
   },
   {
    "run": "qa1",
-   "testsAt": "ace595b",
+   "testsAt": "0065058",
    "sections": [
     "qa1"
    ],
    "casesCounted": 3,
    "verdict": "PASS",
    "requests": 8,
-   "ranAt": "2026-10-18T02:47:59.903Z"
+   "ranAt": "2026-10-24T16:38:01.403Z"
   },
   {
    "run": "seam",
-   "testsAt": "3c9647e",
+   "testsAt": "0065058",
    "sections": [
     "seam"
    ],
-   "casesCounted": 29,
+   "casesCounted": 30,
    "verdict": "PASS",
-   "requests": 49,
-   "ranAt": "2026-10-18T17:02:32.476Z"
+   "requests": 50,
+   "ranAt": "2026-10-24T16:40:18.222Z"
   },
   {
    "run": "frame",
-   "testsAt": "ace595b",
+   "testsAt": "0065058",
    "sections": [
     "frame"
    ],
    "casesCounted": 5,
    "verdict": "PASS",
    "requests": 27,
-   "ranAt": "2026-10-18T03:33:09.275Z"
+   "ranAt": "2026-10-24T18:55:37.031Z"
   },
   {
    "run": "custody",
-   "testsAt": "3c9647e",
+   "testsAt": "0065058",
    "sections": [
     "custody"
    ],
    "casesCounted": 12,
    "verdict": "PASS",
    "requests": 18,
-   "ranAt": "2026-10-18T17:19:24.532Z"
+   "ranAt": "2026-10-24T16:43:29.117Z"
   },
   {
    "run": "witness",
-   "testsAt": "3c9647e",
+   "testsAt": "0065058",
    "sections": [
     "witness"
    ],
    "casesCounted": 14,
    "verdict": "PASS",
    "requests": 70,
-   "ranAt": "2026-10-18T17:35:26.668Z"
+   "ranAt": "2026-10-24T16:46:15.982Z"
   },
   {
    "run": "devices",
-   "testsAt": "3c9647e",
+   "testsAt": "0065058",
    "sections": [
     "devices"
    ],
    "casesCounted": 41,
    "verdict": "PASS",
    "requests": 75,
-   "ranAt": "2026-10-18T18:03:13.162Z"
+   "ranAt": "2026-10-24T16:57:46.193Z"
   },
   {
    "run": "grants",
-   "testsAt": "8d553e1",
+   "testsAt": "0065058",
    "sections": [
     "grants"
    ],
    "casesCounted": 48,
    "verdict": "PASS",
    "requests": 131,
-   "ranAt": "2026-10-20T01:05:22.380Z"
+   "ranAt": "2026-10-24T17:18:22.217Z"
   },
   {
    "run": "grant-matrix",
-   "testsAt": "8d553e1",
+   "testsAt": "0065058",
    "sections": [
     "grant-matrix"
    ],
    "casesCounted": 76,
    "verdict": "PASS",
    "requests": 534,
-   "ranAt": "2026-10-20T01:43:58.038Z"
+   "ranAt": "2026-10-24T17:49:08.837Z"
   },
   {
    "run": "frame-lifecycle",
-   "testsAt": "8d553e1",
+   "testsAt": "0065058",
    "sections": [
     "frame-lifecycle"
    ],
    "casesCounted": 10,
    "verdict": "PASS",
    "requests": 42,
-   "ranAt": "2026-10-20T01:50:46.245Z"
+   "ranAt": "2026-10-24T17:54:11.861Z"
   },
   {
    "run": "qa-s3",
-   "testsAt": "ace595b",
+   "testsAt": "0065058",
    "sections": [
     "qa-s3"
    ],
    "casesCounted": 6,
    "verdict": "PASS",
    "requests": 17,
-   "ranAt": "2026-10-18T06:44:33.351Z"
+   "ranAt": "2026-10-24T17:56:02.370Z"
   },
   {
    "run": "recovery",
-   "testsAt": "3c9647e",
+   "testsAt": "0065058",
    "sections": [
     "recovery"
    ],
    "casesCounted": 48,
    "verdict": "PASS",
    "requests": 94,
-   "ranAt": "2026-10-18T18:35:40.868Z"
+   "ranAt": "2026-10-24T18:02:57.932Z"
   },
   {
    "run": "hints",
-   "testsAt": "8d553e1",
+   "testsAt": "0065058",
    "sections": [
     "hints"
    ],
-   "casesCounted": 23,
+   "casesCounted": 22,
    "verdict": "PASS",
-   "requests": 75,
-   "ranAt": "2026-10-20T02:16:22.438Z"
+   "requests": 72,
+   "ranAt": "2026-10-24T18:09:56.847Z"
   },
   {
    "run": "texts",
-   "testsAt": "8d553e1",
+   "testsAt": "0065058",
    "sections": [
     "texts"
    ],
    "casesCounted": 19,
    "verdict": "PASS",
    "requests": 57,
-   "ranAt": "2026-10-20T02:26:04.651Z"
+   "ranAt": "2026-10-24T18:18:15.347Z"
   },
   {
    "run": "isolate",
-   "testsAt": "8d553e1",
+   "testsAt": "0065058",
    "sections": [
     "isolate"
    ],
    "casesCounted": 13,
    "verdict": "PASS",
    "requests": 45,
-   "ranAt": "2026-10-20T01:57:05.072Z"
+   "ranAt": "2026-10-24T18:23:31.793Z"
   },
   {
    "run": "places",
-   "testsAt": "8d553e1",
+   "testsAt": "0065058",
    "sections": [
     "places"
    ],
    "casesCounted": 12,
    "verdict": "PASS",
    "requests": 36,
-   "ranAt": "2026-10-20T02:33:20.903Z"
+   "ranAt": "2026-10-24T18:30:02.378Z"
+  },
+  {
+   "run": "core",
+   "testsAt": "0065058",
+   "sections": [
+    "core"
+   ],
+   "casesCounted": 46,
+   "verdict": "PASS",
+   "requests": 210,
+   "ranAt": "2026-10-24T18:46:10.573Z"
+  },
+  {
+   "run": "domain",
+   "testsAt": "0065058",
+   "sections": [
+    "domain"
+   ],
+   "casesCounted": 30,
+   "verdict": "PASS",
+   "requests": 96,
+   "ranAt": "2026-10-24T18:52:48.656Z"
   }
  ],
- "cases": 366,
+ "cases": 442,
  "circuits": [
   "activate_initial_device_with_evm_k256",
   "add_device_with_evm_k256",
@@ -225,16 +247,16 @@
  "totalsByLayer": {
   "positive: proved at the proof server": 38,
   "negative: refused at the proof server, layer constraint (constraint on a declared read (+ node transcript replay))": 79,
-  "positive controls proved through a negative's own patched copy before its attempt": 246,
-  "negative: refused at the proof server, layer constraint (constraint)": 230,
+  "positive controls proved through a negative's own patched copy before its attempt": 306,
+  "negative: refused at the proof server, layer constraint (constraint)": 306,
   "negative: refused at the proof server, layer decoding": 3,
   "negative: runtime-only (generated JavaScript; prover level unreachable, reason recorded)": 7,
   "positive: state-only (simulator state check, no proof)": 8,
   "not applicable (reason recorded)": 1
  },
  "controls": {
-  "own": 246,
-  "shared": 66
+  "own": 306,
+  "shared": 82
  },
  "verdict": "PASS",
  "results": [
@@ -307,7 +329,7 @@
    "declaredRead": null,
    "expect": "identity point",
    "assertsNamed": [
-    "evm_k256: device key is the point at infinity"
+    "k256: the key is the point at infinity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -328,7 +350,7 @@
    "declaredRead": null,
    "expect": "expected value of type Secp256k1Point",
    "assertsNamed": [
-    "evm_k256: device key is the point at infinity"
+    "k256: the key is the point at infinity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -593,7 +615,7 @@
   {
    "section": "seam",
    "circuit": "rotate_enc_key_with_evm_k256",
-   "case": "binding: domain name",
+   "case": "binding: domain name (\"Midnight Passport Account\", not \"Midnight Passport\")",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
@@ -638,6 +660,28 @@
    "section": "seam",
    "circuit": "rotate_enc_key_with_evm_k256",
    "case": "binding: domain verifyingContract",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "seam: binding: newKey: signed K', executed K",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "seam",
+   "circuit": "rotate_enc_key_with_evm_k256",
+   "case": "binding: domain verifyingContract: P with its last byte changed",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
@@ -773,9 +817,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -795,9 +839,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -817,9 +861,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero"
+    "k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -840,7 +884,7 @@
    "declaredRead": null,
    "expect": "identity point",
    "assertsNamed": [
-    "evm_k256: device key is the point at infinity",
+    "k256: the key is the point at infinity",
     "unknown device entry",
     "invalid signature"
    ],
@@ -1983,7 +2027,7 @@
   {
    "section": "devices",
    "circuit": "add_device_with_evm_k256",
-   "case": "add_device: an unregistered tag, valid signature over the passkey fields (the 117-byte class assert refuses the same tag)",
+   "case": "add_device: an unregistered tag, valid signature over the EVM target's fields (the 52-byte class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
@@ -1991,7 +2035,7 @@
    "expect": "evm_k256: not a registered device tag",
    "assertsNamed": [
     "evm_k256: not a registered device tag",
-    "descriptor: not a 117-byte device tag"
+    "descriptor: not a 52-byte device tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -2005,7 +2049,7 @@
   {
    "section": "devices",
    "circuit": "add_device_with_evm_k256",
-   "case": "add_device: another recipe's tag (k256 boot), valid signature over the passkey fields (the 117-byte class assert refuses the same tag)",
+   "case": "add_device: another recipe's tag (k256 boot), valid signature over the EVM target's fields (the 52-byte class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
@@ -2013,7 +2057,7 @@
    "expect": "evm_k256: not a registered device tag",
    "assertsNamed": [
     "evm_k256: not a registered device tag",
-    "descriptor: not a 117-byte device tag"
+    "descriptor: not a 52-byte device tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -2179,9 +2223,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero"
+    "k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -2944,7 +2988,7 @@
   {
    "section": "grants",
    "circuit": "issue_grant_with_evm_k256",
-   "case": "issue_grant: an unregistered grant-id tag on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)",
+   "case": "issue_grant: an unregistered grant-id tag on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
@@ -2952,7 +2996,7 @@
    "expect": "evm_k256: not a registered grant-id tag",
    "assertsNamed": [
     "evm_k256: not a registered grant-id tag",
-    "descriptor: not a 64-byte grant-id tag"
+    "descriptor: not a 52-byte grant-id tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -2966,7 +3010,7 @@
   {
    "section": "grants",
    "circuit": "issue_grant_with_evm_k256",
-   "case": "issue_grant: another recipe's tag (the passkey device tag) on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)",
+   "case": "issue_grant: another recipe's tag (the passkey device tag) on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
@@ -2974,7 +3018,7 @@
    "expect": "evm_k256: not a registered grant-id tag",
    "assertsNamed": [
     "evm_k256: not a registered grant-id tag",
-    "descriptor: not a 64-byte grant-id tag"
+    "descriptor: not a 52-byte grant-id tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -3088,7 +3132,7 @@
   {
    "section": "grants",
    "circuit": "revoke_grant_with_evm_k256",
-   "case": "revoke_grant: a planted grant named with an unregistered grant-id tag on a passkey grantee's fields, valid signature (the 64-byte grant-id class assert refuses the same tag)",
+   "case": "revoke_grant: a planted grant named with an unregistered grant-id tag on an evm_k256 grantee's fields, valid signature (the 52-byte grant-id class assert refuses the same tag)",
    "kind": "negative",
    "layer": "constraint",
    "enforcement": "constraint",
@@ -3096,7 +3140,7 @@
    "expect": "evm_k256: not a registered grant-id tag",
    "assertsNamed": [
     "evm_k256: not a registered grant-id tag",
-    "descriptor: not a 64-byte grant-id tag"
+    "descriptor: not a 52-byte grant-id tag"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -3774,9 +3818,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -3796,9 +3840,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -3818,9 +3862,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero"
+    "k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -4192,9 +4236,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4214,9 +4258,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4236,9 +4280,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero"
+    "k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -4752,9 +4796,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4774,9 +4818,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid grant signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -4796,9 +4840,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero"
+    "k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -5864,9 +5908,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -6009,9 +6053,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero",
+    "k256: signature scalar is zero",
     "invalid signature"
    ],
    "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
@@ -6031,9 +6075,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: signature scalar is zero",
+   "expect": "k256: signature scalar is zero",
    "assertsNamed": [
-    "evm_k256: signature scalar is zero"
+    "k256: signature scalar is zero"
    ],
    "attribution": "the zero-scalar assert alone in the copy (with inverses of 0 taken as 0 the signature check passes there); at the proof server the relation's inverse of s = 0 refuses as well",
    "simulator": "PASS",
@@ -6314,10 +6358,10 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value",
-    "evm_k256: hash hint does not match the hash"
+    "evm_identity: byte hint does not match its value",
+    "evm_identity: hash hint does not match the hash"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6336,30 +6380,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: hash hint does not match the hash",
+   "expect": "evm_identity: hash hint does not match the hash",
    "assertsNamed": [
-    "evm_k256: hash hint does not match the hash"
-   ],
-   "attribution": null,
-   "simulator": "PASS",
-   "prover": "PASS",
-   "control": {
-    "kind": "own",
-    "verdict": "PASS"
-   },
-   "reasonRecorded": null
-  },
-  {
-   "section": "hints",
-   "circuit": "rotate_enc_key_with_evm_k256",
-   "case": "device seam: a byte of the account hash outside the verifying contract",
-   "kind": "negative",
-   "layer": "constraint",
-   "enforcement": "constraint",
-   "declaredRead": null,
-   "expect": "evm_k256: hash hint does not match the hash",
-   "assertsNamed": [
-    "evm_k256: hash hint does not match the hash"
+    "evm_identity: hash hint does not match the hash"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -6378,9 +6401,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: digest hint does not match the digest",
+   "expect": "k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_k256: digest hint does not match the digest",
+    "k256: digest hint does not match the digest",
     "invalid signature"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -6403,7 +6426,7 @@
    "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
     "evm_k256: word hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6441,10 +6464,10 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value",
-    "evm_k256: hash hint does not match the hash"
+    "evm_identity: byte hint does not match its value",
+    "evm_identity: hash hint does not match the hash"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6466,7 +6489,7 @@
    "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
     "evm_k256: word hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6488,7 +6511,7 @@
    "expect": "display: the site amount label does not match the value",
    "assertsNamed": [
     "display: the site amount label does not match the value",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6529,7 +6552,7 @@
    "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
     "evm_k256: word hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6548,10 +6571,10 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "evm_identity: byte hint does not match its value",
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6570,9 +6593,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "assertsNamed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -6591,9 +6614,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "assertsNamed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -6612,10 +6635,10 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "assertsNamed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y",
-    "evm_k256: digest hint does not match the digest"
+    "ed25519: the encoding does not match the point's y",
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6637,7 +6660,7 @@
    "expect": "display: the base58 carry hints do not split the leading digits",
    "assertsNamed": [
     "display: the base58 carry hints do not split the leading digits",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6677,10 +6700,10 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "evm_identity: byte hint does not match its value",
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6702,7 +6725,7 @@
    "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
     "evm_k256: word hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6724,7 +6747,7 @@
    "expect": "display: the date and time do not match the value",
    "assertsNamed": [
     "display: the date and time do not match the value",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6743,10 +6766,10 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "evm_identity: byte hint does not match its value",
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6768,7 +6791,7 @@
    "expect": "evm_k256: word hint does not match its value",
    "assertsNamed": [
     "evm_k256: word hint does not match its value",
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
    "simulator": "PASS",
@@ -6787,9 +6810,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: digest hint does not match the digest",
+   "expect": "k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_k256: digest hint does not match the digest",
+    "k256: digest hint does not match the digest",
     "invalid grant signature"
    ],
    "attribution": "the named asserts together: one input breaks each of them, and none separates them",
@@ -7040,9 +7063,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "assertsNamed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7208,9 +7231,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: digest hint does not match the digest",
+   "expect": "k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7292,9 +7315,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value"
+    "evm_identity: byte hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7397,9 +7420,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value"
+    "evm_identity: byte hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7418,9 +7441,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: digest hint does not match the digest",
+   "expect": "k256: digest hint does not match the digest",
    "assertsNamed": [
-    "evm_k256: digest hint does not match the digest"
+    "k256: digest hint does not match the digest"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7460,9 +7483,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "evm_k256: byte hint does not match its value",
+   "expect": "evm_identity: byte hint does not match its value",
    "assertsNamed": [
-    "evm_k256: byte hint does not match its value"
+    "evm_identity: byte hint does not match its value"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7481,9 +7504,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "assertsNamed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7502,9 +7525,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "assertsNamed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7523,9 +7546,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "assertsNamed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7544,9 +7567,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "assertsNamed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7565,9 +7588,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "assertsNamed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7586,9 +7609,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "assertsNamed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7607,9 +7630,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "assertsNamed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7628,9 +7651,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "assertsNamed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7649,9 +7672,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "assertsNamed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7670,9 +7693,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "assertsNamed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7691,9 +7714,9 @@
    "layer": "constraint",
    "enforcement": "constraint",
    "declaredRead": null,
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "assertsNamed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "attribution": null,
    "simulator": "PASS",
@@ -7721,6 +7744,1647 @@
    "prover": "PASS",
    "control": {
     "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "rotate_enc_key_with_evm_k256",
+   "case": "rotate_enc_key: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "rotate_enc_key_with_evm_k256",
+   "case": "rotate_enc_key: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "rotate_enc_key_with_evm_k256",
+   "case": "rotate_enc_key: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "append_inbox_with_evm_k256",
+   "case": "append_inbox: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "append_inbox_with_evm_k256",
+   "case": "append_inbox: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "append_inbox_with_evm_k256",
+   "case": "append_inbox: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_unshielded_with_evm_k256",
+   "case": "withdraw_unshielded: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_unshielded_with_evm_k256",
+   "case": "withdraw_unshielded: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_unshielded_with_evm_k256",
+   "case": "withdraw_unshielded: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_with_evm_k256",
+   "case": "withdraw_shielded: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_with_evm_k256",
+   "case": "withdraw_shielded: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_with_evm_k256",
+   "case": "withdraw_shielded: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+   "case": "withdraw_shielded_to_contract: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+   "case": "withdraw_shielded_to_contract: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+   "case": "withdraw_shielded_to_contract: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "add_device_with_evm_k256",
+   "case": "add_device: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "add_device_with_evm_k256",
+   "case": "add_device: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "add_device_with_evm_k256",
+   "case": "add_device: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "remove_device_with_evm_k256",
+   "case": "remove_device: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "remove_device_with_evm_k256",
+   "case": "remove_device: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "remove_device_with_evm_k256",
+   "case": "remove_device: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "issue_grant_with_evm_k256",
+   "case": "issue_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "issue_grant_with_evm_k256",
+   "case": "issue_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "issue_grant_with_evm_k256",
+   "case": "issue_grant: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "revoke_grant_with_evm_k256",
+   "case": "revoke_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "revoke_grant_with_evm_k256",
+   "case": "revoke_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "revoke_grant_with_evm_k256",
+   "case": "revoke_grant: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "revoke_all_grants_with_evm_k256",
+   "case": "revoke_all_grants: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "revoke_all_grants_with_evm_k256",
+   "case": "revoke_all_grants: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "revoke_all_grants_with_evm_k256",
+   "case": "revoke_all_grants: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "publish_recovery_session_with_evm_k256",
+   "case": "publish_recovery_session: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "publish_recovery_session_with_evm_k256",
+   "case": "publish_recovery_session: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "publish_recovery_session_with_evm_k256",
+   "case": "publish_recovery_session: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "recover_cancel_with_evm_k256",
+   "case": "recover_cancel: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "recover_cancel_with_evm_k256",
+   "case": "recover_cancel: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "recover_cancel_with_evm_k256",
+   "case": "recover_cancel: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
+   "case": "withdraw_unshielded_with_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid grant signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
+   "case": "withdraw_unshielded_with_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid grant signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
+   "case": "withdraw_unshielded_with_grant: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
+   "case": "withdraw_shielded_with_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid grant signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
+   "case": "withdraw_shielded_with_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid grant signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
+   "case": "withdraw_shielded_with_grant: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+   "case": "withdraw_shielded_to_contract_with_grant: signature r = 0 (the zero-scalar assert and the signature check)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid grant signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+   "case": "withdraw_shielded_to_contract_with_grant: signature s = 0 (the zero-scalar assert and the signature check; inverse of 0 taken as 0 in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "k256: signature scalar is zero",
+   "assertsNamed": [
+    "k256: signature scalar is zero",
+    "invalid grant signature"
+   ],
+   "attribution": "the zero-scalar assert and the signature check, which no input separates: in the circuit s = 0 has no inverse (the ECDSA relation is unsatisfiable) and r = 0 needs x(u1\u00b7G) = 0 mod n",
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+   "case": "withdraw_shielded_to_contract_with_grant: the key at infinity, an entry or grant planted for its address, with a signature that verifies against it (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "core",
+   "circuit": "activate_initial_device_with_evm_k256",
+   "case": "activation: the key at infinity under a boot commitment to its address (only the key rule fires in the copy)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "identity point",
+   "assertsNamed": [
+    "k256: the key is the point at infinity"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "rotate_enc_key_with_evm_k256",
+   "case": "rotate_enc_key: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "rotate_enc_key_with_evm_k256",
+   "case": "rotate_enc_key: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: rotate_enc_key: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "append_inbox_with_evm_k256",
+   "case": "append_inbox: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "append_inbox_with_evm_k256",
+   "case": "append_inbox: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: append_inbox: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_unshielded_with_evm_k256",
+   "case": "withdraw_unshielded: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_unshielded_with_evm_k256",
+   "case": "withdraw_unshielded: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: withdraw_unshielded: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_with_evm_k256",
+   "case": "withdraw_shielded: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_with_evm_k256",
+   "case": "withdraw_shielded: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: withdraw_shielded: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+   "case": "withdraw_shielded_to_contract: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_to_contract_with_evm_k256",
+   "case": "withdraw_shielded_to_contract: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: withdraw_shielded_to_contract: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "add_device_with_evm_k256",
+   "case": "add_device: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "add_device_with_evm_k256",
+   "case": "add_device: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: add_device: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "remove_device_with_evm_k256",
+   "case": "remove_device: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "remove_device_with_evm_k256",
+   "case": "remove_device: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: remove_device: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "issue_grant_with_evm_k256",
+   "case": "issue_grant: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "issue_grant_with_evm_k256",
+   "case": "issue_grant: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: issue_grant: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "revoke_grant_with_evm_k256",
+   "case": "revoke_grant: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "revoke_grant_with_evm_k256",
+   "case": "revoke_grant: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: revoke_grant: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "revoke_all_grants_with_evm_k256",
+   "case": "revoke_all_grants: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "revoke_all_grants_with_evm_k256",
+   "case": "revoke_all_grants: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: revoke_all_grants: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "publish_recovery_session_with_evm_k256",
+   "case": "publish_recovery_session: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "publish_recovery_session_with_evm_k256",
+   "case": "publish_recovery_session: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: publish_recovery_session: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "recover_cancel_with_evm_k256",
+   "case": "recover_cancel: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "recover_cancel_with_evm_k256",
+   "case": "recover_cancel: the device's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid signature",
+   "assertsNamed": [
+    "invalid signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: recover_cancel: the device's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
+   "case": "withdraw_unshielded_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid grant signature",
+   "assertsNamed": [
+    "invalid grant signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_unshielded_with_grant_evm_k256",
+   "case": "withdraw_unshielded_with_grant: the grantee's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid grant signature",
+   "assertsNamed": [
+    "invalid grant signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: withdraw_unshielded_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
+   "case": "withdraw_shielded_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid grant signature",
+   "assertsNamed": [
+    "invalid grant signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_with_grant_evm_k256",
+   "case": "withdraw_shielded_with_grant: the grantee's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid grant signature",
+   "assertsNamed": [
+    "invalid grant signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: withdraw_shielded_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+   "case": "withdraw_shielded_to_contract_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid grant signature",
+   "assertsNamed": [
+    "invalid grant signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "own",
+    "verdict": "PASS"
+   },
+   "reasonRecorded": null
+  },
+  {
+   "section": "domain",
+   "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
+   "case": "withdraw_shielded_to_contract_with_grant: the grantee's key signs the honest message under the V1 domain with a chainId (3791715944)",
+   "kind": "negative",
+   "layer": "constraint",
+   "enforcement": "constraint",
+   "declaredRead": null,
+   "expect": "invalid grant signature",
+   "assertsNamed": [
+    "invalid grant signature"
+   ],
+   "attribution": null,
+   "simulator": "PASS",
+   "prover": "PASS",
+   "control": {
+    "kind": "shared",
+    "with": "domain: withdraw_shielded_to_contract_with_grant: the grantee's key signs the honest message under the per-account domain (name \"Midnight Passport Account\", verifyingContract from the account)",
     "verdict": "PASS"
    },
    "reasonRecorded": null
