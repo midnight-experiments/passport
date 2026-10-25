@@ -1,6 +1,10 @@
 // Arm `sol_ed25519`, offline (no node, no proof server): the key relation,
 // the derivations, the seed helper, the blind protocol, key admissibility
-// at the client and runtime layers, and activation in the simulator.
+// at the client and runtime layers, activation in the simulator, and the
+// account's deploy roster: allCircuits() of wave-deploy.ts, which follows the
+// client's arm registry, is exactly the compiled contract's provable circuits,
+// the arm's sixteen among them (a circuit left out of the roster is never
+// deployed, and an account without it cannot be connected).
 //
 // Independent oracles: Node's OpenSSL Ed25519
 // (node:crypto) and noble with { zip215: false } plus explicit policy checks
@@ -30,6 +34,7 @@ import { solKeyHints } from '../wallet/signer-sol-ed25519.js';
 const kin = (p: { x: bigint; y: bigint }): [{ x: bigint; y: bigint }, bigint[], bigint[]] => { const h = solKeyHints(p); return [p, h.pk_bytes, h.pk_x]; };
 import { entryCall, bootCall, grantIdCall, derive, padTag } from '../wallet/descriptors.js';
 import { deriveBlind } from '../wallet/blind.js';
+import { allCircuits, ARMS } from '../wallet/wave-deploy.js';
 import {
   ED25519_L, SolEd25519Device, decodeSolSignature, deriveSolBlind, parseSolRosterEntry, solBlindMessage,
   solPublicKeyBytes, solPublicKeyFromSeed, solPublicKeyPoint, solRosterEntry, solSoftwareSigner,
@@ -347,6 +352,18 @@ async function simCall(sim: Sim, circuit: string, ...args: unknown[]) {
   const idKey = new Uint8Array(32); idKey[0] = 1;
   const simO = await deploySim(sha256(padTag('midnight:account:boot:sol:v1'), salt, idKey, blind));
   await refused(G, 'identity key refused at activation (A != O in the module\'s ed25519 class)', 'runtime', /the Ed25519 key is the identity/, () => simCall(simO, 'activate_initial_device_with_sol_ed25519', ...kin(O), salt, blind));
+}
+
+// ── 7. The deploy roster ────────────────────────────────────────────────────
+{
+  const G = '7 deploy roster';
+  const provable = Object.keys(new (Contract as any)(makeWitnesses()).impureCircuits).sort();
+  const roster = [...allCircuits()].sort();
+  ok(G, "allCircuits() is exactly the compiled contract's provable circuits", JSON.stringify(roster) === JSON.stringify(provable),
+    `roster ${roster.length}, provable ${provable.length}; missing ${provable.filter((c) => !roster.includes(c)).join(', ') || 'none'}; extra ${roster.filter((c) => !provable.includes(c)).join(', ') || 'none'}`);
+  const arm = roster.filter((c) => /_(with|with_grant)_sol_ed25519$/.test(c));
+  ok(G, 'the sixteen sol_ed25519 circuits are in the roster', arm.length === 16, `${arm.length}`);
+  ok(G, 'sol_ed25519 is a registered arm', ARMS.includes('sol_ed25519'), ARMS.join(', '));
 }
 
 // ── report ───────────────────────────────────────────────────────────────────

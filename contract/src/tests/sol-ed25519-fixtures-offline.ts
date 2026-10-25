@@ -23,10 +23,15 @@
 //     are refused by the probe and by the client; a device's signature
 //     offered for another device's request is refused before proving, and
 //     no hardware signer is asked for the raw format.
+//   - The identity key on the circuit path: the probe encodes the key without
+//     the descriptor module's A != O, so the core alone must refuse a
+//     signature for A = O, whose verification equation holds for every
+//     message (R = [s]B, [k]O = O).
 //
 // Writes $EVIDENCE_DIR/sol-ed25519-fixtures-offline.json when EVIDENCE_DIR is set.
 
 import * as fs from 'node:fs';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import * as path from 'node:path';
 import { createHash, createHmac, createPrivateKey, createPublicKey, pbkdf2Sync, sign as osslSign } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -293,6 +298,30 @@ function assertOffchainHead(b: Uint8Array, key: Uint8Array): void {
   const { signer } = replayDevice(t.family, key, [{ signed: unhex(t.signed), signature: unhex(t.signature) }]);
   const r = await new SolEd25519Device({ publicKey: key, blind: new Uint8Array(32), signer: { ...signer, others: () => [unhex(l.key)] } }).signApproval(enc.encode(t.text));
   ok(G, 'control: the right device passes the same check', eq(r.signature, unhex(t.signature)));
+}
+
+// ── 8. The identity key on the circuit path ─────────────────────────────────
+// The Ed25519 core refuses the identity key itself, whoever calls it. The
+// probe passes ed25519_verify the key's checked encoding without the
+// descriptor module's A != O, so a signature made for A = O (R = [s]B, any
+// message: [s]B == R + [k]O) reaches the verification equation, which holds.
+{
+  const G = '8 the identity key on the circuit path';
+  const O = { x: 0n, y: 1n };
+  const s = 0x1f2e3d4c5b6a79881f2e3d4c5b6a79881f2e3d4c5b6a7988n;
+  const R = ed25519.Point.BASE.multiply(s);
+  ok(G, 'the forged signature satisfies the verification equation for A = O ([s]B == R + [k]O = R, for any k)', ed25519.Point.BASE.multiply(s).equals(R.add(ed25519.Point.ZERO)));
+  const sig = { r: { x: R.toAffine().x, y: R.toAffine().y }, s };
+  const h = solKeyHints(O), r = solSignatureHints(sig);
+  for (const n of LENGTHS) {
+    const text = new Uint8Array(n).fill(0x41);
+    for (const offchain of [false, true]) {
+      let res: unknown;
+      try { res = (Probe.pureCircuits as any)[`probe_sol_ed25519_verify_${n}`](offchain, text, sig, O, h.pk_bytes, h.pk_x, r.r_bytes, r.r_x); } catch (e: any) { res = String(e?.message ?? e); }
+      ok(G, `${n}-byte text, ${offchain ? 'off-chain' : 'raw'}: the identity key refused by the core`, res !== true && /the key is the identity/.test(String(res)),
+        res === true ? 'accepted (expected a refusal)' : String(res).slice(0, 160));
+    }
+  }
 }
 
 // ── report ───────────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ import { COORDINATE_DISPLAY_ORDER, coordinateHex } from '../wallet/descriptors.j
 import { solBlindMessage, solDeviceMessageCircuit, solGranteeMessageCircuit } from '../wallet/signer-sol-ed25519.js';
 import { granteeBlindMessageBytes } from '../wallet/blind.js';
 import {
-  SOL_HEAD_LENGTH, SOL_OFFCHAIN_DOMAIN, SOL_PARSE_BOUND, SOL_RAW_HEAD, assertSafeSolMessage, assertSolOffchainMessage, solSignedMessage, claimText, digitsOf, labelBytes, nibblesOf, solAmountShow, solBase58, solCoinShow, solDeviceMessageText, solFrameNibbles,
+  SOL_FIRST_LINE, SOL_HEAD_LENGTH, SOL_OFFCHAIN_DOMAIN, SOL_PARSE_BOUND, SOL_RAW_HEAD, assertSafeSolMessage, assertSolBlindRequest, assertSolOffchainMessage, solSignedMessage, claimText, digitsOf, labelBytes, nibblesOf, solAmountShow, solBase58, solCoinShow, solDeviceMessageText, solFrameNibbles,
   solGranteeArg, solGranteeMessageText, solGranteeShow, solGrantShow, solMessageBytes, solScopeShow, solShow,
   solTargetArg, solTargetShow, type SolAmount, type SolCoin, type SolDeviceContext, type SolDeviceOperation,
   type SolGranteeContext, type SolGranteeFields, type SolGranteeOperation, type SolTargetFields,
@@ -359,6 +359,18 @@ function parseOffchainV1(b: Uint8Array): { ok: boolean; signers: Uint8Array[]; m
     parseLegacyMessage(at(SOL_PARSE_BOUND)).ok && !parseLegacyMessage(at(SOL_PARSE_BOUND - 1)).ok);
   ok(G, 'and even then it never sanitizes: header (77, 105, 100) has no writable fee payer (105 >= 77)', !parseLegacyMessage(at(SOL_PARSE_BOUND)).sanitized);
   ok(G, 'as a transaction a "Midn" prefix claims 77 signatures (4,928 bytes before the message)', cu16(first, 0)![0] === 77);
+  // the client's guards at the bound itself: a raw approval and a raw blind
+  // request that would parse as a legacy message are refused, one byte
+  // shorter they are not (each otherwise well formed: printable ASCII after
+  // its fixed start)
+  const filled = (start: Uint8Array, n: number) => { const b = new Uint8Array(n).fill(0x41); b.set(start); return b; };
+  const approval = new TextEncoder().encode(`${SOL_RAW_HEAD}${SOL_FIRST_LINE}\n`);
+  const request = blindRequests[1].bytes;
+  const passes = (f: (b: Uint8Array) => void, b: Uint8Array) => { try { f(b); return true; } catch { return false; } };
+  ok(G, `a raw approval of ${SOL_PARSE_BOUND} bytes (the raw head, then a printable approval text) is refused by the client; ${SOL_PARSE_BOUND - 1} bytes is accepted`,
+    !passes(assertSafeSolMessage, filled(approval, SOL_PARSE_BOUND)) && passes(assertSafeSolMessage, filled(approval, SOL_PARSE_BOUND - 1)));
+  ok(G, `a raw blind request of ${SOL_PARSE_BOUND} bytes is refused by the client; ${SOL_PARSE_BOUND - 1} bytes is accepted`,
+    !passes(assertSolBlindRequest, filled(request, SOL_PARSE_BOUND)) && passes(assertSolBlindRequest, filled(request, SOL_PARSE_BOUND - 1)));
 }
 
 // ── 3. The site's label changes only the Site line ──────────────────────────
