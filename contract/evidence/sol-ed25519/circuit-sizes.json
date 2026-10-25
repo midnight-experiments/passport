@@ -1,11 +1,11 @@
 {
- "measuredAt": "2026-10-23",
- "what": "the 16 sol_ed25519 circuits of the current contracts: k and rows by zkir-v3 mock-compile, k also by the proof server's /k on these keys, ZKIR and key sizes and sha256 from the keyed build; the signed message is the 50-byte head of the signing format, then the text",
+ "measuredAt": "2026-10-25",
+ "what": "the 16 sol_ed25519 circuits of the current contracts: k and rows by zkir-v3 mock-compile, k also by the proof server's /k on these keys, ZKIR and key sizes and sha256 from the keyed build; the signed message is the 50-byte head of the signing format, then the text; proving times observed on these keys",
  "compiler": "0.35.0",
  "zkirVersion": "midnight-zkir 3.1.0-rc.1",
  "timings": {
-  "measuredAt": "2026-10-18T17:46:41Z",
-  "note": "proveOnEarlierBuild: wall times of /prove requests observed on the 2026-10-18 build, before the signing formats; each circuit that verifies a signature then signed the text alone, and the circuits and keys differ from these (rows below are the current ones). Indicative until re-measured on these keys.",
+  "measuredAt": "2026-10-25",
+  "note": "prove: wall times of /prove requests for the circuit's own key (the build's verifier key) during the constraint-level suite's run of record (2026-10-25 06:55-09:09 UTC, every section from a freshly restarted proof server): the honest calls and the positive controls through patched copies; nothing else ran in Docker but the local stack (node and indexer idle) and the suite, and the host ran no build or test during the run",
   "hardware": {
    "cpu": "Apple M4 Max",
    "logicalCpus": 16,
@@ -14,21 +14,19 @@
    "arch": "arm64"
   },
   "proofServer": {
-   "container": "the shared local proof server (Docker)",
+   "container": "a local proof server (Docker), one worker (MIDNIGHT_PROOF_SERVER_NUM_WORKERS=1, MALLOC_ARENA_MAX=2), restarted before each section",
    "image": "midnightntwrk/proof-server:9.0.0-rc.8",
    "imageId": "sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
    "repoDigests": "midnightntwrk/proof-server@sha256:2666c7bd7b4517f8ad135565387f98d14347a9ac715c6c466d4a8a852b545ecf",
-   "arch": "aarch64",
+   "arch": "arm64",
    "cpus": 12,
    "cpuLimit": "none (all engine CPUs)",
    "memoryLimit": "none (engine memory 32279617536 bytes)",
    "engineMemTotalBytes": 32279617536,
    "engineVersion": "29.8.2",
-   "startedAt": "2026-10-18T17:45:47.539843591Z",
-   "restartCount": 0,
-   "memoryPeakBytes": null,
-   "memoryPeakNote": "not readable: the image has no cat for docker exec (as upstream's p256 suite, which records null)",
-   "memoryUsageNow": "4.123GiB / 30.06GiB"
+   "memoryPeakGiB": 21.09,
+   "memoryPeakNote": "the highest of docker stats samples taken once a minute during the run",
+   "transportRetries": 0
   }
  },
  "circuits": [
@@ -55,11 +53,11 @@
      "sha256": "d8ff9ff9c036fad6a3208affc91e881ca6a6c12ede35535c55e0f2e1433b7e2e"
     }
    },
-   "proveOnEarlierBuild": {
+   "prove": {
     "n": 8,
-    "minMs": 1177,
-    "medianMs": 1390.5,
-    "maxMs": 1968,
+    "minMs": 848,
+    "medianMs": 966,
+    "maxMs": 1266,
     "otherKeyObservations": 0
    }
   },
@@ -86,11 +84,11 @@
      "sha256": "920bc46b1233fac41950271834aa8d1f9bec36e748319c57e871ec2c54fb16a7"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 3,
-    "minMs": 11098,
-    "medianMs": 11633,
-    "maxMs": 15658,
+   "prove": {
+    "n": 5,
+    "minMs": 7424,
+    "medianMs": 9672,
+    "maxMs": 9836,
     "otherKeyObservations": 0
    }
   },
@@ -117,11 +115,11 @@
      "sha256": "1692cb4aa487f82dd5492f2e04cd0a057e7d97d63c0afa1ee103a0b823c1bc95"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 9,
-    "minMs": 8827,
-    "medianMs": 9330,
-    "maxMs": 14521,
+   "prove": {
+    "n": 11,
+    "minMs": 7495,
+    "medianMs": 7561,
+    "maxMs": 9904,
     "otherKeyObservations": 0
    }
   },
@@ -148,11 +146,11 @@
      "sha256": "4777e0432e566051f27ad72b21c44fe5b595f3a91af14c83380e10c292368cd8"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 30,
-    "minMs": 8903,
-    "medianMs": 10528.5,
-    "maxMs": 18374,
+   "prove": {
+    "n": 32,
+    "minMs": 7392,
+    "medianMs": 7497.5,
+    "maxMs": 9907,
     "otherKeyObservations": 0
    }
   },
@@ -179,11 +177,11 @@
      "sha256": "725616dbb98379ce737861ae1b6c67c2cf295e9f2353b5908e7e6c27df464b1c"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 16,
-    "minMs": 7601,
-    "medianMs": 9742.5,
-    "maxMs": 14481,
+   "prove": {
+    "n": 18,
+    "minMs": 7632,
+    "medianMs": 7698.5,
+    "maxMs": 10044,
     "otherKeyObservations": 0
    }
   },
@@ -210,11 +208,11 @@
      "sha256": "bc301f2792fca1b24e6b9b994440b79f03f9d71d67ddf7c5628b4f3c99ab14d1"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 4,
-    "minMs": 9310,
-    "medianMs": 10771.5,
-    "maxMs": 12374,
+   "prove": {
+    "n": 6,
+    "minMs": 7794,
+    "medianMs": 8883.5,
+    "maxMs": 10159,
     "otherKeyObservations": 0
    }
   },
@@ -241,11 +239,11 @@
      "sha256": "cdf33b3273aab1e2c14471fc64199dd30584d555aaf6e6b0a2e33b8657397d16"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 25,
-    "minMs": 16364,
-    "medianMs": 19936,
-    "maxMs": 35809,
+   "prove": {
+    "n": 27,
+    "minMs": 14309,
+    "medianMs": 14438,
+    "maxMs": 20506,
     "otherKeyObservations": 0
    }
   },
@@ -272,11 +270,11 @@
      "sha256": "70334c4dfd85a77b421a092818dd48c10f1d0c7ce373f9207a2f09079e6f45e4"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 19,
-    "minMs": 17796,
-    "medianMs": 20421,
-    "maxMs": 27249,
+   "prove": {
+    "n": 21,
+    "minMs": 14710,
+    "medianMs": 14800,
+    "maxMs": 19952,
     "otherKeyObservations": 0
    }
   },
@@ -303,11 +301,11 @@
      "sha256": "70dea8ac456c9fed9a391b45c9708270c009afa5d78d39244b037b716cb87c09"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 9,
-    "minMs": 16952,
-    "medianMs": 20741,
-    "maxMs": 26916,
+   "prove": {
+    "n": 11,
+    "minMs": 14301,
+    "medianMs": 14519,
+    "maxMs": 20479,
     "otherKeyObservations": 0
    }
   },
@@ -334,11 +332,11 @@
      "sha256": "87ddfa0d6c9c76c8b0c24940275f130bca1307754d59a78d3c8ab1d9174cade6"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 36,
-    "minMs": 15224,
-    "medianMs": 19695.5,
-    "maxMs": 33710,
+   "prove": {
+    "n": 38,
+    "minMs": 14232,
+    "medianMs": 14511.5,
+    "maxMs": 21133,
     "otherKeyObservations": 0
    }
   },
@@ -365,11 +363,11 @@
      "sha256": "5e7373daa4f468fc6912d41eefbe9855c27971f10d7fede125406290db0d0585"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 8,
-    "minMs": 17890,
-    "medianMs": 18687,
-    "maxMs": 25759,
+   "prove": {
+    "n": 10,
+    "minMs": 14415,
+    "medianMs": 14819,
+    "maxMs": 21406,
     "otherKeyObservations": 0
    }
   },
@@ -396,11 +394,11 @@
      "sha256": "974c22ecd2566f1e330717b840ecc770d12f96c99260459249e89c2924fb3ab1"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 3,
-    "minMs": 19987,
-    "medianMs": 23171,
-    "maxMs": 28669,
+   "prove": {
+    "n": 5,
+    "minMs": 14415,
+    "medianMs": 19095,
+    "maxMs": 20241,
     "otherKeyObservations": 0
    }
   },
@@ -427,11 +425,11 @@
      "sha256": "7713dad073159a4a026b7bd24ef5b105d298459b08d0e8ce61a19c28a9508d27"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 15,
-    "minMs": 16819,
-    "medianMs": 18208,
-    "maxMs": 26070,
+   "prove": {
+    "n": 17,
+    "minMs": 14334,
+    "medianMs": 14549,
+    "maxMs": 22019,
     "otherKeyObservations": 0
    }
   },
@@ -458,13 +456,12 @@
      "sha256": "4989068e18075387d8be29cbcc23eb59569bb14518f67e01276154b36a3952ef"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 22,
-    "minMs": 16011,
-    "medianMs": 19968,
-    "maxMs": 30465,
-    "otherKeyObservations": 0,
-    "excludedRetried": 1
+   "prove": {
+    "n": 25,
+    "minMs": 14845,
+    "medianMs": 14913,
+    "maxMs": 21800,
+    "otherKeyObservations": 0
    }
   },
   {
@@ -490,11 +487,11 @@
      "sha256": "3f26f9a4e6af470ac06510ef6e36ef9f57bc0eed93677070feba2f667683834d"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 23,
-    "minMs": 18784,
-    "medianMs": 21396,
-    "maxMs": 26256,
+   "prove": {
+    "n": 25,
+    "minMs": 14828,
+    "medianMs": 14919,
+    "maxMs": 22486,
     "otherKeyObservations": 0
    }
   },
@@ -521,11 +518,11 @@
      "sha256": "455952713c60d6f3380a3ce3f725362c34e50295589d699069cf90074e16c822"
     }
    },
-   "proveOnEarlierBuild": {
-    "n": 46,
-    "minMs": 15002,
-    "medianMs": 15233,
-    "maxMs": 19981,
+   "prove": {
+    "n": 48,
+    "minMs": 14280,
+    "medianMs": 15103.5,
+    "maxMs": 22431,
     "otherKeyObservations": 0
    }
   }
