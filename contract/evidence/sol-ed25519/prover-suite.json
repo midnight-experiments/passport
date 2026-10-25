@@ -1,13 +1,12 @@
 {
  "suite": "sol-ed25519-prover (npm run test:sol-ed25519)",
  "build": {
-  "head": "19e0762",
-  "contracts": "19e0762",
-  "base": "the shared base commits, 1288784",
+  "head": "5cd0fd7",
+  "contracts": "5cd0fd7",
   "compiler": "compactc 0.35.0 (--feature-zkir-v3)",
-  "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8",
-  "snapshot": "a full key generation by compactc 0.35.0 of a contract tree whose ZKIR is byte-identical to 19e0762's, circuit by circuit",
-  "note": "The sections grants, grantee-scope-U, grantee-scope-S, grantee-scope-C, frame-lifecycle, readability, rules, module, hints, arm-asserts, display-module ran at 19e0762 on these keys. devices ran at f143be8 and activation, seam, replay, frame, custody, witness, recovery, field-rendering at 5efb61f, earlier revisions of this arm before the commits of this history were cut: each of their cases equals the case of the same name in the DRY at 19e0762 (circuit, kind, expected refusal, bypassed asserts, enforcement), and every proof-server request they made named the verifier key that these keys hold for its circuit, so no key they used has changed; none of them proves issue_grant_with_sol_ed25519, the one circuit whose key changed since. Every negative names its positive control (results[].control): its own, in the run's record, or one proved earlier in the same run through the same patched module file for the same circuit, named by the runs that record it and, for the earlier runs, derived from the run's own data by that rule. A negative of a check of the verification inputs or of a readable format, and every negative of hints, arm-asserts and display-module, has its own. One run per section (grantee-scope once per grantee twin), each on a freshly restarted proof server."
+  "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8 (one worker)",
+  "snapshot": "keys of the P6.2 keyed build of record (compactc 0.35.0, every contract of the compile script into empty folders at c4c9bd1; the account's 68 circuits byte-identical in ZKIR and keys to the previous build's; 5cd0fd7 changes three test files only)",
+  "note": "Every section ran at this head on these keys, one run per section on a freshly restarted proof server (grantee-scope once per grantee twin; formats in two halves of the fifteen verifying circuits, so that one proof server holds at most eight circuits' keys). Every negative names its positive control (results[].control): its own, or one proved earlier in the same run through the same patched module file for the same circuit. A negative of a check of the verification inputs or of a readable format, and every negative of hints, arm-asserts and display-module, has its own."
  },
  "method": "Each negative runs twice: in the simulator (the generated JavaScript, honest checks) and at the proof server with the JavaScript checks that would refuse it bypassed in a patched copy of the generated contract (and, where a value the runtime refuses must reach the transcript, named runtime functions overridden); each copy first proves the admissible call of the same circuit through itself, and each negative names the control its refusal is attributed to. A case passes only when it is refused at the expected layer and the refusal is attributed to the circuit under test.",
  "layers": [
@@ -21,104 +20,104 @@
    "sections": [
     "activation"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 7,
    "requests": 14,
    "zswapRequests": 0,
-   "startedAt": "2026-10-17T22:28:11.858Z",
-   "finishedAt": "2026-10-17T22:28:21.438Z",
+   "startedAt": "2026-10-25T06:55:36.559Z",
+   "finishedAt": "2026-10-25T06:55:44.157Z",
    "transportRetries": []
   },
   {
    "sections": [
     "seam"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 20,
    "requests": 42,
    "zswapRequests": 0,
-   "startedAt": "2026-10-17T22:28:24.654Z",
-   "finishedAt": "2026-10-17T22:32:01.424Z",
+   "startedAt": "2026-10-25T06:55:48.833Z",
+   "finishedAt": "2026-10-25T06:58:48.927Z",
    "transportRetries": []
   },
   {
    "sections": [
     "replay"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 5,
    "requests": 8,
    "zswapRequests": 0,
-   "startedAt": "2026-10-17T22:32:07.940Z",
-   "finishedAt": "2026-10-17T22:32:48.801Z",
+   "startedAt": "2026-10-25T06:58:53.605Z",
+   "finishedAt": "2026-10-25T06:59:26.230Z",
    "transportRetries": []
   },
   {
    "sections": [
     "frame"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 4,
    "requests": 12,
    "zswapRequests": 12,
-   "startedAt": "2026-10-17T22:44:40.193Z",
-   "finishedAt": "2026-10-17T22:46:39.188Z",
+   "startedAt": "2026-10-25T06:59:31.052Z",
+   "finishedAt": "2026-10-25T07:01:13.396Z",
    "transportRetries": []
   },
   {
    "sections": [
     "custody"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 14,
    "requests": 24,
    "zswapRequests": 0,
-   "startedAt": "2026-10-17T22:57:28.035Z",
-   "finishedAt": "2026-10-17T22:59:32.136Z",
+   "startedAt": "2026-10-25T07:01:18.867Z",
+   "finishedAt": "2026-10-25T07:03:01.747Z",
    "transportRetries": []
   },
   {
    "sections": [
     "witness"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 20,
    "requests": 38,
    "zswapRequests": 76,
-   "startedAt": "2026-10-17T23:26:08.544Z",
-   "finishedAt": "2026-10-17T23:33:22.361Z",
+   "startedAt": "2026-10-25T07:03:06.533Z",
+   "finishedAt": "2026-10-25T07:09:05.936Z",
    "transportRetries": []
   },
   {
    "sections": [
     "devices"
    ],
-   "build": "contracts and tests f143be8",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 34,
    "requests": 70,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T11:30:04.491Z",
-   "finishedAt": "2026-10-18T11:41:32.593Z",
+   "startedAt": "2026-10-25T07:09:10.773Z",
+   "finishedAt": "2026-10-25T07:19:27.838Z",
    "transportRetries": []
   },
   {
    "sections": [
     "grants"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 21,
    "requests": 45,
    "zswapRequests": 0,
-   "startedAt": "2026-10-20T02:33:26.956Z",
-   "finishedAt": "2026-10-20T02:40:08.652Z",
+   "startedAt": "2026-10-25T07:19:32.983Z",
+   "finishedAt": "2026-10-25T07:26:03.801Z",
    "transportRetries": []
   },
   {
@@ -126,13 +125,13 @@
     "grantee-scope",
     "SOL_GRANT_TWINS=U"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 22,
    "requests": 51,
    "zswapRequests": 0,
-   "startedAt": "2026-10-20T02:40:11.501Z",
-   "finishedAt": "2026-10-20T02:48:23.111Z",
+   "startedAt": "2026-10-25T07:26:08.936Z",
+   "finishedAt": "2026-10-25T07:34:15.255Z",
    "transportRetries": []
   },
   {
@@ -140,13 +139,13 @@
     "grantee-scope",
     "SOL_GRANT_TWINS=S"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 29,
    "requests": 68,
    "zswapRequests": 141,
-   "startedAt": "2026-10-20T02:48:25.826Z",
-   "finishedAt": "2026-10-20T02:58:31.298Z",
+   "startedAt": "2026-10-25T07:34:20.056Z",
+   "finishedAt": "2026-10-25T07:44:37.862Z",
    "transportRetries": []
   },
   {
@@ -154,134 +153,162 @@
     "grantee-scope",
     "SOL_GRANT_TWINS=C"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 29,
    "requests": 68,
    "zswapRequests": 141,
-   "startedAt": "2026-10-20T02:58:34.040Z",
-   "finishedAt": "2026-10-20T03:09:02.098Z",
+   "startedAt": "2026-10-25T07:44:42.657Z",
+   "finishedAt": "2026-10-25T07:55:24.774Z",
    "transportRetries": []
   },
   {
    "sections": [
     "frame-lifecycle"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 8,
    "requests": 22,
    "zswapRequests": 12,
-   "startedAt": "2026-10-20T03:09:04.828Z",
-   "finishedAt": "2026-10-20T03:12:43.992Z",
+   "startedAt": "2026-10-25T07:55:29.608Z",
+   "finishedAt": "2026-10-25T07:59:17.936Z",
    "transportRetries": []
   },
   {
    "sections": [
     "recovery"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 48,
    "requests": 96,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T00:54:24.285Z",
-   "finishedAt": "2026-10-18T01:07:51.546Z",
+   "startedAt": "2026-10-25T07:59:24.377Z",
+   "finishedAt": "2026-10-25T08:10:57.832Z",
    "transportRetries": []
   },
   {
    "sections": [
     "field-rendering"
    ],
-   "build": "contracts and tests 5efb61f",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 5,
    "requests": 7,
    "zswapRequests": 0,
-   "startedAt": "2026-10-18T01:17:29.235Z",
-   "finishedAt": "2026-10-18T01:18:17.631Z",
+   "startedAt": "2026-10-25T08:11:02.689Z",
+   "finishedAt": "2026-10-25T08:11:45.041Z",
    "transportRetries": []
   },
   {
    "sections": [
     "readability"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 37,
    "requests": 56,
    "zswapRequests": 18,
-   "startedAt": "2026-10-20T03:12:49.882Z",
-   "finishedAt": "2026-10-20T03:21:33.617Z",
+   "startedAt": "2026-10-25T08:11:49.866Z",
+   "finishedAt": "2026-10-25T08:21:14.254Z",
    "transportRetries": []
   },
   {
    "sections": [
     "rules"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 8,
    "requests": 19,
    "zswapRequests": 0,
-   "startedAt": "2026-10-20T03:21:39.862Z",
-   "finishedAt": "2026-10-20T03:25:08.945Z",
+   "startedAt": "2026-10-25T08:21:21.275Z",
+   "finishedAt": "2026-10-25T08:24:35.036Z",
    "transportRetries": []
   },
   {
    "sections": [
     "module"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 6,
    "requests": 17,
    "zswapRequests": 0,
-   "startedAt": "2026-10-20T03:25:11.751Z",
-   "finishedAt": "2026-10-20T03:28:11.444Z",
+   "startedAt": "2026-10-25T08:24:37.809Z",
+   "finishedAt": "2026-10-25T08:27:37.331Z",
    "transportRetries": []
   },
   {
    "sections": [
     "hints"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 30,
    "requests": 88,
    "zswapRequests": 0,
-   "startedAt": "2026-10-20T03:28:14.212Z",
-   "finishedAt": "2026-10-20T03:37:38.667Z",
+   "startedAt": "2026-10-25T08:27:42.098Z",
+   "finishedAt": "2026-10-25T08:37:28.324Z",
    "transportRetries": []
   },
   {
    "sections": [
     "arm-asserts"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 19,
    "requests": 56,
    "zswapRequests": 0,
-   "startedAt": "2026-10-20T03:37:41.499Z",
-   "finishedAt": "2026-10-20T03:45:30.653Z",
+   "startedAt": "2026-10-25T08:37:33.690Z",
+   "finishedAt": "2026-10-25T08:45:24.150Z",
+   "transportRetries": []
+  },
+  {
+   "sections": [
+    "formats",
+    "SOL_ED25519_FORMATS_CIRCUITS=half 1"
+   ],
+   "build": "contracts and tests 5cd0fd7",
+   "verdict": "PASS",
+   "cases": 40,
+   "requests": 48,
+   "zswapRequests": 24,
+   "startedAt": "2026-10-25T08:45:29.556Z",
+   "finishedAt": "2026-10-25T08:52:25.215Z",
+   "transportRetries": []
+  },
+  {
+   "sections": [
+    "formats",
+    "SOL_ED25519_FORMATS_CIRCUITS=half 2"
+   ],
+   "build": "contracts and tests 5cd0fd7",
+   "verdict": "PASS",
+   "cases": 35,
+   "requests": 42,
+   "zswapRequests": 24,
+   "startedAt": "2026-10-25T08:52:31.757Z",
+   "finishedAt": "2026-10-25T08:58:52.504Z",
    "transportRetries": []
   },
   {
    "sections": [
     "display-module"
    ],
-   "build": "contracts and tests 19e0762",
+   "build": "contracts and tests 5cd0fd7",
    "verdict": "PASS",
    "cases": 24,
    "requests": 71,
    "zswapRequests": 0,
-   "startedAt": "2026-10-20T03:45:33.472Z",
-   "finishedAt": "2026-10-20T03:55:45.929Z",
+   "startedAt": "2026-10-25T08:58:58.545Z",
+   "finishedAt": "2026-10-25T09:08:17.029Z",
    "transportRetries": []
   }
  ],
- "cases": 390,
+ "cases": 465,
  "circuits": [
   "(message text)",
   "(state)",
@@ -304,14 +331,14 @@
   "withdraw_unshielded_with_sol_ed25519"
  ],
  "totalsByLayer": {
-  "positive: proved": 55,
-  "negative: refused at the proof server, constraint (constraint)": 227,
+  "positive: proved": 85,
+  "negative: refused at the proof server, constraint (constraint)": 257,
   "positive control proved through a negative's copy": 224,
   "negative: refused at the proof server, constraint (constraint on a declared read (+ node transcript replay))": 81,
   "negative: refused at the proof server, decoding": 6,
   "negative: refused by the generated JavaScript only (prover level unreachable, reason recorded)": 7,
   "not applicable (reason recorded)": 2,
-  "state check (simulator)": 2,
+  "state check (simulator)": 17,
   "message text check": 10
  },
  "verdict": "PASS",
@@ -343,11 +370,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "the identity as the device key (its boot commitment committed): refused by the descriptor module's A != O",
     "own": true,
@@ -356,7 +378,12 @@
       "descriptor: the Ed25519 key is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -378,11 +405,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "wrong blind",
     "own": true,
@@ -391,7 +413,12 @@
       "boot commitment mismatch"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -413,11 +440,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "wrong blind",
     "own": false,
@@ -426,7 +448,12 @@
       "boot commitment mismatch"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -448,11 +475,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "wrong blind",
     "own": false,
@@ -461,7 +483,12 @@
       "boot commitment mismatch"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -481,11 +508,6 @@
     "layer": "decoding",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "decoding",
-    "rule": "input-decoding",
-    "expectedKind": "decoding"
-   },
    "control": {
     "case": "a small-order key (order 8) (honest-toolchain decoding refusal; in-circuit: the subgroup assignment)",
     "own": true,
@@ -493,7 +515,12 @@
      "bypassed": [],
      "overrides": "Curve25519Point validator overridden (counted)"
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "decoding",
+    "rule": "input-decoding",
+    "expectedKind": "decoding"
    }
   },
   {
@@ -513,11 +540,6 @@
     "layer": "decoding",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "decoding",
-    "rule": "input-decoding",
-    "expectedKind": "decoding"
-   },
    "control": {
     "case": "a small-order key (order 8) (honest-toolchain decoding refusal; in-circuit: the subgroup assignment)",
     "own": false,
@@ -525,7 +547,12 @@
      "bypassed": [],
      "overrides": "Curve25519Point validator overridden (counted)"
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "decoding",
+    "rule": "input-decoding",
+    "expectedKind": "decoding"
    }
   },
   {
@@ -554,11 +581,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: another new key at execution (consistent display inputs)",
     "own": true,
@@ -567,7 +589,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -589,11 +616,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: another new key at execution (consistent display inputs)",
     "own": false,
@@ -602,7 +624,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -624,11 +651,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: another new key at execution (consistent display inputs)",
     "own": false,
@@ -637,7 +659,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -659,11 +686,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: another use counter",
     "own": true,
@@ -672,7 +694,12 @@
       "unknown device entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -694,11 +721,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: another use counter",
     "own": false,
@@ -707,7 +729,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -729,11 +756,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: another new key at execution (consistent display inputs)",
     "own": false,
@@ -742,7 +764,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -764,11 +791,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: another new key at execution (consistent display inputs)",
     "own": false,
@@ -777,7 +799,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -800,11 +827,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "replay: the landed authorisation (consumed entry; its old nonce fails the signature too)",
     "own": true,
@@ -814,7 +836,12 @@
       "unknown device entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -822,9 +849,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "seam: R = O with the verification equation holding (s = k a)",
    "kind": "negative",
-   "expect": "R is the identity",
+   "expect": "ed25519: R is the identity",
    "bypassed": [
-    "R is the identity"
+    "ed25519: R is the identity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -836,20 +863,20 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: R = O with the verification equation holding (s = k a)",
     "own": true,
     "copy": {
      "bypassed": [
-      "R is the identity"
+      "ed25519: R is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -871,11 +898,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: another new key at execution (consistent display inputs)",
     "own": false,
@@ -884,7 +906,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -906,11 +933,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "display: the wallet shown nonce 2 while the call executes at nonce 1 (signed over the wrong digits)",
     "own": true,
@@ -919,7 +941,12 @@
       "display: digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -941,11 +968,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "display: the hex nibbles of the signed key while another key executes",
     "own": true,
@@ -954,7 +976,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -976,11 +1003,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "display: the hex nibbles of the signed key while another key executes",
     "own": false,
@@ -989,7 +1011,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1012,11 +1039,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "frame: the frame shows a foreign signing key in base58 (signed over it)",
     "own": true,
@@ -1026,7 +1048,12 @@
       "display: the base58 digits do not match the value's low bytes"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1048,11 +1075,6 @@
     "layer": "decoding",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "decoding",
-    "rule": "input-decoding",
-    "expectedKind": "decoding"
-   },
    "control": {
     "case": "degenerate: R of small order (honest-toolchain decoding refusal)",
     "own": true,
@@ -1062,7 +1084,12 @@
      ],
      "overrides": "Curve25519Point validator overridden (counted)"
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "decoding",
+    "rule": "input-decoding",
+    "expectedKind": "decoding"
    }
   },
   {
@@ -1084,11 +1111,6 @@
     "layer": "decoding",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "decoding",
-    "rule": "input-decoding",
-    "expectedKind": "decoding"
-   },
    "control": {
     "case": "degenerate: R of small order (honest-toolchain decoding refusal)",
     "own": false,
@@ -1098,7 +1120,12 @@
      ],
      "overrides": "Curve25519Point validator overridden (counted)"
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "decoding",
+    "rule": "input-decoding",
+    "expectedKind": "decoding"
    }
   },
   {
@@ -1118,11 +1145,6 @@
     "layer": "decoding",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "decoding",
-    "rule": "non-canonical-encoding",
-    "expectedKind": "decoding"
-   },
    "control": {
     "case": "degenerate: S + L (the runtime refuses s + L as a scalar; at the proof server the honest s sent as s + L in the scalar limbs: decoding refusal)",
     "own": true,
@@ -1130,7 +1152,12 @@
      "bypassed": [],
      "overrides": "Curve25519Scalar encoder overridden for the target scalar"
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "decoding",
+    "rule": "non-canonical-encoding",
+    "expectedKind": "decoding"
    }
   },
   {
@@ -1147,11 +1174,6 @@
     "layer": "decoding",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "decoding",
-    "rule": "non-canonical-encoding",
-    "expectedKind": "decoding"
-   },
    "control": {
     "case": "one point, one encoding: the signer's point with a non-canonical y limb encoding (y - 1 + p) (honest-toolchain decoding refusal)",
     "own": true,
@@ -1159,7 +1181,12 @@
      "bypassed": [],
      "overrides": "Curve25519Point encoder overridden for the target point"
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "decoding",
+    "rule": "non-canonical-encoding",
+    "expectedKind": "decoding"
    }
   },
   {
@@ -1195,11 +1222,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "replay/arm: the k256 arm's rotate_enc_key challenge (same account, nonce, key) signed by the Solana key",
     "own": true,
@@ -1208,7 +1230,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1230,11 +1257,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "replay/arm: the k256 arm's rotate_enc_key challenge (same account, nonce, key) signed by the Solana key",
     "own": false,
@@ -1243,7 +1265,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1265,11 +1292,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "replay/arm: the k256 arm's rotate_enc_key challenge (same account, nonce, key) signed by the Solana key",
     "own": false,
@@ -1278,7 +1300,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1300,11 +1327,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "replay/arm: the k256 arm's rotate_enc_key challenge (same account, nonce, key) signed by the Solana key",
     "own": false,
@@ -1313,7 +1335,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1335,11 +1362,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "append_inbox: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -1348,7 +1370,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1370,11 +1397,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -1383,7 +1405,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1405,11 +1432,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -1418,7 +1440,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1440,11 +1467,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: the wallet signed a message showing a foreign account (seam-owned frame)",
     "own": true,
@@ -1453,7 +1475,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1483,11 +1510,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "append_inbox binding: signed E1, executed E2 (consistent display inputs)",
     "own": true,
@@ -1496,7 +1518,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1518,11 +1545,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "append_inbox binding: signed E1, executed E2 (consistent display inputs)",
     "own": false,
@@ -1531,7 +1553,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1553,11 +1580,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "append_inbox display: E2 executed with the signed entry's nibbles",
     "own": true,
@@ -1566,7 +1588,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1588,11 +1615,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "append_inbox binding: signed E1, executed E2 (consistent display inputs)",
     "own": false,
@@ -1601,7 +1623,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1638,11 +1665,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded binding: amount signed 400, executed 401",
     "own": true,
@@ -1651,7 +1673,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1673,11 +1700,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded binding: amount signed 400, executed 401",
     "own": false,
@@ -1686,7 +1708,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1708,11 +1735,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded binding: amount signed 400, executed 401",
     "own": false,
@@ -1721,7 +1743,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1743,11 +1770,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded binding: amount signed 400, executed 401",
     "own": false,
@@ -1756,7 +1778,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1779,11 +1806,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded display: 401 executed with the signed amount's digits",
     "own": true,
@@ -1793,7 +1815,12 @@
       "display: the site amount label does not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1827,11 +1854,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_unshielded binding: amount signed 400, executed 401",
     "own": false,
@@ -1840,7 +1862,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1876,11 +1903,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
     "own": true,
@@ -1889,7 +1911,12 @@
       "held coin colour does not match the withdrawn colour"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1911,11 +1938,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
     "own": true,
@@ -1924,7 +1946,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1946,11 +1973,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: witness coin of value 999 with the signed coin's digits (display check)",
     "own": true,
@@ -1959,7 +1981,12 @@
       "display: digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -1981,11 +2008,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
     "own": false,
@@ -1994,7 +2016,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2016,11 +2043,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: witness coin of nonce N' with the signed nonce's nibbles (display check)",
     "own": true,
@@ -2029,7 +2051,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2051,11 +2078,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
     "own": false,
@@ -2064,7 +2086,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2086,11 +2113,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded: witness coin of value 999 with the signed coin's digits (display check)",
     "own": false,
@@ -2099,7 +2121,12 @@
       "display: digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2147,11 +2174,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: valid signature for colour A, witness coin of colour B (same nonce, value, index)",
     "own": true,
@@ -2160,7 +2182,12 @@
       "held coin colour does not match the withdrawn colour"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2182,11 +2209,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
     "own": true,
@@ -2195,7 +2217,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2217,11 +2244,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: witness coin of value 999 with the signed coin's digits (display check)",
     "own": true,
@@ -2230,7 +2252,12 @@
       "display: digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2252,11 +2279,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
     "own": false,
@@ -2265,7 +2287,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2287,11 +2314,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: witness coin of nonce N' with the signed nonce's nibbles (display check)",
     "own": true,
@@ -2300,7 +2322,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2322,11 +2349,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: valid signature for coin value 1000, witness coin of value 999 (display inputs consistent with the substitute)",
     "own": false,
@@ -2335,7 +2357,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2357,11 +2384,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "withdraw_shielded_to_contract: witness coin of value 999 with the signed coin's digits (display check)",
     "own": false,
@@ -2370,7 +2392,12 @@
       "display: digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2476,11 +2503,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": true,
@@ -2489,7 +2511,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2511,11 +2538,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": false,
@@ -2524,7 +2546,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2546,11 +2573,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": false,
@@ -2559,7 +2581,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2581,11 +2608,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": false,
@@ -2594,7 +2616,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2616,11 +2643,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": false,
@@ -2629,7 +2651,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2651,11 +2678,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": false,
@@ -2664,7 +2686,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2686,11 +2713,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": false,
@@ -2699,7 +2721,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2721,11 +2748,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: add_device, the jubjub x coordinate changed at execution",
     "own": false,
@@ -2734,7 +2756,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2756,11 +2783,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: remove_device, the counter changed at execution (0 -> 1; J's counter-1 entry live)",
     "own": true,
@@ -2769,7 +2791,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2791,11 +2818,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: remove_device, the counter changed at execution (0 -> 1; J's counter-1 entry live)",
     "own": false,
@@ -2804,7 +2826,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2826,11 +2853,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: remove_device, the counter changed at execution (0 -> 1; J's counter-1 entry live)",
     "own": false,
@@ -2839,7 +2861,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2861,11 +2888,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "binding: remove_device, the counter changed at execution (0 -> 1; J's counter-1 entry live)",
     "own": false,
@@ -2874,18 +2896,23 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
    "section": "devices",
    "circuit": "add_device_with_sol_ed25519",
-   "case": "guards: add_device, an unregistered tag under a valid signature (the message shows the passkey class text)",
+   "case": "guards: add_device, an unregistered tag under a valid signature (the message shows the first kind's text)",
    "kind": "negative",
    "expect": "descriptor: not a registered device tag",
    "bypassed": [
     "descriptor: not a registered device tag",
-    "descriptor: not a 117-byte device tag"
+    "descriptor: not a 52-byte device tag"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -2897,21 +2924,21 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
+   "control": {
+    "case": "guards: add_device, an unregistered tag under a valid signature (the message shows the first kind's text)",
+    "own": true,
+    "copy": {
+     "bypassed": [
+      "descriptor: not a 52-byte device tag",
+      "descriptor: not a registered device tag"
+     ]
+    },
+    "link": "recorded by the run"
+   },
    "refusal": {
     "kind": "constraint",
     "rule": "direct-assertion",
     "expectedKind": "constraint"
-   },
-   "control": {
-    "case": "guards: add_device, an unregistered tag under a valid signature (the message shows the passkey class text)",
-    "own": true,
-    "copy": {
-     "bypassed": [
-      "descriptor: not a 117-byte device tag",
-      "descriptor: not a registered device tag"
-     ]
-    },
-    "link": "recorded by the run (the case's own positive control)"
    }
   },
   {
@@ -2933,11 +2960,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: add_device, a jubjub target carrying a non-zero envelope (not shown; refused by the canonical-descriptor check)",
     "own": true,
@@ -2946,7 +2968,12 @@
       "descriptor: unused envelope must be zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -2968,11 +2995,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: add_device, a jubjub target carrying a non-zero address (not shown; refused by the canonical-descriptor check)",
     "own": true,
@@ -2981,7 +3003,12 @@
       "descriptor: unused address must be zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3003,11 +3030,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: remove_device descriptor form carrying a non-zero literal entry (not shown; never executed)",
     "own": true,
@@ -3016,7 +3038,12 @@
       "remove_device: a descriptor removal carries no literal entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3038,11 +3065,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: remove_device literal form carrying a non-zero descriptor (not shown; never executed)",
     "own": true,
@@ -3051,7 +3073,12 @@
       "remove_device: a literal removal carries no descriptor"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3073,11 +3100,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: S13, S removes its own post-roll entry by descriptor",
     "own": true,
@@ -3086,7 +3108,12 @@
       "cannot remove the authorising device"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3108,11 +3135,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: S13, S removes its own post-roll entry by descriptor",
     "own": false,
@@ -3121,7 +3143,12 @@
       "cannot remove the authorising device"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3144,11 +3171,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: the last device, S alone removes another entry (literal form)",
     "own": true,
@@ -3158,7 +3180,12 @@
       "unknown device entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3166,9 +3193,9 @@
    "circuit": "add_device_with_sol_ed25519",
    "case": "guards: a sol target whose descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)",
    "kind": "negative",
-   "expect": "descriptor: the Solana key is not the point's encoding",
+   "expect": "descriptor: the Ed25519 key is not the point's encoding",
    "bypassed": [
-    "descriptor: the Solana key is not the point's encoding"
+    "descriptor: the Ed25519 key is not the point's encoding"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -3180,20 +3207,20 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: a sol target whose descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)",
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Solana key is not the point's encoding"
+      "descriptor: the Ed25519 key is not the point's encoding"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3215,11 +3242,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: a jubjub target carrying a non-identity point (not shown; refused by the canonical-descriptor check)",
     "own": true,
@@ -3228,7 +3250,12 @@
       "descriptor: unused point must be the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3250,11 +3277,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards: the identity point as a sol target (its encoding 0100..00 shown and signed): refused by A != O in the derivation",
     "own": true,
@@ -3263,7 +3285,12 @@
       "descriptor: the Ed25519 key is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3282,7 +3309,7 @@
    "expect": "descriptor: the Ed25519 key is the identity",
    "bypassed": [
     "descriptor: the Ed25519 key is the identity",
-    "Curve25519Point identity is not a permitted ed25519Verify verification key"
+    "ed25519: the key is the identity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -3294,21 +3321,21 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "guards (e): the seam's A != O \u2014 a call signed for the identity key (its entry planted, the verification equation holding) is refused only by A != O (the descriptor module's signer derivation and the verification's identity-key assert)",
     "own": true,
     "copy": {
      "bypassed": [
-      "Curve25519Point identity is not a permitted ed25519Verify verification key",
-      "descriptor: the Ed25519 key is the identity"
+      "descriptor: the Ed25519 key is the identity",
+      "ed25519: the key is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -3585,9 +3612,9 @@
    "circuit": "issue_grant_with_sol_ed25519",
    "case": "issue: the grantee's descriptor key is not its key argument's (the message shows the key argument's; only the descriptor check refuses)",
    "kind": "negative",
-   "expect": "descriptor: the Solana key is not the point's encoding",
+   "expect": "descriptor: the Ed25519 key is not the point's encoding",
    "bypassed": [
-    "descriptor: the Solana key is not the point's encoding"
+    "descriptor: the Ed25519 key is not the point's encoding"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -3604,7 +3631,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Solana key is not the point's encoding"
+      "descriptor: the Ed25519 key is not the point's encoding"
      ]
     },
     "link": "recorded by the run"
@@ -4493,9 +4520,9 @@
    "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
    "case": "withdraw_unshielded_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
    "kind": "negative",
-   "expect": "R is the identity",
+   "expect": "ed25519: R is the identity",
    "bypassed": [
-    "R is the identity"
+    "ed25519: R is the identity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -4512,7 +4539,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "R is the identity"
+      "ed25519: R is the identity"
      ]
     },
     "link": "recorded by the run"
@@ -5188,9 +5215,9 @@
    "circuit": "withdraw_shielded_with_grant_sol_ed25519",
    "case": "withdraw_shielded_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
    "kind": "negative",
-   "expect": "R is the identity",
+   "expect": "ed25519: R is the identity",
    "bypassed": [
-    "R is the identity"
+    "ed25519: R is the identity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -5207,7 +5234,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "R is the identity"
+      "ed25519: R is the identity"
      ]
     },
     "link": "recorded by the run"
@@ -6128,9 +6155,9 @@
    "circuit": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
    "case": "withdraw_shielded_to_contract_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
    "kind": "negative",
-   "expect": "R is the identity",
+   "expect": "ed25519: R is the identity",
    "bypassed": [
-    "R is the identity"
+    "ed25519: R is the identity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -6147,7 +6174,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "R is the identity"
+      "ed25519: R is the identity"
      ]
     },
     "link": "recorded by the run"
@@ -6710,11 +6737,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": true,
@@ -6723,7 +6745,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6745,11 +6772,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -6758,7 +6780,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6780,11 +6807,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -6793,7 +6815,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6815,11 +6842,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -6828,7 +6850,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6850,11 +6877,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -6863,7 +6885,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6885,11 +6912,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -6898,7 +6920,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6920,11 +6947,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -6933,7 +6955,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6955,11 +6982,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -6968,7 +6990,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -6990,11 +7017,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish binding: the recovery key \u2014 the wallet signed the session, the call executes another value",
     "own": false,
@@ -7003,7 +7025,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7025,11 +7052,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish: the seam owns the frame \u2014 the wallet signed the session showing a foreign account (its frame nibbles with it)",
     "own": true,
@@ -7038,7 +7060,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7060,11 +7087,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish: the seam owns the frame \u2014 the wallet signed the session showing a foreign account (its frame nibbles with it)",
     "own": false,
@@ -7073,7 +7095,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7095,11 +7122,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "publish display: the length digits and the signed message show 2, the call executes 3 (hex nibbles consistent)",
     "own": true,
@@ -7108,7 +7130,12 @@
       "display: digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7130,11 +7157,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, an empty vector (length 0)",
     "own": true,
@@ -7143,7 +7165,12 @@
       "phi must not be empty"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7165,11 +7192,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, a length beyond the slot bound (5)",
     "own": true,
@@ -7178,7 +7200,12 @@
       "phi length out of range"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7200,11 +7227,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, length 1 with slot 2 non-zero",
     "own": true,
@@ -7213,7 +7235,12 @@
       "unused phi slot 2 not zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7235,11 +7262,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, length 2 with slot 3 non-zero",
     "own": true,
@@ -7248,7 +7270,12 @@
       "unused phi slot 3 not zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7270,11 +7297,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, length 3 with slot 4 non-zero",
     "own": true,
@@ -7283,7 +7305,12 @@
       "unused phi slot 4 not zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7305,11 +7332,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, an all-zero session identifier",
     "own": true,
@@ -7318,7 +7340,12 @@
       "session nonce is zero"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7340,11 +7367,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, the stored session identifier reused",
     "own": true,
@@ -7353,7 +7375,12 @@
       "session nonce reused"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7375,11 +7402,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, the stored recovery commitment reused",
     "own": true,
@@ -7388,7 +7410,12 @@
       "recovery commitment reused"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7411,11 +7438,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature, the identity as the new recovery key",
     "own": true,
@@ -7425,7 +7447,12 @@
       "recovery key is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7459,11 +7486,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: publish, an unenrolled sol key signs the session",
     "own": true,
@@ -7472,7 +7494,12 @@
       "unknown device entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7494,11 +7521,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: publish, an unenrolled sol key signs the session",
     "own": false,
@@ -7507,7 +7529,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7529,11 +7556,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: publish, an unenrolled sol key signs the session",
     "own": false,
@@ -7542,7 +7564,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7550,9 +7577,9 @@
    "circuit": "publish_recovery_session_with_sol_ed25519",
    "case": "seam: publish, R = O with the verification equation holding (s = k a)",
    "kind": "negative",
-   "expect": "R is the identity",
+   "expect": "ed25519: R is the identity",
    "bypassed": [
-    "R is the identity"
+    "ed25519: R is the identity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -7564,20 +7591,20 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: publish, R = O with the verification equation holding (s = k a)",
     "own": true,
     "copy": {
      "bypassed": [
-      "R is the identity"
+      "ed25519: R is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7602,11 +7629,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "replay: publish, the landed session approval replayed with display inputs for the current nonce (entry consumed, stored values)",
     "own": true,
@@ -7618,7 +7640,12 @@
       "unknown device entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7640,11 +7667,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: publish under a valid signature while a recovery is pending",
     "own": true,
@@ -7653,7 +7675,12 @@
       "recovery pending; cancel first"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7683,11 +7710,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "cancel operation: a revoke_all_grants approval over the same frame presented as the cancel",
     "own": true,
@@ -7696,7 +7718,12 @@
       "invalid signature"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7718,11 +7745,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "cancel operation: a revoke_all_grants approval over the same frame presented as the cancel",
     "own": false,
@@ -7731,7 +7753,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7753,11 +7780,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "cancel operation: a revoke_all_grants approval over the same frame presented as the cancel",
     "own": false,
@@ -7766,7 +7788,12 @@
       "invalid signature"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7788,11 +7815,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "cancel: the seam owns the frame \u2014 the wallet signed a cancel showing a foreign account (its frame nibbles with it)",
     "own": true,
@@ -7801,7 +7823,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7823,11 +7850,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "cancel display: the nonce digits and the signed message show auth_nonce + 1",
     "own": true,
@@ -7836,7 +7858,12 @@
       "display: digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7858,11 +7885,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: cancel, an unenrolled sol key",
     "own": true,
@@ -7871,7 +7893,12 @@
       "unknown device entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7879,9 +7906,9 @@
    "circuit": "recover_cancel_with_sol_ed25519",
    "case": "seam: cancel, R = O with the verification equation holding (s = k a)",
    "kind": "negative",
-   "expect": "R is the identity",
+   "expect": "ed25519: R is the identity",
    "bypassed": [
-    "R is the identity"
+    "ed25519: R is the identity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -7893,20 +7920,20 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: cancel, R = O with the verification equation holding (s = k a)",
     "own": true,
     "copy": {
      "bypassed": [
-      "R is the identity"
+      "ed25519: R is the identity"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7928,11 +7955,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "chip: a valid cancel with nothing pending",
     "own": true,
@@ -7941,7 +7963,12 @@
       "no recovery pending"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -7965,11 +7992,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "replay: cancel, the landed cancel replayed with display inputs for the current nonce (entry consumed, nothing pending)",
     "own": true,
@@ -7980,7 +8002,12 @@
       "unknown device entry"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8025,11 +8052,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: publish, an unenrolled sol key signs the session",
     "own": false,
@@ -8038,7 +8060,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8060,11 +8087,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: cancel, an unenrolled sol key",
     "own": false,
@@ -8073,7 +8095,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8095,11 +8122,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: publish, an unenrolled sol key signs the session",
     "own": false,
@@ -8108,7 +8130,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8130,11 +8157,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: cancel, an unenrolled sol key",
     "own": false,
@@ -8143,7 +8165,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8165,11 +8192,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: publish, an unenrolled sol key signs the session",
     "own": false,
@@ -8178,7 +8200,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8200,11 +8227,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "seam: cancel, an unenrolled sol key",
     "own": false,
@@ -8213,7 +8235,12 @@
       "unknown device entry"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8235,11 +8262,6 @@
     "layer": "prover",
     "positiveControl": "PASS"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "backup vector value 1 shown as f + r (the executed value is f; the wallet signed the non-canonical rendering)",
     "own": true,
@@ -8248,7 +8270,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "recorded by the run (the case's own positive control)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8270,11 +8297,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "backup vector value 1 shown as f + r (the executed value is f; the wallet signed the non-canonical rendering)",
     "own": false,
@@ -8283,7 +8305,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8305,11 +8332,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "backup vector value 1 shown as f + r (the executed value is f; the wallet signed the non-canonical rendering)",
     "own": false,
@@ -8318,7 +8340,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8340,11 +8367,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "backup vector value 1 shown as f + r (the executed value is f; the wallet signed the non-canonical rendering)",
     "own": false,
@@ -8353,7 +8375,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -8375,11 +8402,6 @@
     "layer": "prover",
     "positiveControl": "PASS (proved earlier through the same copy)"
    },
-   "refusal": {
-    "kind": "constraint",
-    "rule": "direct-assertion",
-    "expectedKind": "constraint"
-   },
    "control": {
     "case": "backup vector value 1 shown as f + r (the executed value is f; the wallet signed the non-canonical rendering)",
     "own": false,
@@ -8388,7 +8410,12 @@
       "display: hex digits do not match the value"
      ]
     },
-    "link": "derived from the run (the control proved through the same module file for the same circuit, earlier in the run)"
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
    }
   },
   {
@@ -9347,12 +9374,12 @@
   {
    "section": "module",
    "circuit": "issue_grant_with_sol_ed25519",
-   "case": "issue_grant: an unregistered grant-id tag under a valid signature (the message shows the passkey class text): at runtime past the arm's class check, the module's width-64 grant-id recipe refuses it; at the proof server both",
+   "case": "issue_grant: an unregistered grant-id tag under a valid signature (the message shows the first kind's text): at runtime past the arm's registration check, the module's w52 grant-id recipe refuses it; at the proof server both",
    "kind": "negative",
    "expect": "descriptor: not a registered grant-id tag",
    "bypassed": [
     "descriptor: not a registered grant-id tag",
-    "descriptor: not a 64-byte grant-id tag"
+    "descriptor: not a 52-byte grant-id tag"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9365,11 +9392,11 @@
     "positiveControl": "PASS"
    },
    "control": {
-    "case": "issue_grant: an unregistered grant-id tag under a valid signature (the message shows the passkey class text): at runtime past the arm's class check, the module's width-64 grant-id recipe refuses it; at the proof server both",
+    "case": "issue_grant: an unregistered grant-id tag under a valid signature (the message shows the first kind's text): at runtime past the arm's registration check, the module's w52 grant-id recipe refuses it; at the proof server both",
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: not a 64-byte grant-id tag",
+      "descriptor: not a 52-byte grant-id tag",
       "descriptor: not a registered grant-id tag"
      ]
     },
@@ -9498,9 +9525,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "R's encoding with one byte flipped, signed over that encoding",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9517,7 +9544,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -9533,9 +9560,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "R's encoding with the sign bit flipped, signed over that encoding",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "bypassed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9552,7 +9579,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 sign bit is not x's parity"
+      "ed25519: the sign bit is not x's parity"
      ]
     },
     "link": "recorded by the run"
@@ -9568,9 +9595,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "R's encoding as y + p (x odd, so the sign bit agrees), signed over that encoding",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9587,7 +9614,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -9603,10 +9630,10 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "R = O with R's encoding as y + p (y = 1, below 19), signed over that encoding: R != O and the y check both refuse",
    "kind": "negative",
-   "expect": "R is the identity",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "R is the identity",
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: R is the identity",
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9623,8 +9650,8 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "R is the identity",
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: R is the identity",
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -9640,9 +9667,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "R's x bytes with one byte flipped (the parity kept), under an honest signature",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9659,7 +9686,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ]
     },
     "link": "recorded by the run"
@@ -9675,10 +9702,10 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "R's x bytes as x + p (the parity flips), under an honest signature",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x",
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the x bytes do not match the point's x",
+    "ed25519: the sign bit is not x's parity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9695,8 +9722,8 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 sign bit is not x's parity",
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the sign bit is not x's parity",
+      "ed25519: the x bytes do not match the point's x"
      ]
     },
     "link": "recorded by the run"
@@ -9714,7 +9741,7 @@
    "kind": "negative",
    "expect": "/type error/",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y",
+    "ed25519: the encoding does not match the point's y",
     "invalid signature"
    ],
    "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control",
@@ -9733,7 +9760,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y",
+      "ed25519: the encoding does not match the point's y",
       "invalid signature"
      ],
      "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control"
@@ -9753,7 +9780,7 @@
    "kind": "negative",
    "expect": "/type error/",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control",
    "enforcement": "constraint",
@@ -9771,7 +9798,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ],
      "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control"
     },
@@ -9788,9 +9815,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "the signing key's x bytes with one byte flipped (the parity kept), under an honest signature",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9807,7 +9834,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ]
     },
     "link": "recorded by the run"
@@ -9825,7 +9852,7 @@
    "kind": "negative",
    "expect": "/type error/",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y",
+    "ed25519: the encoding does not match the point's y",
     "display: the base58 digits do not match the value's high bytes",
     "unknown device entry",
     "invalid signature"
@@ -9846,8 +9873,8 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y",
       "display: the base58 digits do not match the value's high bytes",
+      "ed25519: the encoding does not match the point's y",
       "invalid signature",
       "unknown device entry"
      ],
@@ -9868,7 +9895,7 @@
    "kind": "negative",
    "expect": "/type error/",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control",
    "enforcement": "constraint",
@@ -9886,7 +9913,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ],
      "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control"
     },
@@ -9903,9 +9930,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "the signing key's bytes forged (an entry planted for them, the message and the signature over them): refused only by the key encoding's y check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9922,7 +9949,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -9945,9 +9972,9 @@
    "circuit": "add_device_with_sol_ed25519",
    "case": "add_device: the Solana target's x bytes with one byte flipped (the parity kept)",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -9964,7 +9991,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ]
     },
     "link": "recorded by the run"
@@ -9982,9 +10009,9 @@
    "kind": "negative",
    "expect": "/type error/",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y",
+    "ed25519: the encoding does not match the point's y",
     "display: the base58 digits do not match the value's high bytes",
-    "descriptor: the Solana key is not the point's encoding"
+    "descriptor: the Ed25519 key is not the point's encoding"
    ],
    "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control",
    "enforcement": "constraint",
@@ -10002,9 +10029,9 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y",
-      "descriptor: the Solana key is not the point's encoding",
-      "display: the base58 digits do not match the value's high bytes"
+      "descriptor: the Ed25519 key is not the point's encoding",
+      "display: the base58 digits do not match the value's high bytes",
+      "ed25519: the encoding does not match the point's y"
      ],
      "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control"
     },
@@ -10023,7 +10050,7 @@
    "kind": "negative",
    "expect": "/type error/",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control",
    "enforcement": "constraint",
@@ -10041,7 +10068,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ],
      "overrides": "byte vectors encoded with two-byte atoms and argument type checks suspended (HINT_OVERRIDES), also for the control"
     },
@@ -10093,9 +10120,9 @@
    "circuit": "rotate_enc_key_with_sol_ed25519",
    "case": "the signing key's sign bit flipped (an entry planted for those bytes, the message and the signature over them): refused only by the parity check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "bypassed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10112,7 +10139,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 sign bit is not x's parity"
+      "ed25519: the sign bit is not x's parity"
      ]
     },
     "link": "recorded by the run"
@@ -10128,9 +10155,9 @@
    "circuit": "add_device_with_sol_ed25519",
    "case": "add_device: the Solana target's key bytes with one byte flipped (its descriptor key too; the block shows them, the device signed it): refused only by the y check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10147,7 +10174,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -10163,9 +10190,9 @@
    "circuit": "add_device_with_sol_ed25519",
    "case": "add_device: the Solana target's key bytes with the sign bit flipped (its descriptor key too; the block shows them, the device signed it): refused only by the parity check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "bypassed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10182,7 +10209,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 sign bit is not x's parity"
+      "ed25519: the sign bit is not x's parity"
      ]
     },
     "link": "recorded by the run"
@@ -10198,9 +10225,9 @@
    "circuit": "issue_grant_with_sol_ed25519",
    "case": "issue_grant: the Solana grantee's key bytes with one byte flipped (its descriptor key too; the grantee block shows them, the device signed it): refused only by the y check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10217,7 +10244,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -10233,9 +10260,9 @@
    "circuit": "issue_grant_with_sol_ed25519",
    "case": "issue_grant: the Solana grantee's key bytes with the sign bit flipped (its descriptor key too; the grantee block shows them, the device signed it): refused only by the parity check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "bypassed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10252,7 +10279,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 sign bit is not x's parity"
+      "ed25519: the sign bit is not x's parity"
      ]
     },
     "link": "recorded by the run"
@@ -10268,9 +10295,9 @@
    "circuit": "issue_grant_with_sol_ed25519",
    "case": "issue_grant: the Solana grantee's x bytes with one byte flipped (the parity kept; the message shows its bytes, unchanged)",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10287,7 +10314,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ]
     },
     "link": "recorded by the run"
@@ -10303,9 +10330,9 @@
    "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
    "case": "withdraw_unshielded_with_grant: the grantee's x bytes with one byte flipped (the parity kept), under its honest signature",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10322,7 +10349,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ]
     },
     "link": "recorded by the run"
@@ -10338,9 +10365,9 @@
    "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
    "case": "withdraw_unshielded_with_grant: the grantee's key bytes with one byte flipped (a grant planted for them, the message and the signature over them): refused only by the y check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10357,7 +10384,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -10373,9 +10400,9 @@
    "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
    "case": "withdraw_unshielded_with_grant: the grantee's key bytes with the sign bit flipped (a grant planted for them, the message and the signature over them): refused only by the parity check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "bypassed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10392,7 +10419,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 sign bit is not x's parity"
+      "ed25519: the sign bit is not x's parity"
      ]
     },
     "link": "recorded by the run"
@@ -10408,9 +10435,9 @@
    "circuit": "activate_initial_device_with_sol_ed25519",
    "case": "activation: the boot key's x bytes with one byte flipped (the parity kept; the commitment binds the bytes, unchanged): refused only by the x check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 x bytes do not match the point's x",
+   "expect": "ed25519: the x bytes do not match the point's x",
    "bypassed": [
-    "descriptor: the Ed25519 x bytes do not match the point's x"
+    "ed25519: the x bytes do not match the point's x"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10427,7 +10454,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 x bytes do not match the point's x"
+      "ed25519: the x bytes do not match the point's x"
      ]
     },
     "link": "recorded by the run"
@@ -10443,9 +10470,9 @@
    "circuit": "activate_initial_device_with_sol_ed25519",
    "case": "activation: the boot key's key bytes with one byte flipped (the boot commitment of those bytes committed): refused only by the y check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 key bytes do not match the point's y",
+   "expect": "ed25519: the encoding does not match the point's y",
    "bypassed": [
-    "descriptor: the Ed25519 key bytes do not match the point's y"
+    "ed25519: the encoding does not match the point's y"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10462,7 +10489,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 key bytes do not match the point's y"
+      "ed25519: the encoding does not match the point's y"
      ]
     },
     "link": "recorded by the run"
@@ -10478,9 +10505,9 @@
    "circuit": "activate_initial_device_with_sol_ed25519",
    "case": "activation: the boot key's key bytes with the sign bit flipped (the boot commitment of those bytes committed): refused only by the parity check",
    "kind": "negative",
-   "expect": "descriptor: the Ed25519 sign bit is not x's parity",
+   "expect": "ed25519: the sign bit is not x's parity",
    "bypassed": [
-    "descriptor: the Ed25519 sign bit is not x's parity"
+    "ed25519: the sign bit is not x's parity"
    ],
    "enforcement": "constraint",
    "simulator": {
@@ -10497,7 +10524,7 @@
     "own": true,
     "copy": {
      "bypassed": [
-      "descriptor: the Ed25519 sign bit is not x's parity"
+      "ed25519: the sign bit is not x's parity"
      ]
     },
     "link": "recorded by the run"
@@ -11138,6 +11165,1371 @@
     "copy": {
      "bypassed": [
       "display: a literal removal's display inputs are not those of an empty target"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "rotate_enc_key_with_sol_ed25519",
+   "case": "rotate_enc_key: raw approval (activated account), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "rotate_enc_key_with_sol_ed25519",
+   "case": "rotate_enc_key: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "rotate_enc_key_with_sol_ed25519",
+   "case": "rotate_enc_key: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "rotate_enc_key_with_sol_ed25519",
+   "case": "rotate_enc_key: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "rotate_enc_key: raw approval (activated account), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "rotate_enc_key_with_sol_ed25519",
+   "case": "rotate_enc_key: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "rotate_enc_key: raw approval (activated account), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "append_inbox_with_sol_ed25519",
+   "case": "append_inbox: raw approval (activated account), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "append_inbox_with_sol_ed25519",
+   "case": "append_inbox: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "append_inbox_with_sol_ed25519",
+   "case": "append_inbox: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "append_inbox_with_sol_ed25519",
+   "case": "append_inbox: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "append_inbox: raw approval (activated account), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "append_inbox_with_sol_ed25519",
+   "case": "append_inbox: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "append_inbox: raw approval (activated account), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "publish_recovery_session_with_sol_ed25519",
+   "case": "publish_recovery_session: raw approval (activated account, a two-value backup vector), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "publish_recovery_session_with_sol_ed25519",
+   "case": "publish_recovery_session: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "publish_recovery_session_with_sol_ed25519",
+   "case": "publish_recovery_session: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "publish_recovery_session_with_sol_ed25519",
+   "case": "publish_recovery_session: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "publish_recovery_session: raw approval (activated account, a two-value backup vector), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "publish_recovery_session_with_sol_ed25519",
+   "case": "publish_recovery_session: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "publish_recovery_session: raw approval (activated account, a two-value backup vector), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_sol_ed25519",
+   "case": "withdraw_unshielded: raw approval (400 of a 1000 mirror), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_sol_ed25519",
+   "case": "withdraw_unshielded: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_sol_ed25519",
+   "case": "withdraw_unshielded: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_sol_ed25519",
+   "case": "withdraw_unshielded: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_unshielded: raw approval (400 of a 1000 mirror), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_sol_ed25519",
+   "case": "withdraw_unshielded: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_unshielded: raw approval (400 of a 1000 mirror), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_sol_ed25519",
+   "case": "withdraw_shielded: raw approval (300 of a 1000 coin at index 1), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_sol_ed25519",
+   "case": "withdraw_shielded: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_sol_ed25519",
+   "case": "withdraw_shielded: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_sol_ed25519",
+   "case": "withdraw_shielded: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded: raw approval (300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_sol_ed25519",
+   "case": "withdraw_shielded: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded: raw approval (300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_sol_ed25519",
+   "case": "withdraw_shielded_to_contract: raw approval (300 of a 1000 coin at index 1), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_sol_ed25519",
+   "case": "withdraw_shielded_to_contract: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_sol_ed25519",
+   "case": "withdraw_shielded_to_contract: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_sol_ed25519",
+   "case": "withdraw_shielded_to_contract: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded_to_contract: raw approval (300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_sol_ed25519",
+   "case": "withdraw_shielded_to_contract: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded_to_contract: raw approval (300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "add_device_with_sol_ed25519",
+   "case": "add_device: raw approval (a jubjub target), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "add_device_with_sol_ed25519",
+   "case": "add_device: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "add_device_with_sol_ed25519",
+   "case": "add_device: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "add_device_with_sol_ed25519",
+   "case": "add_device: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "add_device: raw approval (a jubjub target), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "add_device_with_sol_ed25519",
+   "case": "add_device: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "add_device: raw approval (a jubjub target), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "remove_device_with_sol_ed25519",
+   "case": "remove_device: raw approval (the jubjub target by descriptor), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "remove_device_with_sol_ed25519",
+   "case": "remove_device: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "remove_device_with_sol_ed25519",
+   "case": "remove_device: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "remove_device_with_sol_ed25519",
+   "case": "remove_device: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "remove_device: raw approval (the jubjub target by descriptor), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "remove_device_with_sol_ed25519",
+   "case": "remove_device: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "remove_device: raw approval (the jubjub target by descriptor), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "issue_grant_with_sol_ed25519",
+   "case": "issue_grant: raw approval (a sol grantee, shielded scope), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "issue_grant_with_sol_ed25519",
+   "case": "issue_grant: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "issue_grant_with_sol_ed25519",
+   "case": "issue_grant: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "issue_grant_with_sol_ed25519",
+   "case": "issue_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "issue_grant: raw approval (a sol grantee, shielded scope), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "issue_grant_with_sol_ed25519",
+   "case": "issue_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "issue_grant: raw approval (a sol grantee, shielded scope), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_grant_with_sol_ed25519",
+   "case": "revoke_grant: raw approval (the slot-0 grant), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_grant_with_sol_ed25519",
+   "case": "revoke_grant: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_grant_with_sol_ed25519",
+   "case": "revoke_grant: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_grant_with_sol_ed25519",
+   "case": "revoke_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "revoke_grant: raw approval (the slot-0 grant), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_grant_with_sol_ed25519",
+   "case": "revoke_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "revoke_grant: raw approval (the slot-0 grant), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_all_grants_with_sol_ed25519",
+   "case": "revoke_all_grants: raw approval (two live grants), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_all_grants_with_sol_ed25519",
+   "case": "revoke_all_grants: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_all_grants_with_sol_ed25519",
+   "case": "revoke_all_grants: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_all_grants_with_sol_ed25519",
+   "case": "revoke_all_grants: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "revoke_all_grants: raw approval (two live grants), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "revoke_all_grants_with_sol_ed25519",
+   "case": "revoke_all_grants: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "revoke_all_grants: raw approval (two live grants), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "recover_cancel_with_sol_ed25519",
+   "case": "recover_cancel: raw approval (a recovery pending), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "recover_cancel_with_sol_ed25519",
+   "case": "recover_cancel: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "recover_cancel_with_sol_ed25519",
+   "case": "recover_cancel: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "recover_cancel_with_sol_ed25519",
+   "case": "recover_cancel: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "recover_cancel: raw approval (a recovery pending), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "recover_cancel_with_sol_ed25519",
+   "case": "recover_cancel: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid signature",
+   "bypassed": [
+    "invalid signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "recover_cancel: raw approval (a recovery pending), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
+   "case": "withdraw_unshielded_grant: raw approval (slot 1, 200 to the pinned user address), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
+   "case": "withdraw_unshielded_grant: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
+   "case": "withdraw_unshielded_grant: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
+   "case": "withdraw_unshielded_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid grant signature",
+   "bypassed": [
+    "invalid grant signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_unshielded_grant: raw approval (slot 1, 200 to the pinned user address), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid grant signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_unshielded_with_grant_sol_ed25519",
+   "case": "withdraw_unshielded_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid grant signature",
+   "bypassed": [
+    "invalid grant signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_unshielded_grant: raw approval (slot 1, 200 to the pinned user address), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid grant signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_grant: raw approval (slot 0, 300 of a 1000 coin at index 1), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_grant: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_grant: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid grant signature",
+   "bypassed": [
+    "invalid grant signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded_grant: raw approval (slot 0, 300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid grant signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid grant signature",
+   "bypassed": [
+    "invalid grant signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded_grant: raw approval (slot 0, 300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid grant signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_to_contract_grant: raw approval (slot 0, 300 of a 1000 coin at index 1), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_to_contract_grant: the same approval as an off-chain message v1 (same key, blind, counters and operands, same state), proved through the copy",
+   "kind": "positive",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_to_contract_grant: the two formats' public parts are equal (proof bytes and the communications commitment excluded)",
+   "kind": "state",
+   "positive": "PASS"
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_to_contract_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid grant signature",
+   "bypassed": [
+    "invalid grant signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded_to_contract_grant: raw approval (slot 0, 300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid grant signature"
+     ]
+    },
+    "link": "recorded by the run"
+   },
+   "refusal": {
+    "kind": "constraint",
+    "rule": "direct-assertion",
+    "expectedKind": "constraint"
+   }
+  },
+  {
+   "section": "formats",
+   "circuit": "withdraw_shielded_to_contract_with_grant_sol_ed25519",
+   "case": "withdraw_shielded_to_contract_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+   "kind": "negative",
+   "expect": "invalid grant signature",
+   "bypassed": [
+    "invalid grant signature"
+   ],
+   "enforcement": "constraint",
+   "simulator": {
+    "verdict": "PASS",
+    "layer": "runtime"
+   },
+   "prover": {
+    "verdict": "PASS",
+    "layer": "prover",
+    "positiveControl": "PASS (proved earlier through the same copy)"
+   },
+   "control": {
+    "case": "withdraw_shielded_to_contract_grant: raw approval (slot 0, 300 of a 1000 coin at index 1), proved through the copy",
+    "own": false,
+    "copy": {
+     "bypassed": [
+      "invalid grant signature"
      ]
     },
     "link": "recorded by the run"

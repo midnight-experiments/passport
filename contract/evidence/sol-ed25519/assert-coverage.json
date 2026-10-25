@@ -10,6 +10,7 @@
   "derive_boot_commitment_with_sol_ed25519",
   "derive_device_entry_with_sol_ed25519",
   "derive_grant_id_with_sol_ed25519",
+  "encode_public_key_ed25519",
   "issue_grant_with_sol_ed25519",
   "publish_recovery_session_with_sol_ed25519",
   "recover_cancel_with_sol_ed25519",
@@ -159,7 +160,7 @@
      }
     ],
     "constraint": [
-     "devices: guards: add_device, an unregistered tag under a valid signature (the message shows the passkey class text)"
+     "devices: guards: add_device, an unregistered tag under a valid signature (the message shows the first kind's text)"
     ]
    },
    {
@@ -173,7 +174,7 @@
      }
     ],
     "constraint": [
-     "module: issue_grant: an unregistered grant-id tag under a valid signature (the message shows the passkey class text): at runtime past the arm's class check, the module's width-64 grant-id recipe refuses it; at the proof server both"
+     "module: issue_grant: an unregistered grant-id tag under a valid signature (the message shows the first kind's text): at runtime past the arm's registration check, the module's w52 grant-id recipe refuses it; at the proof server both"
     ]
    },
    {
@@ -583,7 +584,13 @@
      "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the encryption key: signed a stale key, executed with the live key",
      "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the coin value: signed 1000, the witness coin of value 999",
      "grantee-scope: withdraw_shielded_to_contract_with_grant: substitution, the amount: signed 300, executed 301",
-     "readability: forged amount: the grantee signed \"250000\" for an executed 2500000"
+     "readability: forged amount: the grantee signed \"250000\" for an executed 2500000",
+     "formats: withdraw_unshielded_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_unshielded_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract_grant: the off-chain signature presented as raw (same key, validly enrolled device)"
     ]
    },
    {
@@ -663,7 +670,31 @@
      "readability: forged word: the wallet signed \"0\" for a zero window",
      "readability: forged key: the wallet signed the signing key in hex instead of base58",
      "readability: forged word: the wallet signed \"never\" for an expiry of 1000",
-     "readability: forged word: the wallet signed \"not applicable\" for a passkey grantee's RP hash"
+     "readability: forged word: the wallet signed \"not applicable\" for a passkey grantee's RP hash",
+     "formats: rotate_enc_key: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: rotate_enc_key: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: append_inbox: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: append_inbox: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: publish_recovery_session: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: publish_recovery_session: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_unshielded: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_unshielded: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: withdraw_shielded_to_contract: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: add_device: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: add_device: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: remove_device: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: remove_device: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: issue_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: issue_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: revoke_grant: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: revoke_grant: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: revoke_all_grants: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: revoke_all_grants: the off-chain signature presented as raw (same key, validly enrolled device)",
+     "formats: recover_cancel: the raw signature presented as an off-chain message (same key, validly enrolled device)",
+     "formats: recover_cancel: the off-chain signature presented as raw (same key, validly enrolled device)"
     ]
    },
    {
@@ -841,10 +872,7 @@
      }
     ],
     "constraint": [],
-    "refusedTogetherWithAnother": [
-     "devices: guards: add_device, an unregistered tag under a valid signature (the message shows the passkey class text)"
-    ],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not a 52-byte device tag",
@@ -857,7 +885,10 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "refusedTogetherWithAnother": [
+     "devices: guards: add_device, an unregistered tag under a valid signature (the message shows the first kind's text)"
+    ],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not a 52-byte grant-id tag",
@@ -870,7 +901,10 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "refusedTogetherWithAnother": [
+     "module: issue_grant: an unregistered grant-id tag under a valid signature (the message shows the first kind's text): at runtime past the arm's registration check, the module's w52 grant-id recipe refuses it; at the proof server both"
+    ],
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not a 64-byte device tag",
@@ -883,7 +917,7 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not a 64-byte grant-id tag",
@@ -896,10 +930,7 @@
      }
     ],
     "constraint": [],
-    "refusedTogetherWithAnother": [
-     "module: issue_grant: an unregistered grant-id tag under a valid signature (the message shows the passkey class text): at runtime past the arm's class check, the module's width-64 grant-id recipe refuses it; at the proof server both"
-    ],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not a 65-byte device tag",
@@ -912,7 +943,7 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not a 65-byte grant-id tag",
@@ -925,7 +956,7 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not a blind tag",
@@ -938,7 +969,7 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first. Only a pure export of the arm reaches it (computed in JavaScript, never proved)."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first. Only a pure export of the arm reaches it (computed in JavaScript, never proved)."
    },
    {
     "message": "descriptor: not a grant salt tag",
@@ -951,7 +982,7 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not an Ed25519 boot tag",
@@ -964,7 +995,7 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not an Ed25519 device tag",
@@ -978,11 +1009,12 @@
      {
       "file": "WalletArmDescriptors.compact",
       "line": 480,
-      "helper": "derive_signer_entries_ed25519"
+      "helper": "derive_signer_entries_ed25519",
+      "inProvedCircuit": true
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: not an Ed25519 grant-id tag",
@@ -995,7 +1027,7 @@
      }
     ],
     "constraint": [],
-    "why": "The arm selects each recipe by the class of the tag's kind, found by the tag's equality tests against its kinds table, and passes constant tags in its seams and activation, so every tag a recipe receives is one it admits; an unregistered tag is refused by the arm's kind check first."
+    "why": "The arm selects each recipe by its class, which is the tag's equality test, and passes constant tags in its seams and activation, so every tag a recipe receives is the one it checks for; an unregistered tag is refused by the arm's class check first."
    },
    {
     "message": "descriptor: the Ed25519 key is the identity",
@@ -1381,8 +1413,7 @@
      "grantee-scope: withdraw_shielded_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
      "grantee-scope: withdraw_shielded_to_contract_with_grant: the grant seam: R = O with the verification equation holding (s = k a)",
      "recovery: seam: publish, R = O with the verification equation holding (s = k a)",
-     "recovery: seam: cancel, R = O with the verification equation holding (s = k a)",
-     "hints: R = O with R's encoding as y + p (y = 1, below 19), signed over that encoding: R != O and the y check both refuse"
+     "recovery: seam: cancel, R = O with the verification equation holding (s = k a)"
     ]
    },
    {
@@ -1398,6 +1429,7 @@
     "constraint": [
      "hints: R's encoding with one byte flipped, signed over that encoding",
      "hints: R's encoding as y + p (x odd, so the sign bit agrees), signed over that encoding",
+     "hints: R = O with R's encoding as y + p (y = 1, below 19), signed over that encoding: R != O and the y check both refuse",
      "hints: the signing key's bytes forged (an entry planted for them, the message and the signature over them): refused only by the key encoding's y check",
      "hints: add_device: the Solana target's key bytes with one byte flipped (its descriptor key too; the block shows them, the device signed it): refused only by the y check",
      "hints: issue_grant: the Solana grantee's key bytes with one byte flipped (its descriptor key too; the grantee block shows them, the device signed it): refused only by the y check",
@@ -1419,7 +1451,7 @@
     "refusedTogetherWithAnother": [
      "devices: guards (e): the seam's A != O — a call signed for the identity key (its entry planted, the verification equation holding) is refused only by A != O (the descriptor module's signer derivation and the verification's identity-key assert)"
     ],
-    "why": "The verification takes the key the seam's derivation has already checked, and that derivation's A != O refuses the identity first; the two are refused together."
+    "why": "The core's extra safety check: every seam passes the key its derivation has already checked (the descriptor module's ed25519 class refuses the identity first, on the same checked inputs), so the two are refused together; deleting it is an equivalent mutant on the account (m11), with proof-server evidence against that mutant's own keys."
    },
    {
     "message": "ed25519: the sign bit is not x's parity",
