@@ -17,6 +17,11 @@
 //                refused, per-index and per-network separation
 //   roster       record round trip; a record whose address is not its point's
 //                refused; restore finds accounts by testing entries
+//   deploy       the account's deploy roster (allCircuits() of wave-deploy.ts,
+//                which follows the client's arm registry) is exactly the
+//                compiled contract's provable circuits, the arm's sixteen among
+//                them: a circuit left out of the roster is never deployed, and
+//                an account without it cannot be connected
 //   domain       the fixed V1 domain: the contract's oracles, the client
 //                codec's constants and the frozen file's pinned values equal
 //                the specified type hash, separator and verifyingContract P,
@@ -56,7 +61,9 @@ import * as path from 'node:path';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { p256 as p256Curve } from '@noble/curves/nist.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
-import { pureCircuits } from '../wallet/contract.js';
+import { Contract, pureCircuits } from '../wallet/contract.js';
+import { makeWitnesses } from '../wallet/witnesses.js';
+import { allCircuits, ARMS } from '../wallet/wave-deploy.js';
 import { pureCircuits as baseProbe } from '../../contracts/managed/probe-wallet-arms-base/contract/index.js';
 import { RECIPIENT_KIND_LABELS, K256_ENVELOPE_LABELS, recipientKindLabel, k256EnvelopeLabel } from '../wallet/labels.js';
 import { NEVER_TEXT, NOT_APPLICABLE_TEXT, NO_WINDOW_TEXT, utcDateTimeInputs, base58Inputs, siteAmountLabelBytes } from '../wallet/rendering.js';
@@ -294,6 +301,19 @@ console.log(`  ✓ blind: deterministic, == derive_blind == SHA-256, recovered p
   ok('roster', 2);
 }
 console.log(`  ✓ roster: record round trip; restore finds index 0 (counter 3) and index 2 (counter 0) only; ${tally.roster.refused} bad records refused`);
+
+// ── Deploy roster ────────────────────────────────────────────────────────────
+
+{
+  const provable = Object.keys(new (Contract as any)(makeWitnesses()).impureCircuits).sort();
+  const roster = [...allCircuits()].sort();
+  assert.deepEqual(roster, provable, 'deploy: allCircuits() is exactly the compiled contract\'s provable circuits');
+  const arm = roster.filter((c) => /_(with|with_grant)_evm_k256$/.test(c));
+  assert.equal(arm.length, 16, 'deploy: the sixteen evm_k256 circuits are in the roster');
+  assert.ok(ARMS.includes('evm_k256'), 'deploy: evm_k256 is a registered arm');
+  ok('deploy', 3);
+  console.log(`  ✓ deploy: allCircuits() == the compiled contract's ${provable.length} provable circuits, the ${arm.length} evm_k256 circuits among them (${tally.deploy.pass} checks)`);
+}
 
 // ── Domain: the fixed V1 domain ───────────────────────────────────────────
 

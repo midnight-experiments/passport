@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-10-18T15:25:18Z",
+  "measuredAt": "2026-10-24T18:55:40Z",
   "compiler": "0.35.0",
   "zkirVersion": "midnight-zkir 3.1.0-rc.1",
   "hardware": {
@@ -20,35 +20,37 @@
     "memoryLimit": "none (engine memory 32279617536 bytes)",
     "engineMemTotalBytes": 32279617536,
     "engineVersion": "29.8.2",
-    "startedAt": "2026-10-18T15:24:28.419698333Z",
+    "startedAt": "2026-10-24T18:54:02.672366171Z",
     "restartCount": 0,
     "memoryPeakBytes": null,
     "memoryPeakNote": "not readable: the image has no cat for docker exec (as upstream's p256 suite, which records null)",
-    "memoryUsageNow": "100.1MiB / 30.06GiB"
+    "memoryUsageNow": "8.121GiB / 30.06GiB",
+    "workers": 1
   },
   "circuits": [
     {
       "contract": "account",
       "circuit": "activate_initial_device_with_evm_k256",
       "k": 15,
-      "rows": 17139,
+      "kProofServer": 15,
+      "rows": 17953,
       "assets": {
         "zkir": {
-          "bytes": 37582
+          "bytes": 38076
         },
         "prover": {
-          "bytes": 71318933
+          "bytes": 71319075
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "c5c4520ccbc32b0f3f2cb15e736ec07973235656f4635b8383674b23f273d182"
+          "sha256": "2a178d4a5977bcdd1e95103f4172abfcef3d299616704a9cc63711f023b62537"
         }
       },
       "prove": {
-        "n": 7,
-        "minMs": 2740,
-        "medianMs": 2844,
-        "maxMs": 3597,
+        "n": 12,
+        "minMs": 2603,
+        "medianMs": 2903,
+        "maxMs": 3557,
         "otherKeyObservations": 0
       }
     },
@@ -56,24 +58,25 @@
       "contract": "account",
       "circuit": "revoke_all_grants_with_evm_k256",
       "k": 16,
-      "rows": 62470,
+      "kProofServer": 16,
+      "rows": 54033,
       "assets": {
         "zkir": {
-          "bytes": 68744
+          "bytes": 57975
         },
         "prover": {
-          "bytes": 142630241
+          "bytes": 142627540
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "218eb6893d886b975c2c76a671af688d6d04dde21c793ddd58d76418be083164"
+          "sha256": "6975babc716e42b94a12c4fee1b4b7f3d35ede2567a2033efbf104a94f858e86"
         }
       },
       "prove": {
-        "n": 2,
-        "minMs": 7601,
-        "medianMs": 7622,
-        "maxMs": 7643,
+        "n": 7,
+        "minMs": 5289,
+        "medianMs": 6159,
+        "maxMs": 6746,
         "otherKeyObservations": 0
       }
     },
@@ -81,49 +84,51 @@
       "contract": "account",
       "circuit": "recover_cancel_with_evm_k256",
       "k": 16,
-      "rows": 63172,
+      "kProofServer": 16,
+      "rows": 54735,
       "assets": {
         "zkir": {
-          "bytes": 70122
+          "bytes": 59353
         },
         "prover": {
-          "bytes": 148922736
+          "bytes": 148920035
         },
         "verifier": {
           "bytes": 3465,
-          "sha256": "ffcbf54affb82695809eba2ada3df456a1a0f4c2a1ac0aa196caaf96a9447183"
+          "sha256": "0f29371ca6edad89cb7d18f012b5a3f551a3ad2b6e533c0029bb0dbe94b0e609"
         }
       },
       "prove": {
-        "n": 4,
-        "minMs": 5828,
-        "medianMs": 5855,
-        "maxMs": 7245,
+        "n": 13,
+        "minMs": 5349,
+        "medianMs": 5573,
+        "maxMs": 6771,
         "otherKeyObservations": 0
       }
     },
     {
       "contract": "account",
       "circuit": "rotate_enc_key_with_evm_k256",
-      "k": 17,
-      "rows": 60921,
+      "k": 16,
+      "kProofServer": 16,
+      "rows": 58281,
       "assets": {
         "zkir": {
-          "bytes": 68341
+          "bytes": 57572
         },
         "prover": {
-          "bytes": 285236485
+          "bytes": 142627448
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "595b5734cc0bfdf373a7e65c6c30ee728537dff23b6303dcfce2c3eaeb750f27"
+          "sha256": "374b2ffd94ef5dc73ba5d41ecc82e06a61d00f1765ce9495335faf43eff53df3"
         }
       },
       "prove": {
-        "n": 9,
-        "minMs": 9651,
-        "medianMs": 9862,
-        "maxMs": 13495,
+        "n": 22,
+        "minMs": 5397,
+        "medianMs": 5698,
+        "maxMs": 9020,
         "otherKeyObservations": 0
       }
     },
@@ -131,24 +136,25 @@
       "contract": "account",
       "circuit": "append_inbox_with_evm_k256",
       "k": 17,
-      "rows": 69778,
+      "kProofServer": 17,
+      "rows": 61333,
       "assets": {
         "zkir": {
-          "bytes": 70527
+          "bytes": 59758
         },
         "prover": {
-          "bytes": 285237140
+          "bytes": 285234439
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "2145cfc673d46bda8c8669efa18946df6b79a0e9fb10aa01b951555a263f6216"
+          "sha256": "2783c8cc1003eb8ab56ac1a11d3254ed757980ae3adf1ca00f7b1988f11d2915"
         }
       },
       "prove": {
-        "n": 2,
-        "minMs": 13501,
-        "medianMs": 13502,
-        "maxMs": 13503,
+        "n": 7,
+        "minMs": 9836,
+        "medianMs": 11887,
+        "maxMs": 12783,
         "otherKeyObservations": 0
       }
     },
@@ -156,24 +162,25 @@
       "contract": "account",
       "circuit": "withdraw_unshielded_with_evm_k256",
       "k": 17,
-      "rows": 73202,
+      "kProofServer": 17,
+      "rows": 64757,
       "assets": {
         "zkir": {
-          "bytes": 397962
+          "bytes": 386997
         },
         "prover": {
-          "bytes": 285347442
+          "bytes": 285344547
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "583f0a90e70ea8603b6fcd649c863f91137c740ede8159d4872e5b9f0ca4fffc"
+          "sha256": "8cec37eb4a0de2bd24e39b569df627f5a5f781afab9c5eebb6507b2a75de565d"
         }
       },
       "prove": {
-        "n": 10,
-        "minMs": 10460,
-        "medianMs": 13140.5,
-        "maxMs": 15094,
+        "n": 18,
+        "minMs": 9413,
+        "medianMs": 9873,
+        "maxMs": 12543,
         "otherKeyObservations": 0
       }
     },
@@ -181,24 +188,25 @@
       "contract": "account",
       "circuit": "publish_recovery_session_with_evm_k256",
       "k": 17,
-      "rows": 76557,
+      "kProofServer": 17,
+      "rows": 68112,
       "assets": {
         "zkir": {
-          "bytes": 79140
+          "bytes": 68373
         },
         "prover": {
-          "bytes": 297823601
+          "bytes": 297820904
         },
         "verifier": {
           "bytes": 3465,
-          "sha256": "9830d129822c2d5a121caf929ad41195530542724e1a1c9e7bbcb695f223f20f"
+          "sha256": "e660bcae715a8c7a1a46a43ff563192eab5daac1304577c3bdc257acdefa90d4"
         }
       },
       "prove": {
-        "n": 9,
-        "minMs": 10424,
-        "medianMs": 10739,
-        "maxMs": 14770,
+        "n": 27,
+        "minMs": 10343,
+        "medianMs": 10662,
+        "maxMs": 13530,
         "otherKeyObservations": 0
       }
     },
@@ -206,24 +214,25 @@
       "contract": "account",
       "circuit": "withdraw_shielded_with_evm_k256",
       "k": 17,
-      "rows": 95892,
+      "kProofServer": 17,
+      "rows": 87447,
       "assets": {
         "zkir": {
-          "bytes": 416090
+          "bytes": 405123
         },
         "prover": {
-          "bytes": 285352057
+          "bytes": 285349160
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "65f541662fe2f6e9a85eb9ede907a8adf2bdb6a6453e80c8515c9cd7ddbe107d"
+          "sha256": "8fb8194b8713f3cd6d8b1710c18cfc97bba839bd7c80da49b1b36f8bda7d70dd"
         }
       },
       "prove": {
-        "n": 3,
-        "minMs": 10705,
-        "medianMs": 14047,
-        "maxMs": 14117,
+        "n": 11,
+        "minMs": 10175,
+        "medianMs": 12044,
+        "maxMs": 13747,
         "otherKeyObservations": 0
       }
     },
@@ -231,24 +240,25 @@
       "contract": "account",
       "circuit": "withdraw_unshielded_with_grant_evm_k256",
       "k": 17,
-      "rows": 99268,
+      "kProofServer": 17,
+      "rows": 90823,
       "assets": {
         "zkir": {
-          "bytes": 466860
+          "bytes": 455898
         },
         "prover": {
-          "bytes": 285370206
+          "bytes": 285367314
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "16e268f437d5919df5977112388cbb86e832f36973f2adc3f6e2e84105597a58"
+          "sha256": "c127635c28142020366373dcc7258667935088ffbaa3644a6e1e045465882c9f"
         }
       },
       "prove": {
-        "n": 22,
-        "minMs": 10393,
-        "medianMs": 10732,
-        "maxMs": 15596,
+        "n": 32,
+        "minMs": 10291,
+        "medianMs": 10482.5,
+        "maxMs": 13186,
         "otherKeyObservations": 0
       }
     },
@@ -256,99 +266,103 @@
       "contract": "account",
       "circuit": "withdraw_shielded_to_contract_with_evm_k256",
       "k": 17,
-      "rows": 101595,
+      "kProofServer": 17,
+      "rows": 93150,
       "assets": {
         "zkir": {
-          "bytes": 417723
+          "bytes": 406756
         },
         "prover": {
-          "bytes": 285352580
+          "bytes": 285349683
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "94c5b963efa39b40ce2a4de44d353ba4696dcd623e859607a07f39a83c6326df"
+          "sha256": "8a58546be423317e8e026a5c50192000c754ac76082d5f3833b65acf7c5437db"
         }
       },
       "prove": {
-        "n": 3,
-        "minMs": 11522,
-        "medianMs": 14565,
-        "maxMs": 15208,
+        "n": 9,
+        "minMs": 10405,
+        "medianMs": 10584,
+        "maxMs": 13558,
         "otherKeyObservations": 0
       }
     },
     {
       "contract": "account",
       "circuit": "add_device_with_evm_k256",
-      "k": 18,
-      "rows": 133169,
+      "k": 17,
+      "kProofServer": 17,
+      "rows": 126449,
       "assets": {
         "zkir": {
-          "bytes": 297272
+          "bytes": 287111
         },
         "prover": {
-          "bytes": 637632492
+          "bytes": 318862593
         },
         "verifier": {
           "bytes": 3705,
-          "sha256": "6a43de1a9420832ce9c4bd0ac5e7fbc7cca5bde23ecefdb0f8154e5a69fa7735"
+          "sha256": "0aac557ddfb254e33bbc32ddf8dc1fc8810b285cb071a0df7cfef6794a832495"
         }
       },
       "prove": {
-        "n": 18,
-        "minMs": 24825,
-        "medianMs": 26082,
-        "maxMs": 35460,
+        "n": 32,
+        "minMs": 12139,
+        "medianMs": 12667,
+        "maxMs": 18180,
         "otherKeyObservations": 0
       }
     },
     {
       "contract": "account",
       "circuit": "withdraw_shielded_with_grant_evm_k256",
-      "k": 18,
-      "rows": 133618,
+      "k": 17,
+      "kProofServer": 17,
+      "rows": 126817,
       "assets": {
         "zkir": {
-          "bytes": 490009
+          "bytes": 479047
         },
         "prover": {
-          "bytes": 570589288
+          "bytes": 285373724
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "7564671d3d52a2ebbbc9f0cd755cb8bb5fef3b4c5fc23edf05167da03a7200f4"
+          "sha256": "cd9883d9b7ecdbc8577899faf08bc40f5a53ad103dc4c5235cb2352615c1ca9b"
         }
       },
       "prove": {
-        "n": 30,
-        "minMs": 22852,
-        "medianMs": 24424,
-        "maxMs": 34405,
+        "n": 34,
+        "minMs": 11427,
+        "medianMs": 11766.5,
+        "maxMs": 14528,
         "otherKeyObservations": 0
       }
     },
     {
       "contract": "account",
       "circuit": "revoke_grant_with_evm_k256",
-      "k": 18,
-      "rows": 137452,
+      "k": 17,
+      "kProofServer": 17,
+      "rows": 130788,
       "assets": {
         "zkir": {
-          "bytes": 354852
+          "bytes": 344286
         },
         "prover": {
-          "bytes": 637651680
+          "bytes": 318881632
         },
         "verifier": {
           "bytes": 3705,
-          "sha256": "7ec5bbb014c625f434403dfca681713110fecc0895b8a3071e6fceff643f11e5"
+          "sha256": "924bb8aa7250b342ddf85f5581289d8f8939d5dab95e629d5f1c95e82e0efe51"
         }
       },
       "prove": {
-        "n": 6,
-        "minMs": 25861,
-        "medianMs": 26615.5,
-        "maxMs": 38388,
+        "n": 14,
+        "minMs": 12556,
+        "medianMs": 13081.5,
+        "maxMs": 16802,
         "otherKeyObservations": 0
       }
     },
@@ -356,24 +370,25 @@
       "contract": "account",
       "circuit": "withdraw_shielded_to_contract_with_grant_evm_k256",
       "k": 18,
-      "rows": 139321,
+      "kProofServer": 18,
+      "rows": 130923,
       "assets": {
         "zkir": {
-          "bytes": 491642
+          "bytes": 480680
         },
         "prover": {
-          "bytes": 570589811
+          "bytes": 570586919
         },
         "verifier": {
           "bytes": 3321,
-          "sha256": "2965a236613ceae486b014c3793bac926197813dcb7d9e67a408469b1df4024d"
+          "sha256": "83f5e21e201bbbdd84c184ccb721ce508688e34e1b81436486ba685ff6724779"
         }
       },
       "prove": {
-        "n": 29,
-        "minMs": 23026,
-        "medianMs": 24070,
-        "maxMs": 33330,
+        "n": 33,
+        "minMs": 19722,
+        "medianMs": 20407,
+        "maxMs": 26915,
         "otherKeyObservations": 0
       }
     },
@@ -381,24 +396,25 @@
       "contract": "account",
       "circuit": "remove_device_with_evm_k256",
       "k": 18,
-      "rows": 142161,
+      "kProofServer": 18,
+      "rows": 133771,
       "assets": {
         "zkir": {
-          "bytes": 306591
+          "bytes": 296426
         },
         "prover": {
-          "bytes": 637635041
+          "bytes": 637632242
         },
         "verifier": {
           "bytes": 3705,
-          "sha256": "2bbbe2d76bb800af3119cf05588c849b949c3fd7832b5836e88293bbda17486e"
+          "sha256": "743fc34fdee5ce29f68157eb24a1879e309050f68b1df74e231e5f9098fafc8e"
         }
       },
       "prove": {
-        "n": 9,
-        "minMs": 25934,
-        "medianMs": 27194,
-        "maxMs": 37298,
+        "n": 24,
+        "minMs": 21455,
+        "medianMs": 22591.5,
+        "maxMs": 31387,
         "otherKeyObservations": 0
       }
     },
@@ -406,24 +422,25 @@
       "contract": "account",
       "circuit": "issue_grant_with_evm_k256",
       "k": 18,
-      "rows": 189595,
+      "kProofServer": 18,
+      "rows": 181201,
       "assets": {
         "zkir": {
-          "bytes": 442305
+          "bytes": 431742
         },
         "prover": {
-          "bytes": 637678961
+          "bytes": 637676020
         },
         "verifier": {
           "bytes": 3705,
-          "sha256": "fef53fa38e7d6587bd8143cc09352f892e75e8e554c9fdd25ebdf93e8b068a35"
+          "sha256": "086a155f895c56178e1a05076be7ee827a19b40a5e740ec7caed78d803135b57"
         }
       },
       "prove": {
-        "n": 43,
-        "minMs": 23468,
-        "medianMs": 27973,
-        "maxMs": 43492,
+        "n": 47,
+        "minMs": 22835,
+        "medianMs": 23760,
+        "maxMs": 30964,
         "otherKeyObservations": 0
       }
     }
