@@ -947,7 +947,21 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 
     const late = new AbortController();
     const finds = solDeviceFinds(pre.surface, K, { signal: late.signal });
     late.abort();
+    const lateReads = pre.st.reads;
     await refused(G, 'solDeviceFinds: a signal aborted after the predicate was made', /aborted after 0 probes/, () => finds(rec.blind));
+    ok(G, '... and the aborted predicate does not read the ledger', pre.st.reads === lateReads);
+    // a signal aborted while the ledger is read: refused before the first probe, by the resolver and by a helper
+    for (const [name, call] of [
+      ['resolveSolEd25519Counter', (sf: any, signal: AbortSignal) => resolveSolEd25519Counter(sf, fresh(), { signal })],
+      ['rotateEncKeyWithSolEd25519', (sf: any, signal: AbortSignal) => rotateEncKeyWithSolEd25519(sf, fresh(counting), SITE, rnd(32), { signal })],
+      ['issueGrantWithSolEd25519', (sf: any, signal: AbortSignal) => issueGrantWithSolEd25519(sf, fresh(counting), SITE, {} as any, {} as any, { signal })],
+    ] as const) {
+      const c = new AbortController();
+      const a = ledgerOf(3000n, 3000n, `abort during read ${name}`);
+      const slow = { ...a.surface, ledgerState: async () => { const l = await a.surface.ledgerState(); c.abort(); return l; } };
+      await refused(G, `${name}: a signal aborted while the ledger is read`, /aborted after 0 probes/, () => call(slow, c.signal));
+      ok(G, `... ${name}: no entry probed`, a.st.probes === 0);
+    }
     const restoreCtl = new AbortController();
     const deep = ledgerOf(3000n, 3000n, 'restore abort');
     deep.st.onProbe = (n) => { if (n === 600) restoreCtl.abort(); };
