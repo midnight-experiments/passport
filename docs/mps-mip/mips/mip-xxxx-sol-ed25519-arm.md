@@ -89,7 +89,10 @@ refuse raw bytes); Backpack and Solflare sign raw, and the off-chain
 message through their own wallet-standard `solana:signOffchainMessage`
 when they advertise it with message version 1, which clients SHOULD
 use instead of handing them the envelope's bytes (shown as garbled
-characters). Clients MUST verify every signature a wallet returns
+characters). A wallet-standard account lists the features it supports
+(`WalletAccount.features`, a subset of the wallet's); clients MUST use
+only the wallet's features that the connected account lists, and treat
+an account without that list as supporting none. Clients MUST verify every signature a wallet returns
 against the expected key, over exactly the bytes the wallet was asked
 to sign, before proving: a wallet may answer with another key than the
 one it reports. A refusal names another key only when the signature
@@ -201,9 +204,11 @@ enrolled in; its identity (the key and the arm's tag) does not depend
 on the format. Clients MUST store per device its arm, format and
 account index, and SHOULD cache the blind with them in local storage,
 never sending it. On restore a client uses the cached blind, else
-derives it in the stored format, else, with no record, in every format
-the wallet can sign; it never derives a blind in another format than
-the stored one. A device enrolled through a raw-only wallet cannot be
+derives it in the stored format and uses it only if it finds the
+account's entry (a wallet whose Ed25519 nonce is not derived as RFC 8032
+specifies signs the request differently and derives another blind),
+else, with no record, in every format the wallet can sign; it never
+derives a blind in another format than the stored one. A device enrolled through a raw-only wallet cannot be
 re-derived from an off-chain-only wallet of the same key: the client
 says so (naming the format needed, or, without a record, that no
 account was found in the wallet's formats and that the device may have
@@ -216,6 +221,26 @@ verifier keys of the readable arms' enrolment and grant circuits. A
 deployed account has retired its maintenance authority and cannot take
 new keys, so such an upgrade is new code, new keys and a new account
 version.
+
+**Use counters.** Every enrolment by a circuit inserts counter 0 and
+every successful device-gated call advances the caller's counter and
+`auth_nonce` by one each, so a live entry enrolled at counter 0 has a
+counter no greater than `auth_nonce`. Clients MUST find a device's
+counter without a fixed ceiling: the last counter they confirmed
+first, then forward from it, then every counter up to `auth_nonce`.
+An entry enrolled through an entry-taking `add_device` at a counter
+above `auth_nonce` is reached only when its counter is given.
+
+**Changes from earlier drafts.** An approval was the text alone,
+signed with `signMessage`; it is now the 50-byte head followed by the
+same text, so every raw approval's bytes changed, while the texts and
+the raw blind requests (and so the blinds and entries) did not. The
+off-chain message v1 format is new. 15 of the arm's 16 circuits have
+new verifier keys (the activation keeps its own), and the account's
+other circuits keep theirs. The Ed25519 key encoder and seed
+derivation moved to the shared Ed25519 core
+(`encode_public_key_ed25519`, `compute_public_key_ed25519`). The full
+list is in [SOL-ED25519](../../../contract/SOL-ED25519.md), section 12.
 
 **What is public.** Every call publishes which arm and role it uses
 (the circuit name), and the ledger holds only blinded device entries
