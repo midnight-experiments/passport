@@ -952,7 +952,15 @@ const counterCases: Record<string, unknown>[] = [];
     const late = new AbortController();
     const finds = evmK256DeviceFinds(acc3, { signal: late.signal });
     late.abort();
+    const lateReads = acc3.reads;
     await refusedAsync('counters', () => finds(dev3), /aborted after 0 probes/, 'a predicate whose signal was aborted after it was made');
+    assert.equal(acc3.reads, lateReads, 'the aborted predicate does not read the ledger');
+    // a signal aborted while the ledger is read: refused before the first probe
+    const c8 = new AbortController();
+    const acc8 = rollingAccount(3000n, [[d, 3000n]]);
+    const slow = { ...acc8, async ledgerState() { const l = await acc8.ledgerState(); c8.abort(); return l; } };
+    await refusedAsync('counters', () => resolveEvmK256Counter(slow as any, fresh(), { signal: c8.signal }), /aborted after 0 probes/, 'a signal aborted while the ledger is read');
+    assert.equal(acc8.probes, 0, 'no entry probed once the signal was aborted during the read');
     const mid = new AbortController();
     const acc4 = rollingAccount(3000n, [[d, 3000n]]);
     let n4 = 0;
