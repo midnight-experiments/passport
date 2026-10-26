@@ -1133,7 +1133,7 @@
           "k256-core-probe-offline"
         ],
         "verdict": "KILLED",
-        "killKind": "accepted forgery at K256Core alone (the point at infinity as the key: digest 1, s = 1, r = x(G))",
+        "killKind": "accepted forgery at K256Core alone (the flagged point at infinity as the key: digest 1, s = 1, r = x(G)); the unflagged (0, 0) is refused by the generated argument check before the core, and is no evidence for or against this mutant",
         "evidence": [
           "k256-core-probe-offline (probe-k256-core): ✗ the key rule refuses the point at infinity (flagged) (NOT refused: the core accepted it)",
           "k256-core-probe-offline (probe-k256-core): ✗ the verification refuses the point at infinity (flagged) with digest 1, s = 1, r = x(G) (NOT refused: the core accepted it); the pure circuit returned true",
@@ -1150,7 +1150,7 @@
           "k256-core-probe-offline"
         ],
         "verdict": "KILLED",
-        "killKind": "accepted forgery at K256Core alone (the point at infinity as the key: digest 1, s = 1, r = x(G))",
+        "killKind": "accepted forgery at K256Core alone (the flagged point at infinity as the key: digest 1, s = 1, r = x(G)); the unflagged (0, 0) is refused by the generated argument check before the core, and is no evidence for or against this mutant",
         "evidence": [
           "k256-core-probe-offline (probe-k256-core): ✗ the verification refuses the point at infinity (flagged) with digest 1, s = 1, r = x(G) (NOT refused: the core accepted it); the pure circuit returned true",
           "prover: C7's runs, the 15 core-section gated exports and the seam case"

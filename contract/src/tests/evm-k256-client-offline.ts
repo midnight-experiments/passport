@@ -90,6 +90,9 @@ import {
   evmK256WalletFormats, highSTwin, parseEvmSignature, personalMessageDigest, restoreEvmK256Device, restoreEvmK256Grantee,
   revokeAllGrantsWithEvmK256, rotateEncKeyWithEvmK256, serialiseEvmSignature, withdrawUnshieldedAsEvmGrantee, SECP256K1_ORDER,
   evmK256GrantReadSeed, evmK256DeviceFinds, recoverCancelWithEvmK256, resolveEvmK256Counter, restoreEvmDevices,
+  appendInboxWithEvmK256, withdrawUnshieldedWithEvmK256, withdrawShieldedWithEvmK256, authoriseWithdrawShieldedToContract, addDeviceWithEvmK256,
+  removeDeviceWithEvmK256, removeUnknownDeviceWithEvmK256, issueGrantWithEvmK256, revokeGrantWithEvmK256, publishRecoverySessionWithEvmK256,
+  evmK256GranteeInput, evmDeviceDescriptor,
   type EvmK256Authorisation, type EvmK256GranteeRecord, type EvmK256RosterRecord, type EvmWallet,
 } from '../wallet/signer-evm-k256.js';
 
@@ -716,9 +719,10 @@ function rollingAccount(authNonce: bigint, live: [EvmK256Device, bigint][], epoc
   const set = new Set(live.map(([d, c]) => hex(d.entryAt(account, epoch, c))));
   const devices = live.map(([d]) => d);
   const s = {
-    authNonce, probes: 0, calls: [] as { circuit: string; useCounter: bigint }[],
+    authNonce, probes: 0, reads: 0, calls: [] as { circuit: string; useCounter: bigint }[],
     addressBytes: account,
     async ledgerState() {
+      s.reads++;
       return { auth_nonce: s.authNonce, device_epoch: epoch, devices: { member: (e: Uint8Array) => { s.probes++; return set.has(hex(e)); } } };
     },
     seam(circuit: string, a: { pk: { x: bigint; y: bigint }; blind: Uint8Array; use_counter: bigint }) {
@@ -853,8 +857,135 @@ const counterCases: Record<string, unknown>[] = [];
     counterCases.push({ case: 'uncached restore at 4500 and 5000', counters: ['4500', '5000'] });
     ok('counters', 4);
   }
+  // 7. counters at the top of the Uint<64> range: a known counter at, or just below, 2^64 - 1 scans
+  //    forward to the largest counter only (never 2^64, which no entry can have), then from 0
+  {
+    const MAX = (1n << 64n) - 1n;
+    const acc = rollingAccount(10n, [[d, 3n]]);
+    for (const known of [MAX, MAX - 1n, MAX - 10n]) {
+      const dev = fresh();
+      dev.noteCounter(acc.addressBytes, 0n, known);
+      const p0 = acc.probes;
+      assert.equal(await resolveEvmK256Counter(acc, dev), 3n, `a noted counter ${known === MAX ? '2^64 - 1' : `2^64 - 1 - ${MAX - known}`}: the live counter 3 is found`);
+      assert.equal(acc.probes - p0, Number(MAX - known) + 1 + 4, 'forward to 2^64 - 1, then 0..3');
+      assert.equal(await resolveEvmK256Counter(acc, fresh(), { counter: known }), 3n, 'the same hint given as an option');
+    }
+    // a device whose live entry is at 2^64 - 1 itself
+    const top = rollingAccount(10n, [[d, MAX]]);
+    const devTop = fresh(); devTop.noteCounter(top.addressBytes, 0n, MAX);
+    assert.equal(await resolveEvmK256Counter(top, devTop), MAX, 'a live entry at 2^64 - 1 is found from its counter');
+    // a counter that is not a Uint<64> is refused before the ledger is read
+    for (const [bad, why] of [[MAX + 1n, '2^64'], [-1n, '-1'], [3 as any, 'the number 3'], ['3' as any, 'the string "3"']] as const) {
+      const r0 = acc.reads;
+      await refusedAsync('counters', () => resolveEvmK256Counter(acc, fresh(), { counter: bad as bigint }), /a use counter is a Uint<64>/, `an explicit counter ${why}`);
+      await refusedAsync('counters', () => rotateEncKeyWithEvmK256(acc, fresh(), rnd(), { counter: bad as bigint }), /a use counter is a Uint<64>/, `a helper given the counter ${why}`);
+      assert.equal(acc.reads, r0, `the ledger is not read for the counter ${why}`);
+    }
+    counterCases.push({ case: 'hints at 2^64 - 1, 2^64 - 2 and 2^64 - 11 with the entry at 3; an entry at 2^64 - 1; non-Uint<64> counters refused before reading', found: '3' });
+    ok('counters', 3);
+  }
+  // 8. a long scan runs in chunks: it yields to the event loop between chunks (other work runs), a signal
+  //    stops it with a clear error, and the entry deep in the range is still found
+  {
+    const acc = rollingAccount(5000n, [[d, 5000n]]);
+    let ticks = 0;
+    const timer = setInterval(() => { ticks++; }, 0);
+    const seen: number[] = [];
+    const watched = (a: ReturnType<typeof rollingAccount>, onProbe: (n: number) => void = () => {}) => ({
+      ...a,
+      async ledgerState() {
+        const l = await a.ledgerState();
+        return { ...l, devices: { member: (e: Uint8Array) => { seen.push(ticks); onProbe(seen.length); return l.devices.member(e); } } };
+      },
+    });
+    try {
+      assert.equal(await resolveEvmK256Counter(watched(acc), fresh()), 5000n, 'the entry at 5000 is found');
+      assert.equal(seen.length, 5001, 'every counter 0..5000 probed once');
+      assert.ok(seen[seen.length - 1] > seen[0], 'other work ran during the scan (it yields between chunks)');
+      assert.ok(new Set(seen).size >= 5, `the scan yielded several times (${new Set(seen).size} tick values over 5,001 probes)`);
+      assert.equal(seen[255], seen[0], 'no yield inside the first chunk: a live known counter and its successor cost no yield');
+      // aborted mid-scan, through a helper: refused at the next chunk boundary, nothing signed or sent
+      seen.length = 0;
+      const ctl = new AbortController();
+      const w = new RecordingWallet(A);
+      const dev = new EvmK256Device(d.pk, d.blind, NET, 0n, w);
+      const acc2 = rollingAccount(5000n, [[d, 5000n]]);
+      let err: any;
+      try { await rotateEncKeyWithEvmK256(watched(acc2, (n) => { if (n === 1000) ctl.abort(new Error('the user left the page')); }) as any, dev, rnd(), { signal: ctl.signal }); }
+      catch (e) { err = e; }
+      assert.ok(err && /^evm_k256: the use-counter scan was aborted after 1024 probes$/.test(err.message), `aborted with a clear error: ${err?.message}`);
+      assert.equal(err.cause?.message, 'the user left the page', 'the signal\'s reason is the cause');
+      assert.ok(seen.length === 1024 && w.requests.filter((r) => r.method !== 'address').length === 0 && acc2.calls.length === 0, 'stopped at the chunk boundary; nothing signed, nothing sent');
+    } finally { clearInterval(timer); }
+    // an aborted signal refuses every caller before the ledger is read and before the wallet is asked
+    const ctl = new AbortController(); ctl.abort();
+    const signal = ctl.signal;
+    const acc3 = rollingAccount(5n, [[d, 5n]]);
+    const w3 = new RecordingWallet(A);
+    const dev3 = new EvmK256Device(d.pk, d.blind, NET, 0n, w3);
+    const other = await EvmK256Device.enrol(new SoftwareEvmWallet(scalar()), NET, 0);
+    const grantee = evmK256GranteeInput(evmDeviceDescriptor(other), { label: LABEL }, 1n);
+    const surface = { ...acc3, async heldCoin() { return { nonce: rnd(), color: rnd(), value: 9n, mt_index: 0n }; } } as any;
+    const helpers: [string, () => Promise<unknown>][] = [
+      ['resolveEvmK256Counter', () => resolveEvmK256Counter(surface, dev3, { signal })],
+      ['rotateEncKeyWithEvmK256', () => rotateEncKeyWithEvmK256(surface, dev3, rnd(), { signal })],
+      ['appendInboxWithEvmK256', () => appendInboxWithEvmK256(surface, dev3, rnd(192), { signal })],
+      ['withdrawUnshieldedWithEvmK256', () => withdrawUnshieldedWithEvmK256(surface, dev3, rnd(), 1n, rnd(), SITE, { signal })],
+      ['withdrawShieldedWithEvmK256', () => withdrawShieldedWithEvmK256(surface, dev3, rnd(), rnd(), 1n, SITE, { signal })],
+      ['authoriseWithdrawShieldedToContract', () => authoriseWithdrawShieldedToContract(surface, dev3, rnd(), rnd(), 1n, SITE, { signal })],
+      ['addDeviceWithEvmK256', () => addDeviceWithEvmK256(surface, dev3, evmDeviceDescriptor(other), { signal })],
+      ['removeDeviceWithEvmK256', () => removeDeviceWithEvmK256(surface, dev3, evmDeviceDescriptor(other), 0n, 0n, { signal })],
+      ['removeUnknownDeviceWithEvmK256', () => removeUnknownDeviceWithEvmK256(surface, dev3, rnd(), { signal })],
+      ['issueGrantWithEvmK256', () => issueGrantWithEvmK256(surface, dev3, grantee, {} as any, { signal })],
+      ['revokeGrantWithEvmK256', () => revokeGrantWithEvmK256(surface, dev3, grantee, { signal })],
+      ['revokeAllGrantsWithEvmK256', () => revokeAllGrantsWithEvmK256(surface, dev3, { signal })],
+      ['publishRecoverySessionWithEvmK256', () => publishRecoverySessionWithEvmK256(surface, dev3, { recoveryPk: { x: 1n, y: 2n }, sessionNonce: rnd(), phi: [1n], wrap: rnd(64) }, { signal })],
+      ['recoverCancelWithEvmK256', () => recoverCancelWithEvmK256(surface, dev3, { signal })],
+      ['evmK256DeviceFinds', () => Promise.resolve().then(() => evmK256DeviceFinds(surface, { signal })(dev3))],
+      ['restoreEvmDevices', () => restoreEvmDevices(w3, NET, [{ address: acc3.addressBytes, epoch: 0n, authNonce: 5n, isMember: () => false }], { maxIndex: 0, signal })],
+    ];
+    for (const [name, call] of helpers) {
+      await refusedAsync('counters', call, /^Error: evm_k256: the use-counter scan was aborted after 0 probes$/, `${name} with an aborted signal`);
+    }
+    assert.ok(acc3.reads === 0 && acc3.probes === 0 && w3.requests.length === 0 && acc3.calls.length === 0, 'no ledger read, no probe, no wallet request, nothing sent');
+    // a signal aborted after evmK256DeviceFinds was made, and one aborted during restoreEvmDevices' scan
+    const late = new AbortController();
+    const finds = evmK256DeviceFinds(acc3, { signal: late.signal });
+    late.abort();
+    await refusedAsync('counters', () => finds(dev3), /aborted after 0 probes/, 'a predicate whose signal was aborted after it was made');
+    const mid = new AbortController();
+    const acc4 = rollingAccount(3000n, [[d, 3000n]]);
+    let n4 = 0;
+    await refusedAsync('counters', () => restoreEvmDevices(new RecordingWallet(A), NET,
+      [{ address: acc4.addressBytes, epoch: 0n, authNonce: 3000n, isMember: (e) => { if (++n4 === 600) mid.abort(); return acc4.isLive(d, 3000n) && eq(e, d.entryAt(acc4.addressBytes, 0n, 3000n)); } }],
+      { maxIndex: 0, signal: mid.signal }), /aborted after 768 probes/, 'restoreEvmDevices aborted during its scan');
+    // aborted mid-scan through the shared frame of the other helpers (recover_cancel), through
+    // evmK256DeviceFinds inside a restore, and before restoreEvmDevices' scan starts (while the wallet signs)
+    {
+      const c5 = new AbortController();
+      const acc5 = rollingAccount(3000n, [[d, 3000n]]);
+      seen.length = 0;
+      await refusedAsync('counters', () => recoverCancelWithEvmK256(watched(acc5, (n) => { if (n === 300) c5.abort(); }) as any, fresh(), { signal: c5.signal }),
+        /aborted after 512 probes/, 'recover_cancel aborted during its scan');
+      const c6 = new AbortController();
+      const acc6 = rollingAccount(3000n, [[d, 3000n]]);
+      seen.length = 0;
+      await refusedAsync('counters', () => restoreEvmK256Device({ wallet: new RecordingWallet(A), network: NET, accountIndex: 0,
+        finds: evmK256DeviceFinds(watched(acc6, (n) => { if (n === 300) c6.abort(); }) as any, { signal: c6.signal }) }), /aborted after 512 probes/, 'evmK256DeviceFinds aborted during its scan');
+      const c7 = new AbortController();
+      const acc7 = rollingAccount(3000n, [[d, 3000n]]);
+      const aborting = new RecordingWallet(A);
+      const sign = aborting.personalSign.bind(aborting);
+      aborting.personalSign = async (m: Uint8Array) => { c7.abort(); return sign(m); };
+      await refusedAsync('counters', () => restoreEvmDevices(aborting, NET, [{ address: acc7.addressBytes, epoch: 0n, authNonce: 3000n, isMember: (e) => { acc7.probes++; return eq(e, d.entryAt(acc7.addressBytes, 0n, 3000n)); } }],
+        { maxIndex: 0, signal: c7.signal }), /aborted after 0 probes/, 'restoreEvmDevices aborted while the wallet signed: no probe');
+      assert.equal(acc7.probes, 0, 'no entry probed after the abort');
+    }
+    counterCases.push({ case: 'a scan of 5,001 probes yields between chunks of 256 and finds 5000; aborted at probe 1,000 it stops at 1,024 with the reason as cause; aborted through recover_cancel, evmK256DeviceFinds and restoreEvmDevices; every caller refuses an aborted signal before reading the ledger', yielded: true });
+    ok('counters', 5);
+  }
   report.counters = counterCases;
-  console.log(`  ✓ counters: ${tally.counters.pass} cases (4095 → 4096 → 4097 with the same and a fresh device object, 5000, stale known counters, an entry above auth_nonce given its counter, recover_cancel at 4100, uncached restores at 4500 and 5000); ${tally.counters.refused} refused`);
+  console.log(`  ✓ counters: ${tally.counters.pass} cases (4095 → 4096 → 4097 with the same and a fresh device object, 5000, stale known counters, an entry above auth_nonce given its counter, recover_cancel at 4100, uncached restores at 4500 and 5000, hints at the top of the Uint<64> range, a chunked scan that yields and is aborted, every caller's signal); ${tally.counters.refused} refused`);
 }
 
 // ── The read seed: in memory only, derived again from one signature ─────────
