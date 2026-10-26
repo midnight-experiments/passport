@@ -287,7 +287,9 @@ npm run test:evm_k256-offline        # evm_k256: frozen EIP-712 vectors (contrac
                                      # records and restore, the grant and recovery
                                      # matrices, every gated export's authorisation
                                      # and every checked byte argument forged, in
-                                     # the simulator
+                                     # the simulator; and K256Core alone through
+                                     # its probe (the point at infinity as the key,
+                                     # zero scalars, the digest hint)
 VIEM_DIR=<viem 2.x> npx tsx src/tests/evm-k256-viem.ts  # evm_k256: the vectors,
                                      # addresses, blinds and signatures against viem
                                      # (not a dependency; loaded at run time)
