@@ -293,10 +293,10 @@ console.log(`  ✓ blind: deterministic, == derive_blind == SHA-256, recovered p
   const setB = new Set([hex(d2.entryAt(B, 0n, 0n))]);
   const setC = new Set([hex(d0.entryAt(A, 0n, 0n))]); // an entry of A planted in C matches nothing in C
   const found = await restoreEvmDevices(w, 'undeployed', [
-    { address: A, epoch: 0n, isMember: (e) => setA.has(hex(e)) },
-    { address: B, epoch: 0n, isMember: (e) => setB.has(hex(e)) },
-    { address: C, epoch: 0n, isMember: (e) => setC.has(hex(e)) },
-  ], { maxIndex: 3, maxCounter: 8n });
+    { address: A, epoch: 0n, authNonce: 8n, isMember: (e) => setA.has(hex(e)) },
+    { address: B, epoch: 0n, authNonce: 8n, isMember: (e) => setB.has(hex(e)) },
+    { address: C, epoch: 0n, authNonce: 8n, isMember: (e) => setC.has(hex(e)) },
+  ], { maxIndex: 3 });
   assert.deepEqual(found.map((f) => [f.accountIndex, hex(f.account), f.counter]), [[0n, hex(A), 3n], [2n, hex(B), 0n]]);
   ok('roster', 2);
 }

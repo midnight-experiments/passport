@@ -158,8 +158,10 @@ above, signed with `eth_signTypedData_v4`; blind requests are signed
 with `personal_sign`. Clients MUST NOT ask a wallet for anything else.
 A device is bound to the format it was enrolled in: its blind is the
 signature over the blind request in that format, so only a wallet
-that signs that format deterministically with the same key derives it
-again. Clients store per device its arm, its format, its network and
+that signs that format with the same key and the same deterministic
+nonce rule as the enrolling wallet (RFC 6979, as specified) derives it
+again; a deterministic wallet with another nonce rule derives another
+blind. Clients store per device its arm, its format, its network and
 its account index (none of them secret), and per grant a wallet holds
 the issuing account; they MAY cache the blind with that record in
 local storage, protected as the wallet's session data, and MUST NOT
@@ -167,7 +169,8 @@ send it anywhere. A grantee's read seed MUST NOT be stored: it is kept
 in memory for the session and derived again from one signature of the
 grantee request, which must give the cached blind again. On restore a client MUST
 use the cached blind if present, else derive the blind in the stored
-format from a signature by the stored address, else (no record)
+format from a signature by the stored address and use it only if it
+finds the account's entry (or the grant ID), else (no record)
 derive it in every format the wallet can sign and test it against the
 account's entries or the grant ID; it MUST NOT derive a blind in any
 other format, and without a match it reports that no account (or
@@ -201,6 +204,28 @@ changes the ZKIR, and so the verifier keys, of the existing readable
 arms' enrolment and grant circuits. An account that has retired its
 maintenance authority cannot take new keys, so such an upgrade is new
 code, new keys and a new account version.
+
+**Use counters.** Every enrolment by a circuit inserts counter 0 and
+every successful device-gated call advances the caller's counter and
+`auth_nonce` by one each, so a live entry enrolled at counter 0 has a
+counter no greater than `auth_nonce`. Clients MUST find a device's
+counter without a fixed ceiling: the last counter they confirmed
+first, then forward from it, then every counter up to `auth_nonce`.
+An entry enrolled through an entry-taking `add_device` at a counter
+above `auth_nonce` is reached only when its counter is given.
+
+**Changes from earlier drafts.** The arm was named `evm_eip712`. Its
+domain was `{name "Midnight Passport Account", version "1",
+verifyingContract the low 20 bytes of keccak256(A)}`, one separator per
+account; it is now the fixed V1 domain above, one separator for every
+account, so every digest changed, while the types, the members, the
+blind requests and the entries did not. Every name containing
+`evm_eip712` became `evm_k256`, or a name of the new core, identity
+and format modules (circuits, helpers, structs, files);
+the 16 entry circuits have new verifier keys, and the account's other
+circuits keep theirs. The full list of renamed and removed names and
+the changed keys is in [EVM-K256](../../../contract/EVM-K256.md),
+section 16.
 
 **Privacy.** A call publishes its entry point (the arm and the role);
 blinded device entries, boot commitments and grant IDs; a grant's
