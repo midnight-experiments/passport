@@ -227,7 +227,10 @@ every successful device-gated call advances the caller's counter and
 `auth_nonce` by one each, so a live entry enrolled at counter 0 has a
 counter no greater than `auth_nonce`. Clients MUST find a device's
 counter without a fixed ceiling: the last counter they confirmed
-first, then forward from it, then every counter up to `auth_nonce`.
+first, then forward from it (never past 2^64 − 1), then every counter
+up to `auth_nonce`; a counter a caller gives must be a `Uint<64>`, and
+a long scan should run in bounded chunks that yield and can be
+cancelled.
 An entry enrolled through an entry-taking `add_device` at a counter
 above `auth_nonce` is reached only when its counter is given.
 
@@ -239,8 +242,13 @@ off-chain message v1 format is new. 15 of the arm's 16 circuits have
 new verifier keys (the activation keeps its own), and the account's
 other circuits keep theirs. The Ed25519 key encoder and seed
 derivation moved to the shared Ed25519 core
-(`encode_public_key_ed25519`, `compute_public_key_ed25519`). The full
-list is in [SOL-ED25519](../../../contract/SOL-ED25519.md), section 12.
+(`encode_public_key_ed25519`, `compute_public_key_ed25519`). The
+client's API changed with them: a device takes a `signer` (no longer a
+signing function), every signer lists the `formats` it signs, the
+grantee blind derivation returns a record (with the format beside the blind), records
+name their format, and the counter resolution takes a known counter and
+an abort signal. The full list is in
+[SOL-ED25519](../../../contract/SOL-ED25519.md), section 12.
 
 **What is public.** Every call publishes which arm and role it uses
 (the circuit name), and the ledger holds only blinded device entries
