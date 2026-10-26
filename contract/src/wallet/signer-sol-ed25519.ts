@@ -451,8 +451,7 @@ export class SolEd25519Device {
    *  way to reach an entry enrolled at a counter above auth_nonce, which the
    *  resolution's scan does not reach. */
   noteCounter(contractAddress: Uint8Array, epoch: bigint, counter: bigint): void {
-    if (typeof counter !== 'bigint' || counter < 0n || counter >= 1n << 64n) throw new Error('sol_ed25519: a use counter is a Uint<64>');
-    this.counters.set(counterKey(contractAddress, epoch), counter);
+    this.counters.set(counterKey(contractAddress, epoch), checkUseCounter(counter));
   }
 
   bootCommitment(salt: Uint8Array): Uint8Array {
@@ -746,21 +745,77 @@ export interface SolEd25519CustodySurface extends SolEd25519AccountSurface {
 // or the resolver's `counter`). From a counter the device held once, its
 // counter now is at most auth_nonce higher (one per call, and auth_nonce
 // counts every call), so the scan forward from a known counter reaches
-// known + auth_nonce, which also follows such an entry.
+// known + auth_nonce (or 2^64 - 1, the largest counter, if that is less),
+// which also follows such an entry; the scan from 0 always follows it, so a
+// wrong known counter never hides an entry enrolled at 0. Every counter a
+// caller gives is checked to be a Uint<64> first.
+//
+// A scan can be long (auth_nonce counts every call of every device), so it
+// runs in chunks of SCAN_CHUNK probes and yields to the event loop between
+// two chunks, and a caller's AbortSignal stops it between chunks. A live known
+// counter costs one probe and its successor two, both inside the first chunk.
 
 const counterKey = (contractAddress: Uint8Array, epoch: bigint) => `${toHex(contractAddress)}/${epoch.toString()}`;
 
+/** The largest use counter: the entry recipes take a Uint<64>. */
+const MAX_USE_COUNTER = (1n << 64n) - 1n;
+
+/** How many entries a scan probes between two yields to the event loop. */
+const SCAN_CHUNK = 256;
+
+/** A counter resolution's options: a use counter the caller knows (a
+ *  Uint<64>, checked first; it overrides the device object's own), and a
+ *  signal that cancels the scan (the resolution then rejects, naming the
+ *  probes made, with the signal's reason as the cause). */
+export interface SolEd25519CounterOptions { counter?: bigint; signal?: AbortSignal }
+
+/** Refuses a value that is not a Uint<64>, the type of a use counter. */
+function checkUseCounter(counter: unknown): bigint {
+  if (typeof counter !== 'bigint' || counter < 0n || counter > MAX_USE_COUNTER) throw new Error('sol_ed25519: a use counter is a Uint<64>');
+  return counter;
+}
+
+/** Refuses the resolution when `signal` is aborted, before any probe or
+ *  between two chunks of a scan. */
+function checkNotAborted(signal: AbortSignal | undefined, probes: number): void {
+  if (signal?.aborted) throw new Error(`sol_ed25519: the use-counter scan was aborted after ${probes} probes`, { cause: signal.reason });
+}
+
+/** Checks a resolution's options before the ledger is read: the counter a
+ *  Uint<64>, the signal an AbortSignal not yet aborted. */
+function checkCounterOptions(opts: SolEd25519CounterOptions): void {
+  if (opts.counter !== undefined) checkUseCounter(opts.counter);
+  if (opts.signal !== undefined && typeof (opts.signal as { aborted?: unknown }).aborted !== 'boolean') throw new Error('sol_ed25519: signal is an AbortSignal');
+  checkNotAborted(opts.signal, 0);
+}
+
+const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => {
+  const g = globalThis as { setImmediate?: (f: () => void) => unknown };
+  if (typeof g.setImmediate === 'function') g.setImmediate(resolve); else setTimeout(resolve, 0);
+});
+
 /** The first live counter in the order: `known` (when given), forward from it
- *  through known + authNonce, then from 0 up to it (or through authNonce
- *  without a known counter); undefined when none is live. At most
- *  2 x authNonce + 2 probes. */
-function liveCounter(isLive: (counter: bigint) => boolean, authNonce: bigint, known?: bigint): bigint | undefined {
-  if (known !== undefined) {
-    if (typeof known !== 'bigint' || known < 0n) throw new Error('sol_ed25519: a known use counter is a non-negative bigint');
-    for (let k = known; k <= known + authNonce; k++) if (isLive(k)) return k;
+ *  through known + authNonce (at most the largest counter), then from 0 up to
+ *  it (or through authNonce without a known counter); undefined when none is
+ *  live. At most 2 x authNonce + 2 probes, in chunks (see "Use counters"). */
+async function liveCounter(isLive: (counter: bigint) => boolean, authNonce: bigint, known?: bigint, signal?: AbortSignal): Promise<bigint | undefined> {
+  if (known !== undefined) checkUseCounter(known);
+  checkNotAborted(signal, 0);
+  const ranges: [bigint, bigint][] = [];
+  if (known !== undefined) ranges.push([known, known + authNonce < MAX_USE_COUNTER ? known + authNonce : MAX_USE_COUNTER]);
+  const last = known !== undefined && known <= authNonce ? known - 1n : authNonce;
+  if (last >= 0n) ranges.push([0n, last]);
+  let probes = 0;
+  for (const [from, to] of ranges) {
+    for (let k = from; k <= to; k++) {
+      if (probes > 0 && probes % SCAN_CHUNK === 0) {
+        await yieldToEventLoop();
+        checkNotAborted(signal, probes);
+      }
+      probes++;
+      if (isLive(k)) return k;
+    }
   }
-  const end = known !== undefined && known <= authNonce ? known : authNonce + 1n;
-  for (let k = 0n; k < end; k++) if (isLive(k)) return k;
   return undefined;
 }
 
@@ -768,12 +823,13 @@ type SolLedgerView = Awaited<ReturnType<SolEd25519AccountSurface['ledgerState']>
 
 /** The counter of `device`'s live entry in the ledger state `l`, kept as the
  *  device's known counter (see resolveSolEd25519Counter). */
-function counterIn(l: SolLedgerView, account: SolEd25519AccountSurface, device: SolEd25519Device, counter?: bigint): bigint {
-  const known = counter ?? device.knownCounter(account.addressBytes, l.device_epoch);
-  const found = liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce, known);
+async function counterIn(l: SolLedgerView, account: SolEd25519AccountSurface, device: SolEd25519Device, opts: SolEd25519CounterOptions = {}): Promise<bigint> {
+  const known = opts.counter ?? device.knownCounter(account.addressBytes, l.device_epoch);
+  const found = await liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce, known, opts.signal);
   if (found === undefined) {
+    const top = known !== undefined && known + l.auth_nonce < MAX_USE_COUNTER ? known + l.auth_nonce : MAX_USE_COUNTER;
     throw new Error(`sol_ed25519: no live entry for this device at the current epoch, at any use counter from 0 to auth_nonce (${l.auth_nonce})` +
-      `${known !== undefined ? `, or from the known counter ${known} through ${known + l.auth_nonce}` : ''}: not a device of this account, or an entry enrolled at a counter above auth_nonce (give it with noteCounter)`);
+      `${known !== undefined ? `, or from the known counter ${known} through ${top}` : ''}: not a device of this account, or an entry enrolled at a counter above auth_nonce (give it with noteCounter)`);
   }
   device.noteCounter(account.addressBytes, l.device_epoch, found);
   return found;
@@ -786,31 +842,38 @@ function counterIn(l: SolLedgerView, account: SolEd25519AccountSurface, device: 
  *  known + auth_nonce, then from 0 up to it. That scan is complete for every
  *  entry enrolled at counter 0 (see "Use counters"), so a device never stops
  *  being found after many calls. The counter found becomes the known one, so
- *  the next call finds its successor with one more probe. */
-export async function resolveSolEd25519Counter(account: SolEd25519AccountSurface, device: SolEd25519Device, opts: { counter?: bigint } = {}): Promise<bigint> {
-  return counterIn(await account.ledgerState(), account, device, opts.counter);
+ *  the next call finds its successor with one more probe. `opts.counter`
+ *  must be a Uint<64>, checked before the ledger is read; `opts.signal`
+ *  cancels the scan. */
+export async function resolveSolEd25519Counter(account: SolEd25519AccountSurface, device: SolEd25519Device, opts: SolEd25519CounterOptions = {}): Promise<bigint> {
+  checkCounterOptions(opts);
+  return counterIn(await account.ledgerState(), account, device, opts);
 }
 
 /** A restore's test for a device blind (restoreSolBlind `finds`): whether
  *  the key with that blind has a live entry on `account` at the current
- *  epoch, at any counter from 0 to auth_nonce. */
-export function solDeviceFinds(account: SolEd25519AccountSurface, key: Uint8Array | string): (blind: Uint8Array) => Promise<boolean> {
+ *  epoch, at any counter from 0 to auth_nonce; `opts.signal` cancels the
+ *  scan. */
+export function solDeviceFinds(account: SolEd25519AccountSurface, key: Uint8Array | string, opts: { signal?: AbortSignal } = {}): (blind: Uint8Array) => Promise<boolean> {
   const k = parseSolanaPublicKey(key);
+  checkCounterOptions({ signal: opts.signal });
   return async (blind) => {
+    checkNotAborted(opts.signal, 0);
     const device = new SolEd25519Device({ publicKey: k, blind });
     const l = await account.ledgerState();
-    return liveCounter((c) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, c)), l.auth_nonce) !== undefined;
+    return (await liveCounter((c) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, c)), l.auth_nonce, undefined, opts.signal)) !== undefined;
   };
 }
 
 /** Authorises the next device-gated call of `device` on `account`: the
  *  ledger's auth_nonce and the resolved counter (one read of the ledger;
- *  `opts.counter` is a counter the caller knows, checked first), the
- *  message, the signature. */
+ *  `opts` as resolveSolEd25519Counter's: every helper below takes them as
+ *  its last argument), the message, the signature. */
 export async function authoriseSolDeviceOn(account: SolEd25519AccountSurface, device: SolEd25519Device, site: string, o: SolDeviceOperation,
-  opts: { counter?: bigint } = {}): Promise<SolEd25519Authorisation> {
+  opts: SolEd25519CounterOptions = {}): Promise<SolEd25519Authorisation> {
+  checkCounterOptions(opts);
   const l = await account.ledgerState();
-  const counter = counterIn(l, account, device, opts.counter);
+  const counter = await counterIn(l, account, device, opts);
   return authoriseSolDevice(device, { contractAddress: account.addressBytes, authNonce: l.auth_nonce }, site, o, counter);
 }
 
@@ -824,39 +887,39 @@ export async function solSpentCoin(account: SolEd25519CustodySurface, color: Uin
 }
 
 /** rotate_enc_key_with_sol_ed25519 through a CustodyAccount. */
-export async function rotateEncKeyWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, newKey: Uint8Array) {
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'rotate_enc_key', newKey });
+export async function rotateEncKeyWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, newKey: Uint8Array, opts: SolEd25519CounterOptions = {}) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'rotate_enc_key', newKey }, opts);
   return { auth, ...(await account.rotateEncKeyWithAuth(newKey, auth)) };
 }
 
 /** append_inbox_with_sol_ed25519: the 192-byte entry in full. */
-export async function appendInboxWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, entry: Uint8Array) {
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'append_inbox', entry });
+export async function appendInboxWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, entry: Uint8Array, opts: SolEd25519CounterOptions = {}) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'append_inbox', entry }, opts);
   return { auth, ...(await account.appendInboxWithAuth(entry, auth)) };
 }
 
 /** withdraw_unshielded_with_sol_ed25519 to a 32-byte user address. `amount`
  *  carries the site's decimals and symbol (shown as the site's claim). */
-export async function withdrawUnshieldedWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipient: Uint8Array) {
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_unshielded', amount, recipient });
+export async function withdrawUnshieldedWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipient: Uint8Array, opts: SolEd25519CounterOptions = {}) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_unshielded', amount, recipient }, opts);
   return { auth, ...(await account.withdrawUnshieldedWithAuth(amount.color, amount.amount, recipient, auth)) };
 }
 
 /** withdraw_shielded_with_sol_ed25519 to a Zswap coin public key: the
  *  message shows the coin the store holds for the colour (nonce, value,
  *  Merkle index) and the change. */
-export async function withdrawShieldedWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipient: Uint8Array) {
+export async function withdrawShieldedWithSolEd25519(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipient: Uint8Array, opts: SolEd25519CounterOptions = {}) {
   const coin = await solSpentCoin(account, amount.color);
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_shielded', amount, recipient, coin });
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_shielded', amount, recipient, coin }, opts);
   return { auth, coin, ...(await account.withdrawShieldedWithAuth(recipient, amount.color, amount.amount, auth)) };
 }
 
 /** withdraw_shielded_to_contract_with_sol_ed25519 (direct transfer, MIP-0012
  *  §6.6): the authorisation only, because the call must be composed with the
  *  recipient contract's claim in one transaction. */
-export async function authoriseWithdrawShieldedToContractSol(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipientContract: Uint8Array) {
+export async function authoriseWithdrawShieldedToContractSol(account: SolEd25519CustodySurface, device: SolEd25519Device, site: string, amount: SolAmount, recipientContract: Uint8Array, opts: SolEd25519CounterOptions = {}) {
   const coin = await solSpentCoin(account, amount.color);
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_shielded_to_contract', amount, recipient: recipientContract, coin });
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'withdraw_shielded_to_contract', amount, recipient: recipientContract, coin }, opts);
   return { auth, coin };
 }
 
@@ -919,9 +982,9 @@ export function solTargetOf(d: Descriptor): SolTargetFields {
 /** add_device_with_sol_ed25519: the message ("gives this device FULL
  *  control of this account" and the target's descriptor), signed, then the
  *  call; the circuit enrols the target at the current epoch and counter 0. */
-export async function addDeviceWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, target: Descriptor) {
+export async function addDeviceWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, target: Descriptor, opts: SolEd25519CounterOptions = {}) {
   const t = solTargetOf(checkDescriptor(requireRegisteredScheme(target)));
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'add_device', target: t });
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'add_device', target: t }, opts);
   const r = await account.callTx.add_device_with_sol_ed25519(solTargetArg(t), solTargetPointArg(t), ...solEd25519AuthArgs(auth));
   return { auth, target: t, txId: txIdOf(r) };
 }
@@ -931,18 +994,19 @@ export async function addDeviceWithSolEd25519(account: SolEd25519LifecycleSurfac
  *  authority). */
 export async function removeDeviceWithSolEd25519(
   account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, target: Descriptor, epoch: bigint, counter: bigint,
+  opts: SolEd25519CounterOptions = {},
 ) {
   const t = solTargetOf(checkDescriptor(requireRegisteredScheme(target)));
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'remove_device', literal: false, target: t, counter, epoch });
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'remove_device', literal: false, target: t, counter, epoch }, opts);
   const r = await account.callTx.remove_device_with_sol_ed25519(false, solTargetArg(t), solTargetPointArg(t), counter, epoch, new Uint8Array(32), ...solEd25519AuthArgs(auth));
   return { auth, target: t, txId: txIdOf(r) };
 }
 
 /** remove_device_with_sol_ed25519, literal form: an entry this wallet
  *  cannot describe, under "Removes a device this wallet cannot identify". */
-export async function removeUnknownDeviceWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, entry: Uint8Array) {
+export async function removeUnknownDeviceWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, entry: Uint8Array, opts: SolEd25519CounterOptions = {}) {
   if (!(entry instanceof Uint8Array) || entry.length !== 32) throw new Error('sol_ed25519: an entry is 32 bytes');
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'remove_device', literal: true, entry: new Uint8Array(entry) });
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'remove_device', literal: true, entry: new Uint8Array(entry) }, opts);
   const r = await account.callTx.remove_device_with_sol_ed25519(true, solTargetArg({ tag: '' }), solUnusedKey(), 0n, 0n, new Uint8Array(entry), ...solEd25519AuthArgs(auth));
   return { auth, txId: txIdOf(r) };
 }
@@ -1012,10 +1076,11 @@ export function solGrantScopeSalt(blind: Uint8Array, account: Uint8Array, authNo
  *  field shown, signed, then the call. Returns, with the transaction, the
  *  grant's scope salt as the circuit derived it, for the grantee. */
 export async function issueGrantWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string,
-  grantee: SolGranteeFields, scope: SolIssueScope) {
+  grantee: SolGranteeFields, scope: SolIssueScope, opts: SolEd25519CounterOptions = {}) {
   const o: SolDeviceOperation = { op: 'issue_grant', grantee, ...scope };
+  checkCounterOptions(opts);
   const l = await account.ledgerState();
-  const counter = counterIn(l, account, device);
+  const counter = await counterIn(l, account, device, opts);
   const auth = await authoriseSolDevice(device, { contractAddress: account.addressBytes, authNonce: l.auth_nonce }, site, o, counter);
   const scopeSalt = solGrantScopeSalt(device.blind, account.addressBytes, l.auth_nonce);
   const caller = { is_some: scope.caller !== null, value: { bytes: scope.caller ?? new Uint8Array(32) } };
@@ -1043,15 +1108,15 @@ export function solGranteeReadKey(secret: Uint8Array, grantId: Uint8Array): { se
 
 /** revoke_grant_with_sol_ed25519: the grantee descriptor shown; the grant id
  *  re-derived in-circuit. */
-export async function revokeGrantWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, grantee: SolGranteeFields) {
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'revoke_grant', grantee });
+export async function revokeGrantWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, grantee: SolGranteeFields, opts: SolEd25519CounterOptions = {}) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'revoke_grant', grantee }, opts);
   const r = await account.callTx.revoke_grant_with_sol_ed25519(solGranteeArg(grantee), solTargetPointArg(grantee), ...solEd25519AuthArgs(auth));
   return { auth, txId: txIdOf(r) };
 }
 
 /** revoke_all_grants_with_sol_ed25519. */
-export async function revokeAllGrantsWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string) {
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'revoke_all_grants' });
+export async function revokeAllGrantsWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, opts: SolEd25519CounterOptions = {}) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'revoke_all_grants' }, opts);
   const r = await account.callTx.revoke_all_grants_with_sol_ed25519(...solEd25519AuthArgs(auth));
   return { auth, txId: txIdOf(r) };
 }
@@ -1090,9 +1155,9 @@ export function solRecoverySession(a: SolRecoveryArtefacts) {
  *  account's recovery key", the key's coordinates, the session identifier,
  *  the four backup vector values, the length and the wrap, all in full),
  *  signed by the device's wallet, then the call. */
-export async function publishRecoverySessionWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, artefacts: SolRecoveryArtefacts) {
+export async function publishRecoverySessionWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, artefacts: SolRecoveryArtefacts, opts: SolEd25519CounterOptions = {}) {
   const session = solRecoverySession(artefacts);
-  const auth = await authoriseSolDeviceOn(account, device, site, session);
+  const auth = await authoriseSolDeviceOn(account, device, site, session, opts);
   const r = await account.callTx.publish_recovery_session_with_sol_ed25519(
     session.recoveryPk, session.sessionNonce, ...session.phi, session.phiLen, session.wrap, ...solEd25519AuthArgs(auth));
   return { auth, session, txId: txIdOf(r) };
@@ -1100,8 +1165,8 @@ export async function publishRecoverySessionWithSolEd25519(account: SolEd25519Li
 
 /** recover_cancel_with_sol_ed25519: the frame and the consequence line,
  *  signed, then the call; vetoes the pending recovery. */
-export async function recoverCancelWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string) {
-  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'recover_cancel' });
+export async function recoverCancelWithSolEd25519(account: SolEd25519LifecycleSurface, device: SolEd25519Device, site: string, opts: SolEd25519CounterOptions = {}) {
+  const auth = await authoriseSolDeviceOn(account, device, site, { op: 'recover_cancel' }, opts);
   const r = await account.callTx.recover_cancel_with_sol_ed25519(...solEd25519AuthArgs(auth));
   return { auth, txId: txIdOf(r) };
 }
