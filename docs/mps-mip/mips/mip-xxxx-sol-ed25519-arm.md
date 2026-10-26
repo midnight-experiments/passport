@@ -244,10 +244,13 @@ other circuits keep theirs. The Ed25519 key encoder and seed
 derivation moved to the shared Ed25519 core
 (`encode_public_key_ed25519`, `compute_public_key_ed25519`). The
 client's API changed with them: a device takes a `signer` (no longer a
-signing function), every signer lists the `formats` it signs, the
-grantee blind derivation returns a record (with the format beside the blind), records
-name their format, and the counter resolution takes a known counter and
-an abort signal. The full list is in
+signing function), every signer lists the `formats` it signs, a device
+made from a signer and an enrolled grantee take an optional format, the
+grantee blind derivation returns a record (with the format beside the
+blind), records name their format, the raw-message check takes the
+complete signed message (the raw head, then the text) where it took the
+text alone, and the counter resolution takes a known counter and an
+abort signal. The full list is in
 [SOL-ED25519](../../../contract/SOL-ED25519.md), section 12.
 
 **What is public.** Every call publishes which arm and role it uses
