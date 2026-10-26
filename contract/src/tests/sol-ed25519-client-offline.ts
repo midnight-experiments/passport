@@ -47,6 +47,14 @@
 //      known counters; a new epoch; an entry above auth_nonce refused until
 //      its counter is given, then used; recover_cancel at 4100; uncached
 //      restores at 4500 and 5000.
+//   7. The scan's bounds and chunks: known counters at and just below
+//      2^64 - 1 with a live low counter (the forward scan stops at the
+//      largest counter, then the scan from 0 finds it); counters that are not
+//      a Uint<64> refused before the ledger is read; a scan of 5,001 probes
+//      that yields to the event loop between chunks and still finds 5000; one
+//      aborted mid-scan, stopping at the chunk boundary with the signal's
+//      reason as the cause; an aborted signal refused by every caller before
+//      the ledger is read or the wallet asked.
 //
 // Writes $EVIDENCE_DIR/sol-ed25519-client-offline.json when EVIDENCE_DIR is set.
 
@@ -62,6 +70,9 @@ import {
   ED25519_L, SolEd25519Device, SolEd25519Grantee, addDeviceWithSolEd25519, authoriseSolDevice, authoriseSolGrantee, checkSolSignature,
   deriveSolBlind, deriveSolGranteeBlind, parseSolRosterEntry, restoreSolBlind, restoreSolGranteeBlind, solBlindSignedBytes, solDeviceFinds,
   authoriseSolDeviceOn, recoverCancelWithSolEd25519, resolveSolEd25519Counter, rotateEncKeyWithSolEd25519, solEd25519AuthArgs,
+  appendInboxWithSolEd25519, withdrawUnshieldedWithSolEd25519, withdrawShieldedWithSolEd25519, authoriseWithdrawShieldedToContractSol,
+  removeDeviceWithSolEd25519, removeUnknownDeviceWithSolEd25519, issueGrantWithSolEd25519, revokeGrantWithSolEd25519, revokeAllGrantsWithSolEd25519,
+  publishRecoverySessionWithSolEd25519,
   solGranteeBlindSignedBytes, solKeyHints, solRosterEntry, solSignerFormats, solSoftwareSigner, type SolEd25519LifecycleSurface, type SolSigner,
 } from '../wallet/signer-sol-ed25519.js';
 import {
@@ -742,7 +753,7 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 
   const d = fresh();
   const rolling = (authNonce: bigint, counter: bigint, epoch = 0n, account = seedOf(`counters account ${authNonce}/${counter}/${epoch}`)) => {
     const set = new Set([hex(d.entryAt(account, epoch, counter))]);
-    const st = { authNonce, probes: 0, calls: [] as string[] };
+    const st = { authNonce, probes: 0, reads: 0, calls: [] as string[], onProbe: undefined as ((n: number) => void) | undefined };
     const seam = (circuit: string, args: unknown[]) => {
       const a = args.at(-1) as { pk: unknown; blind: Uint8Array; use_counter: bigint };
       const e = hex(new SolEd25519Device({ publicKey: K, blind: a.blind }).entryAt(account, epoch, a.use_counter));
@@ -753,7 +764,7 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 
     };
     const surface = {
       addressBytes: account,
-      ledgerState: async () => ({ auth_nonce: st.authNonce, device_epoch: epoch, devices: { member: (e: Uint8Array) => { st.probes++; return set.has(hex(e)); } } }),
+      ledgerState: async () => { st.reads++; return { auth_nonce: st.authNonce, device_epoch: epoch, devices: { member: (e: Uint8Array) => { st.probes++; st.onProbe?.(st.probes); return set.has(hex(e)); } } }; },
       rotateEncKeyWithAuth: async (_k: Uint8Array, a: any) => seam('rotate_enc_key_with_sol_ed25519', solEd25519AuthArgs(a)).public,
       callTx: new Proxy({}, { get: (_t, name) => async (...args: unknown[]) => seam(String(name), args) }) as any,
       heldCoin: async () => { throw new Error('no coin'); },
@@ -831,6 +842,118 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 
     ok(G, 'restores of a device at 4500 (no record, and the cache lost) and at 5000 find it', r1.ok === true && r1.source === 'search' && eq(r1.matches[0].blind, rec.blind)
       && r2.ok === true && r2.source === 'stored-format' && r3.ok === true && eq(r3.matches[0].blind, rec.blind));
   }
+}
+
+// ── 7. The scan's bounds and chunks (R2) ─────────────────────────────────────
+{
+  const G = '7 scan bounds and chunks';
+  const s = seedOf('counters'), K = keyOf(s);
+  const signer = solSoftwareSigner(s);
+  const rec = await deriveSolBlind(signer, { network: NETWORK, accountIndex: 0 });
+  const fresh = (sg: SolSigner = signer) => new SolEd25519Device({ publicKey: K, blind: rec.blind, signer: sg });
+  const d = fresh();
+  const MAX = (1n << 64n) - 1n;
+  const ledgerOf = (authNonce: bigint, counter: bigint, label: string) => {
+    const account = seedOf(`scan account ${label}`);
+    const live = hex(d.entryAt(account, 0n, counter));
+    const st = { probes: 0, reads: 0, ticks: [] as number[], onProbe: undefined as ((n: number) => void) | undefined };
+    const surface = {
+      addressBytes: account,
+      ledgerState: async () => { st.reads++; return { auth_nonce: authNonce, device_epoch: 0n, devices: { member: (e: Uint8Array) => { st.probes++; st.ticks.push(ticks); st.onProbe?.(st.probes); return hex(e) === live; } } }; },
+      rotateEncKeyWithAuth: async () => { throw new Error('the call must not be sent'); },
+      callTx: new Proxy({}, { get: () => async () => { throw new Error('the call must not be sent'); } }) as any,
+      heldCoin: async (color: Uint8Array) => ({ nonce: rnd(32), color, value: 9n, mt_index: 0n }),
+    } as any;
+    return { st, surface };
+  };
+  let ticks = 0;
+  const timer = setInterval(() => { ticks++; }, 0);
+  try {
+    // known counters at the top of the range, a live low counter
+    let good = true;
+    const detail: string[] = [];
+    for (const known of [MAX, MAX - 1n, MAX - 10n]) {
+      const a = ledgerOf(10n, 3n, `top ${known}`);
+      const dev = fresh(); dev.noteCounter(a.surface.addressBytes, 0n, known);
+      const got = await resolveSolEd25519Counter(a.surface, dev);
+      const viaOpt = await resolveSolEd25519Counter(a.surface, fresh(), { counter: known });
+      const auth = await authoriseSolDeviceOn(a.surface, fresh(), SITE, { op: 'rotate_enc_key', newKey: rnd(32) }, { counter: known });
+      const want = Number(MAX - known) + 1 + 4;
+      good &&= got === 3n && viaOpt === 3n && auth.use_counter === 3n && a.st.probes === 3 * want;
+      detail.push(`${known}: ${got}, ${viaOpt}, ${auth.use_counter}, ${a.st.probes} probes`);
+    }
+    ok(G, 'known counters 2^64 - 1, 2^64 - 2 and 2^64 - 11 (noted, given, and given to authoriseSolDeviceOn) with the entry at 3: forward to 2^64 - 1 only, then 0..3, found', good, detail.join('; '));
+    const top = ledgerOf(10n, MAX, 'at max');
+    const devTop = fresh(); devTop.noteCounter(top.surface.addressBytes, 0n, MAX);
+    ok(G, 'a live entry at 2^64 - 1 is found from its counter', await resolveSolEd25519Counter(top.surface, devTop) === MAX);
+    for (const [bad, why] of [[MAX + 1n, '2^64'], [-1n, '-1'], [3 as any, 'the number 3']] as const) {
+      const a = ledgerOf(10n, 3n, `bad ${why}`);
+      await refused(G, `an explicit counter ${why} is refused`, /a use counter is a Uint<64>/, () => resolveSolEd25519Counter(a.surface, fresh(), { counter: bad as bigint }));
+      await refused(G, `a helper given the counter ${why} is refused`, /a use counter is a Uint<64>/, () => rotateEncKeyWithSolEd25519(a.surface, fresh(), SITE, rnd(32), { counter: bad as bigint }));
+      ok(G, `... before the ledger is read (${why})`, a.st.reads === 0);
+    }
+    // a long scan: chunks with yields, the deep entry found
+    const long = ledgerOf(5000n, 5000n, 'long');
+    const found = await resolveSolEd25519Counter(long.surface, fresh());
+    const t = long.st.ticks;
+    ok(G, 'a scan of 5,001 probes finds 5000, yields between chunks (other work runs), and not inside the first chunk',
+      found === 5000n && t.length === 5001 && t[t.length - 1] > t[0] && new Set(t).size >= 5 && t[255] === t[0], `${new Set(t).size} tick values`);
+    // aborted mid-scan through a helper: stops at the chunk boundary, nothing signed or sent
+    const ctl = new AbortController();
+    const mid = ledgerOf(5000n, 5000n, 'abort');
+    mid.st.onProbe = (n) => { if (n === 1000) ctl.abort(new Error('the user left the page')); };
+    let asked = 0;
+    const counting: SolSigner = { publicKey: signer.publicKey, formats: signer.formats, sign: (m) => { asked++; return signer.sign(m); } };
+    let err: any;
+    try { await rotateEncKeyWithSolEd25519(mid.surface, fresh(counting), SITE, rnd(32), { signal: ctl.signal }); } catch (e) { err = e; }
+    ok(G, 'aborted at probe 1,000: refused at the chunk boundary (1,024 probes) with a clear error and the reason as cause; nothing signed',
+      !!err && /^sol_ed25519: the use-counter scan was aborted after 1024 probes$/.test(err.message) && err.cause?.message === 'the user left the page' && mid.st.probes === 1024 && asked === 0,
+      String(err?.message ?? err));
+    // aborted mid-scan through issue_grant, which resolves the counter on its own ledger read
+    const gctl = new AbortController();
+    const gmid = ledgerOf(3000n, 3000n, 'grant abort');
+    gmid.st.onProbe = (n) => { if (n === 300) gctl.abort(); };
+    await refused(G, 'issue_grant aborted during its scan: at the chunk boundary (512 probes)', /^sol_ed25519: the use-counter scan was aborted after 512 probes$/,
+      () => issueGrantWithSolEd25519(gmid.surface, fresh(counting), SITE, {} as any, {} as any, { signal: gctl.signal }));
+    ok(G, '... nothing signed', asked === 0 && gmid.st.probes === 512);
+    // an aborted signal refuses every caller before the ledger is read and the wallet asked
+    const dead = new AbortController(); dead.abort();
+    const signal = dead.signal;
+    const pre = ledgerOf(5n, 5n, 'pre-aborted');
+    const dev = fresh(counting);
+    const target = solDescriptor(keyOf(seedOf('a target')), seedOf('a target blind'));
+    const amount = { color: rnd(32), amount: 1n, decimals: 0, symbol: 'T' } as any;
+    const callers: [string, () => Promise<unknown>][] = [
+      ['resolveSolEd25519Counter', () => resolveSolEd25519Counter(pre.surface, dev, { signal })],
+      ['authoriseSolDeviceOn', () => authoriseSolDeviceOn(pre.surface, dev, SITE, { op: 'revoke_all_grants' }, { signal })],
+      ['rotateEncKeyWithSolEd25519', () => rotateEncKeyWithSolEd25519(pre.surface, dev, SITE, rnd(32), { signal })],
+      ['appendInboxWithSolEd25519', () => appendInboxWithSolEd25519(pre.surface, dev, SITE, rnd(192), { signal })],
+      ['withdrawUnshieldedWithSolEd25519', () => withdrawUnshieldedWithSolEd25519(pre.surface, dev, SITE, amount, rnd(32), { signal })],
+      ['withdrawShieldedWithSolEd25519', () => withdrawShieldedWithSolEd25519(pre.surface, dev, SITE, amount, rnd(32), { signal })],
+      ['authoriseWithdrawShieldedToContractSol', () => authoriseWithdrawShieldedToContractSol(pre.surface, dev, SITE, amount, rnd(32), { signal })],
+      ['addDeviceWithSolEd25519', () => addDeviceWithSolEd25519(pre.surface, dev, SITE, target, { signal })],
+      ['removeDeviceWithSolEd25519', () => removeDeviceWithSolEd25519(pre.surface, dev, SITE, target, 0n, 0n, { signal })],
+      ['removeUnknownDeviceWithSolEd25519', () => removeUnknownDeviceWithSolEd25519(pre.surface, dev, SITE, rnd(32), { signal })],
+      ['issueGrantWithSolEd25519', () => issueGrantWithSolEd25519(pre.surface, dev, SITE, {} as any, {} as any, { signal })],
+      ['revokeGrantWithSolEd25519', () => revokeGrantWithSolEd25519(pre.surface, dev, SITE, {} as any, { signal })],
+      ['revokeAllGrantsWithSolEd25519', () => revokeAllGrantsWithSolEd25519(pre.surface, dev, SITE, { signal })],
+      ['publishRecoverySessionWithSolEd25519', () => publishRecoverySessionWithSolEd25519(pre.surface, dev, SITE, { recoveryPk: { x: 1n, y: 2n }, sessionNonce: rnd(32), phi: [1n], wrap: rnd(64) }, { signal })],
+      ['recoverCancelWithSolEd25519', () => recoverCancelWithSolEd25519(pre.surface, dev, SITE, { signal })],
+      ['solDeviceFinds', () => Promise.resolve().then(() => solDeviceFinds(pre.surface, K, { signal })(rec.blind))],
+    ];
+    for (const [name, call] of callers) await refused(G, `${name} with an aborted signal`, /^sol_ed25519: the use-counter scan was aborted after 0 probes$/, call);
+    ok(G, '... none read the ledger, probed an entry or asked the wallet', pre.st.reads === 0 && pre.st.probes === 0 && asked === 0);
+    // a predicate whose signal is aborted after it was made, and a restore aborted during its scan
+    const late = new AbortController();
+    const finds = solDeviceFinds(pre.surface, K, { signal: late.signal });
+    late.abort();
+    await refused(G, 'solDeviceFinds: a signal aborted after the predicate was made', /aborted after 0 probes/, () => finds(rec.blind));
+    const restoreCtl = new AbortController();
+    const deep = ledgerOf(3000n, 3000n, 'restore abort');
+    deep.st.onProbe = (n) => { if (n === 600) restoreCtl.abort(); };
+    await refused(G, 'a restore whose finds is aborted during its scan', /aborted after 768 probes/,
+      () => restoreSolBlind(signer, { network: NETWORK, accountIndex: 0, finds: solDeviceFinds(deep.surface, K, { signal: restoreCtl.signal }) }));
+  } finally { clearInterval(timer); }
 }
 
 // ── report ───────────────────────────────────────────────────────────────────
