@@ -210,7 +210,10 @@ every successful device-gated call advances the caller's counter and
 `auth_nonce` by one each, so a live entry enrolled at counter 0 has a
 counter no greater than `auth_nonce`. Clients MUST find a device's
 counter without a fixed ceiling: the last counter they confirmed
-first, then forward from it, then every counter up to `auth_nonce`.
+first, then forward from it (never past 2^64 − 1), then every counter
+up to `auth_nonce`; a counter a caller gives must be a `Uint<64>`, and
+a long scan should run in bounded chunks that yield and can be
+cancelled.
 An entry enrolled through an entry-taking `add_device` at a counter
 above `auth_nonce` is reached only when its counter is given.
 
