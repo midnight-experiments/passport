@@ -9,10 +9,14 @@
 //     a signature by another key, or over another digest, does not (the
 //     verification returns false, the call lands); a live key is admitted
 //     by the key rule;
-//   - the point at infinity as the key, in both encodings (flagged, and the
-//     unflagged (0, 0)), is refused by the key rule and by the verification,
-//     with the signature that verifies against it when its term vanishes:
-//     digest = 1, s = 1, r = x(G) (u1·G + u2·O = G);
+//   - the point at infinity as the key (its flagged encoding, the only one a
+//     Secp256k1Point argument can carry) is refused by the key rule and by the
+//     verification, with the signature that verifies against it when its term
+//     vanishes: digest = 1, s = 1, r = x(G) (u1·G + u2·O = G);
+//   - the unflagged (0, 0) never reaches the core: it is not a point of the
+//     curve, so the generated argument check refuses it as a Secp256k1Point
+//     value, at the impure and the pure entry alike (asserted as that layer
+//     and message, not counted as a core refusal);
 //   - r = 0, s = 0 and (0, 0) are refused, with the honest key and digest;
 //   - a digest hint that is not the digest's bytes is refused.
 // A refused call must leave the ledger untouched (atomic abort).
@@ -49,7 +53,7 @@ const signOf = (sk: bigint, digest: Uint8Array): Sig => {
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
-const refusals: { label: string; message: string }[] = [];
+const refusals: { label: string; layer?: string; message: string }[] = [];
 function ok(condition: boolean, label: string) {
   if (condition) { pass++; console.log(`  ✓ ${label}`); } else { fail++; failures.push(label); console.log(`  ✗ ${label}`); }
 }
@@ -77,16 +81,46 @@ const verify = (digest: Uint8Array, sig: Sig, pk: Point, h = hint(digest)) => ca
 const admit = (pk: Point) => call('probe_k256_require_live_key', [pk]);
 
 /** The call must be refused, leave the ledger untouched, and the pure
- *  circuit must refuse the same input (when `pureCall` is given). */
+ *  circuit must refuse the same input (when `pureCall` is given). A core
+ *  refusal: any argument-decoding refusal is a failure here. */
 async function refused(label: string, f: () => Promise<unknown>, pureCall?: () => unknown) {
   const before = fingerprint();
   try { await f(); ok(false, `${label} (NOT refused: the core accepted it)`); }
-  catch (e: any) { refusals.push({ label, message: String(e?.message ?? e).slice(0, 240) }); ok(true, `${label}: refused`); }
+  catch (e: any) {
+    const m = String(e?.message ?? e);
+    refusals.push({ label, layer: DECODER.test(m) ? 'argument decoding' : 'core', message: m.slice(0, 240) });
+    ok(!DECODER.test(m), `${label}: refused${DECODER.test(m) ? ' (but by the argument decoder, not the core)' : ''}`);
+  }
   ok(fingerprint() === before, `${label}: the ledger is unchanged (atomic abort)`);
   if (pureCall) {
     try { const r = pureCall(); ok(false, `${label} (pure circuit NOT refused: returned ${String(r)})`); }
-    catch (e: any) { refusals.push({ label: `${label} (pure)`, message: String(e?.message ?? e).slice(0, 240) }); ok(true, `${label}: refused by the pure circuit too`); }
+    catch (e: any) {
+      const m = String(e?.message ?? e);
+      refusals.push({ label: `${label} (pure)`, layer: DECODER.test(m) ? 'argument decoding' : 'core', message: m.slice(0, 240) });
+      ok(!DECODER.test(m), `${label}: refused by the pure circuit too`);
+    }
   }
+}
+
+/** The argument decoder's refusal of a value that is not of the declared
+ *  type: the generated JavaScript's check of each circuit argument, before
+ *  any circuit code runs. */
+const DECODER = /^type error: .* expected value of type Secp256k1Point/;
+
+/** The call must be refused by the argument decoder (that layer and its
+ *  message), at the impure and at the pure entry, the ledger untouched: the
+ *  value never reaches the core. */
+async function decoderRefused(label: string, f: () => Promise<unknown>, pureCall: () => unknown) {
+  const before = fingerprint();
+  for (const [entry, run] of [['impure', f], ['pure', async () => pureCall()]] as const) {
+    try { await run(); ok(false, `${label} (${entry}): NOT refused`); }
+    catch (e: any) {
+      const m = String(e?.message ?? e);
+      refusals.push({ label: `${label} (${entry})`, layer: DECODER.test(m) ? 'argument decoding' : 'other', message: m.slice(0, 240) });
+      ok(DECODER.test(m), `${label} (${entry}): refused by the argument decoder ("expected value of type Secp256k1Point")${DECODER.test(m) ? '' : `, got: ${m.slice(0, 120)}`}`);
+    }
+  }
+  ok(fingerprint() === before, `${label}: the ledger is unchanged`);
 }
 
 // ── Honest controls ─────────────────────────────────────────────────────────
@@ -125,12 +159,14 @@ const forged: Sig = { r: G.x % N, s: 1n };
 ok(G.x < N && secp256k1.Point.BASE.multiply(1n).toAffine().x % N === forged.r, 'the construction: r = x(G) = x(1·G) mod n, so only the key rule stands in its way');
 const O_FLAGGED: Point = { x: 0n, y: 0n, identity: true };
 const O_ZERO: Point = { x: 0n, y: 0n, identity: false };
-console.log('── the point at infinity');
-for (const [name, O] of [['flagged', O_FLAGGED], ['unflagged (0, 0)', O_ZERO]] as const) {
-  await refused(`the key rule refuses the point at infinity (${name})`, () => admit(O), () => pure.k256_require_live_key(O));
-  await refused(`the verification refuses the point at infinity (${name}) with digest 1, s = 1, r = x(G)`,
-    () => verify(one, forged, O), () => pure.k256_ecdsa_verify(one, hint(one), forged, O));
-}
+console.log('── the point at infinity (the core)');
+await refused('the key rule refuses the point at infinity (flagged)', () => admit(O_FLAGGED), () => pure.k256_require_live_key(O_FLAGGED));
+await refused('the verification refuses the point at infinity (flagged) with digest 1, s = 1, r = x(G)',
+  () => verify(one, forged, O_FLAGGED), () => pure.k256_ecdsa_verify(one, hint(one), forged, O_FLAGGED));
+console.log('── the unflagged (0, 0) (the argument decoder, before the core)');
+await decoderRefused('the unflagged (0, 0) as the key-rule argument', () => admit(O_ZERO), () => pure.k256_require_live_key(O_ZERO));
+await decoderRefused('the unflagged (0, 0) as the verification key, with digest 1, s = 1, r = x(G)',
+  () => verify(one, forged, O_ZERO), () => pure.k256_ecdsa_verify(one, hint(one), forged, O_ZERO));
 
 // ── Zero scalars ────────────────────────────────────────────────────────────
 

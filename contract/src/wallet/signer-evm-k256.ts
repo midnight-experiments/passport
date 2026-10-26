@@ -499,8 +499,7 @@ export class EvmK256Device {
    *  way to reach an entry enrolled at a counter above auth_nonce, which the
    *  resolution's scan does not reach. */
   noteCounter(contractAddress: Uint8Array, epoch: bigint, counter: bigint): void {
-    if (typeof counter !== 'bigint' || counter < 0n || counter >= 1n << 64n) throw new Error('evm_k256: a use counter is a Uint<64>');
-    this.counters.set(counterKey(contractAddress, epoch), counter);
+    this.counters.set(counterKey(contractAddress, epoch), checkUseCounter(counter));
   }
 
   /** The boot commitment for an account deployed with `salt`. */
@@ -584,21 +583,77 @@ export class EvmK256Device {
 // k (EvmK256Device.noteCounter, or the resolver's `counter`). From a counter
 // the device held once, its counter now is at most auth_nonce higher (one per
 // call, and auth_nonce counts every call), so the scan forward from a known
-// counter reaches known + auth_nonce, which also follows such an entry.
+// counter reaches known + auth_nonce (or 2^64 - 1, the largest counter, if
+// that is less), which also follows such an entry; the scan from 0 always
+// follows it, so a wrong known counter never hides an entry enrolled at 0.
+// Every counter a caller gives is checked to be a Uint<64> first.
+//
+// A scan can be long (auth_nonce counts every call of every device), so it
+// runs in chunks of SCAN_CHUNK probes and yields to the event loop between
+// two chunks, and a caller's AbortSignal stops it between chunks. A live known
+// counter costs one probe and its successor two, both inside the first chunk.
 
 const counterKey = (contractAddress: Uint8Array, epoch: bigint) => `${hex(contractAddress)}/${epoch.toString()}`;
 
+/** The largest use counter: the entry recipes take a Uint<64>. */
+const MAX_USE_COUNTER = (1n << 64n) - 1n;
+
+/** How many entries a scan probes between two yields to the event loop. */
+const SCAN_CHUNK = 256;
+
+/** A counter resolution's options: a use counter the caller knows (a
+ *  Uint<64>, checked first; it overrides the device object's own), and a
+ *  signal that cancels the scan (the resolution then rejects, naming the
+ *  probes made, with the signal's reason as the cause). */
+export interface EvmK256CounterOptions { counter?: bigint; signal?: AbortSignal }
+
+/** Refuses a value that is not a Uint<64>, the type of a use counter. */
+function checkUseCounter(counter: unknown): bigint {
+  if (typeof counter !== 'bigint' || counter < 0n || counter > MAX_USE_COUNTER) throw new Error('evm_k256: a use counter is a Uint<64>');
+  return counter;
+}
+
+/** Refuses the resolution when `signal` is aborted, before any probe or
+ *  between two chunks of a scan. */
+function checkNotAborted(signal: AbortSignal | undefined, probes: number): void {
+  if (signal?.aborted) throw new Error(`evm_k256: the use-counter scan was aborted after ${probes} probes`, { cause: signal.reason });
+}
+
+/** Checks a resolution's options before the ledger is read: the counter a
+ *  Uint<64>, the signal an AbortSignal not yet aborted. */
+function checkCounterOptions(opts: EvmK256CounterOptions): void {
+  if (opts.counter !== undefined) checkUseCounter(opts.counter);
+  if (opts.signal !== undefined && typeof (opts.signal as { aborted?: unknown }).aborted !== 'boolean') throw new Error('evm_k256: signal is an AbortSignal');
+  checkNotAborted(opts.signal, 0);
+}
+
+const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => {
+  const g = globalThis as { setImmediate?: (f: () => void) => unknown };
+  if (typeof g.setImmediate === 'function') g.setImmediate(resolve); else setTimeout(resolve, 0);
+});
+
 /** The first live counter in the order: `known` (when given), forward from it
- *  through known + authNonce, then from 0 up to it (or through authNonce
- *  without a known counter); undefined when none is live. At most
- *  2 x authNonce + 2 probes. */
-function liveCounter(isLive: (counter: bigint) => boolean, authNonce: bigint, known?: bigint): bigint | undefined {
-  if (known !== undefined) {
-    if (typeof known !== 'bigint' || known < 0n) throw new Error('evm_k256: a known use counter is a non-negative bigint');
-    for (let k = known; k <= known + authNonce; k++) if (isLive(k)) return k;
+ *  through known + authNonce (at most the largest counter), then from 0 up to
+ *  it (or through authNonce without a known counter); undefined when none is
+ *  live. At most 2 x authNonce + 2 probes, in chunks (see "Use counters"). */
+async function liveCounter(isLive: (counter: bigint) => boolean, authNonce: bigint, known?: bigint, signal?: AbortSignal): Promise<bigint | undefined> {
+  if (known !== undefined) checkUseCounter(known);
+  checkNotAborted(signal, 0);
+  const ranges: [bigint, bigint][] = [];
+  if (known !== undefined) ranges.push([known, known + authNonce < MAX_USE_COUNTER ? known + authNonce : MAX_USE_COUNTER]);
+  const last = known !== undefined && known <= authNonce ? known - 1n : authNonce;
+  if (last >= 0n) ranges.push([0n, last]);
+  let probes = 0;
+  for (const [from, to] of ranges) {
+    for (let k = from; k <= to; k++) {
+      if (probes > 0 && probes % SCAN_CHUNK === 0) {
+        await yieldToEventLoop();
+        checkNotAborted(signal, probes);
+      }
+      probes++;
+      if (isLive(k)) return k;
+    }
   }
-  const end = known !== undefined && known <= authNonce ? known : authNonce + 1n;
-  for (let k = 0n; k < end; k++) if (isLive(k)) return k;
   return undefined;
 }
 
@@ -674,18 +729,19 @@ export async function restoreEvmK256Device(req: EvmK256DeviceRestoreRequest): Pr
  * `network`, each through restoreEvmK256Device, its blind derived from the
  * wallet and tested against candidate accounts' device sets (each account's
  * epoch and auth_nonce, read from its ledger) at every counter from 0 to its
- * auth_nonce (see "Use counters"). Returns every match, with the counter of
- * its live entry. The wallet is asked for 2 x (maxIndex + 1) `personal_sign`
+ * auth_nonce (see "Use counters"; `opts.signal` cancels the scans). Returns
+ * every match, with the counter of its live entry. The wallet is asked for 2 x (maxIndex + 1) `personal_sign`
  * approvals (two per index: the sign-twice check).
  */
 export async function restoreEvmDevices(
   wallet: EvmWallet,
   network: string,
   accounts: { address: Uint8Array; epoch: bigint; authNonce: bigint; isMember: (entry: Uint8Array) => boolean }[],
-  opts: { maxIndex?: number } = {},
+  opts: { maxIndex?: number; signal?: AbortSignal } = {},
 ): Promise<{ accountIndex: bigint; account: Uint8Array; counter: bigint; device: EvmK256Device }[]> {
   const found: { accountIndex: bigint; account: Uint8Array; counter: bigint; device: EvmK256Device }[] = [];
   const maxIndex = opts.maxIndex ?? 4;
+  checkCounterOptions({ signal: opts.signal });
   for (const a of accounts) {
     if (typeof a.authNonce !== 'bigint' || a.authNonce < 0n) throw new Error('evm_k256: each account gives its auth_nonce (a non-negative bigint), the bound of the counter scan');
   }
@@ -693,9 +749,9 @@ export async function restoreEvmDevices(
     const hits: { account: Uint8Array; counter: bigint }[] = [];
     const r = await restoreEvmK256Device({
       wallet, network, accountIndex: i,
-      finds: (device) => {
+      finds: async (device) => {
         for (const a of accounts) {
-          const k = liveCounter((c) => a.isMember(device.entryAt(a.address, a.epoch, c)), a.authNonce);
+          const k = await liveCounter((c) => a.isMember(device.entryAt(a.address, a.epoch, c)), a.authNonce, undefined, opts.signal);
           if (k !== undefined) hits.push({ account: a.address, counter: k });
         }
         return hits.length > 0;
@@ -725,12 +781,13 @@ type EvmK256LedgerView = Awaited<ReturnType<EvmK256AccountSurface['ledgerState']
 
 /** The counter of `device`'s live entry in the ledger state `l`, kept as the
  *  device's known counter (see resolveEvmK256Counter). */
-function counterIn(l: EvmK256LedgerView, account: EvmK256AccountSurface, device: EvmK256Device, counter?: bigint): bigint {
-  const known = counter ?? device.knownCounter(account.addressBytes, l.device_epoch);
-  const found = liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce, known);
+async function counterIn(l: EvmK256LedgerView, account: EvmK256AccountSurface, device: EvmK256Device, opts: EvmK256CounterOptions = {}): Promise<bigint> {
+  const known = opts.counter ?? device.knownCounter(account.addressBytes, l.device_epoch);
+  const found = await liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce, known, opts.signal);
   if (found === undefined) {
+    const top = known !== undefined && known + l.auth_nonce < MAX_USE_COUNTER ? known + l.auth_nonce : MAX_USE_COUNTER;
     throw new Error(`evm_k256: no live entry for this device at the current epoch, at any use counter from 0 to auth_nonce (${l.auth_nonce})` +
-      `${known !== undefined ? `, or from the known counter ${known} through ${known + l.auth_nonce}` : ''}: not a device of this account, or an entry enrolled at a counter above auth_nonce (give it with noteCounter)`);
+      `${known !== undefined ? `, or from the known counter ${known} through ${top}` : ''}: not a device of this account, or an entry enrolled at a counter above auth_nonce (give it with noteCounter)`);
   }
   device.noteCounter(account.addressBytes, l.device_epoch, found);
   return found;
@@ -743,26 +800,32 @@ function counterIn(l: EvmK256LedgerView, account: EvmK256AccountSurface, device:
  *  known + auth_nonce, then from 0 up to it. That scan is complete for every entry
  *  enrolled at counter 0 (see "Use counters"), so a device never stops being
  *  found after many calls. The counter found becomes the known one, so the
- *  next call finds its successor with one more probe. */
-export async function resolveEvmK256Counter(account: EvmK256AccountSurface, device: EvmK256Device, opts: { counter?: bigint } = {}): Promise<bigint> {
-  return counterIn(await account.ledgerState(), account, device, opts.counter);
+ *  next call finds its successor with one more probe. `opts.counter` must be
+ *  a Uint<64>, checked before the ledger is read; `opts.signal` cancels the
+ *  scan. */
+export async function resolveEvmK256Counter(account: EvmK256AccountSurface, device: EvmK256Device, opts: EvmK256CounterOptions = {}): Promise<bigint> {
+  checkCounterOptions(opts);
+  return counterIn(await account.ledgerState(), account, device, opts);
 }
 
 /** A restore's test of a candidate device (restoreEvmK256Device `finds`):
  *  whether it has a live entry on `account` at the current epoch, at any
- *  counter from 0 to auth_nonce. */
-export function evmK256DeviceFinds(account: EvmK256AccountSurface): (device: EvmK256Device) => Promise<boolean> {
+ *  counter from 0 to auth_nonce; `opts.signal` cancels the scan. */
+export function evmK256DeviceFinds(account: EvmK256AccountSurface, opts: { signal?: AbortSignal } = {}): (device: EvmK256Device) => Promise<boolean> {
+  checkCounterOptions({ signal: opts.signal });
   return async (device) => {
+    checkNotAborted(opts.signal, 0);
     const l = await account.ledgerState();
-    return liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce) !== undefined;
+    return (await liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce, undefined, opts.signal)) !== undefined;
   };
 }
 
 /** rotate_enc_key_with_evm_k256: the RotateEncKey message, signed by the
- *  device's wallet, then the call. */
-export async function rotateEncKeyWithEvmK256(account: EvmK256AccountSurface, device: EvmK256Device, newKey: Uint8Array) {
+ *  device's wallet, then the call. `opts` as resolveEvmK256Counter's. */
+export async function rotateEncKeyWithEvmK256(account: EvmK256AccountSurface, device: EvmK256Device, newKey: Uint8Array, opts: EvmK256CounterOptions = {}) {
+  checkCounterOptions(opts);
   const l = await account.ledgerState();
-  const counter = counterIn(l, account, device);
+  const counter = await counterIn(l, account, device, opts);
   const typedData = evmK256Messages.rotateEncKey({ account: account.addressBytes, device: device.address, authNonce: l.auth_nonce }, newKey);
   const auth = await device.authorise(typedData, counter);
   return { typedData, auth, ...(await account.rotateEncKeyWithAuth(newKey, auth)) };
@@ -783,10 +846,12 @@ export interface EvmK256CustodySurface extends EvmK256AccountSurface {
 }
 
 /** The device frame of the next call and the device's counter, from one
- *  read of the ledger. */
-async function deviceFrame(account: EvmK256AccountSurface, device: EvmK256Device) {
+ *  read of the ledger; `opts` as resolveEvmK256Counter's (every helper below
+ *  takes them as its last argument). */
+async function deviceFrame(account: EvmK256AccountSurface, device: EvmK256Device, opts: EvmK256CounterOptions = {}) {
+  checkCounterOptions(opts);
   const l = await account.ledgerState();
-  const counter = counterIn(l, account, device);
+  const counter = await counterIn(l, account, device, opts);
   return { frame: { account: account.addressBytes, device: device.address, authNonce: l.auth_nonce }, counter };
 }
 
@@ -801,8 +866,8 @@ async function spentCoin(account: EvmK256CustodySurface, color: Uint8Array) {
 
 /** append_inbox_with_evm_k256: the AppendInbox message (the 192-byte
  *  entry in full), signed by the device's wallet, then the call. */
-export async function appendInboxWithEvmK256(account: EvmK256CustodySurface, device: EvmK256Device, entry: Uint8Array) {
-  const { frame, counter } = await deviceFrame(account, device);
+export async function appendInboxWithEvmK256(account: EvmK256CustodySurface, device: EvmK256Device, entry: Uint8Array, opts: EvmK256CounterOptions = {}) {
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.appendInbox(frame, entry);
   const auth = await device.authorise(typedData, counter);
   return { typedData, auth, ...(await account.appendInboxWithAuth(entry, auth)) };
@@ -811,8 +876,9 @@ export async function appendInboxWithEvmK256(account: EvmK256CustodySurface, dev
 /** withdraw_unshielded_with_evm_k256 to a 32-byte user address. */
 export async function withdrawUnshieldedWithEvmK256(
   account: EvmK256CustodySurface, device: EvmK256Device, color: Uint8Array, amount: bigint, recipient: Uint8Array, site: SiteAmount,
+  opts: EvmK256CounterOptions = {},
 ) {
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.withdrawUnshielded(frame, color, amount, recipient, site);
   const auth = { ...(await device.authorise(typedData, counter)), op: evmK256AmountHint(amount, site) };
   return { typedData, auth, ...(await account.withdrawUnshieldedWithAuth(color, amount, recipient, auth)) };
@@ -823,8 +889,9 @@ export async function withdrawUnshieldedWithEvmK256(
  *  and the change. */
 export async function withdrawShieldedWithEvmK256(
   account: EvmK256CustodySurface, device: EvmK256Device, recipient: Uint8Array, color: Uint8Array, amount: bigint, site: SiteAmount,
+  opts: EvmK256CounterOptions = {},
 ) {
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const coin = await spentCoin(account, color);
   const typedData = evmK256Messages.withdrawShielded(frame, color, amount, recipient, coin, site);
   const auth = { ...(await device.authorise(typedData, counter)), op: evmK256CoinHint(amount, coin.value, coin.mtIndex, site) };
@@ -837,8 +904,9 @@ export async function withdrawShieldedWithEvmK256(
  *  `withdrawShieldedToContractWithAuth` for an uncomposed call). */
 export async function authoriseWithdrawShieldedToContract(
   account: EvmK256CustodySurface, device: EvmK256Device, recipientContract: Uint8Array, color: Uint8Array, amount: bigint, site: SiteAmount,
+  opts: EvmK256CounterOptions = {},
 ) {
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const coin = await spentCoin(account, color);
   const typedData = evmK256Messages.withdrawShieldedToContract(frame, color, amount, recipientContract, coin, site);
   return { typedData, coin, auth: { ...(await device.authorise(typedData, counter)), op: evmK256CoinHint(amount, coin.value, coin.mtIndex, site) } };
@@ -959,8 +1027,8 @@ const authArg = (a: EvmK256Authorisation) => { const { arm, op, ...auth } = a; r
 /** add_device_with_evm_k256: the AddDevice message ("Gives this key FULL
  *  control of this account" and the target's descriptor), signed, then the
  *  call; the circuit enrols the target at the current epoch and counter 0. */
-export async function addDeviceWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, target: Descriptor) {
-  const { frame, counter } = await deviceFrame(account, device);
+export async function addDeviceWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, target: Descriptor, opts: EvmK256CounterOptions = {}) {
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const input = evmK256DescriptorInput(target);
   const typedData = evmK256Messages.addDevice(frame, input);
   const auth = await device.authorise(typedData, counter);
@@ -973,8 +1041,9 @@ export async function addDeviceWithEvmK256(account: EvmK256LifecycleSurface, dev
  *  reduces authority). */
 export async function removeDeviceWithEvmK256(
   account: EvmK256LifecycleSurface, device: EvmK256Device, target: Descriptor, targetEpoch: bigint, targetCounter: bigint,
+  opts: EvmK256CounterOptions = {},
 ) {
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const input = evmK256DescriptorInput(target);
   const typedData = evmK256Messages.removeDevice(frame, input, targetEpoch, targetCounter);
   const auth = await device.authorise(typedData, counter);
@@ -985,9 +1054,9 @@ export async function removeDeviceWithEvmK256(
 
 /** remove_device_with_evm_k256, literal-entry form: an entry this wallet
  *  cannot describe, under "Removes a device this wallet cannot identify". */
-export async function removeUnknownDeviceWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, entry: Uint8Array) {
+export async function removeUnknownDeviceWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, entry: Uint8Array, opts: EvmK256CounterOptions = {}) {
   if (entry.length !== 32) throw new Error('evm_k256: an entry is 32 bytes');
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.removeUnknownDevice(frame, entry);
   const auth = await device.authorise(typedData, counter);
   const r = await account.callTx.remove_device_with_evm_k256(EVM_K256_UNUSED_DESCRIPTOR, ...EVM_K256_ED25519_FILLER_ARGS, 0n, 0n, { is_some: true, value: new Uint8Array(entry) }, authArg(auth),
@@ -1355,9 +1424,10 @@ export function evmK256GrantScopeSalt(blind: Uint8Array, account: Uint8Array, au
  *  the circuit derives and the grantee needs to spend. */
 export async function issueGrantWithEvmK256(
   account: EvmK256LifecycleSurface, device: EvmK256Device, grantee: EvmK256GranteeInput, scope: IssueScope,
+  opts: EvmK256CounterOptions = {},
 ) {
   checkEvmK256GranteeInput(grantee);
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.issueGrant(frame, grantee, scope);
   const auth = await device.authorise(typedData, counter);
   const scopeSalt = evmK256GrantScopeSalt(device.blind, frame.account, frame.authNonce);
@@ -1368,9 +1438,9 @@ export async function issueGrantWithEvmK256(
 
 /** revoke_grant_with_evm_k256: the grantee shown by its descriptor; the
  *  circuit re-derives the grant id. */
-export async function revokeGrantWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, grantee: EvmK256GranteeInput) {
+export async function revokeGrantWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, grantee: EvmK256GranteeInput, opts: EvmK256CounterOptions = {}) {
   checkEvmK256GranteeInput(grantee);
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.revokeGrant(frame, grantee);
   const auth = await device.authorise(typedData, counter);
   const r = await account.callTx.revoke_grant_with_evm_k256(grantee, ...ed25519Args(grantee), authArg(auth), evmK256GranteeHint(grantee));
@@ -1378,8 +1448,8 @@ export async function revokeGrantWithEvmK256(account: EvmK256LifecycleSurface, d
 }
 
 /** revoke_all_grants_with_evm_k256. */
-export async function revokeAllGrantsWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device) {
-  const { frame, counter } = await deviceFrame(account, device);
+export async function revokeAllGrantsWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, opts: EvmK256CounterOptions = {}) {
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.revokeAllGrants(frame);
   const auth = await device.authorise(typedData, counter);
   const r = await account.callTx.revoke_all_grants_with_evm_k256(authArg(auth));
@@ -1421,9 +1491,9 @@ export function evmK256RecoverySession(a: EvmK256RecoveryArtefacts) {
  *  message ("Sets this account's recovery key", the new recovery key, the
  *  session identifier, the four phi values, the length and the 64-byte wrap,
  *  all in full), signed by the device's wallet, then the call. */
-export async function publishRecoverySessionWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, artefacts: EvmK256RecoveryArtefacts) {
+export async function publishRecoverySessionWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, artefacts: EvmK256RecoveryArtefacts, opts: EvmK256CounterOptions = {}) {
   const session = evmK256RecoverySession(artefacts);
-  const { frame, counter } = await deviceFrame(account, device);
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.publishRecoverySession(frame, session);
   const auth = await device.authorise(typedData, counter);
   const r = await account.callTx.publish_recovery_session_with_evm_k256(
@@ -1434,8 +1504,8 @@ export async function publishRecoverySessionWithEvmK256(account: EvmK256Lifecycl
 /** recover_cancel_with_evm_k256: the CancelRecovery message (the frame
  *  alone: account, device, authNonce), signed, then the call; vetoes the
  *  pending recovery. */
-export async function recoverCancelWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device) {
-  const { frame, counter } = await deviceFrame(account, device);
+export async function recoverCancelWithEvmK256(account: EvmK256LifecycleSurface, device: EvmK256Device, opts: EvmK256CounterOptions = {}) {
+  const { frame, counter } = await deviceFrame(account, device, opts);
   const typedData = evmK256Messages.cancelRecovery(frame);
   const auth = await device.authorise(typedData, counter);
   const r = await account.callTx.recover_cancel_with_evm_k256(authArg(auth));
