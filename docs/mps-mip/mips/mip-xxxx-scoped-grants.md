@@ -8,7 +8,7 @@ Status: Draft
 Category: Standards
 Created: 2026-09-09
 License: Apache-2.0
-Requires: "MIP-0012: Contract Custody of Midnight-Native Assets", "MIP-0013: Multi-key Account Authorisation for Custody Contracts"
+Requires: [MIP-0012, MIP-0013, MIP-0030]
 Replaces: none
 MPS: MPS-0018
 ---
@@ -29,39 +29,12 @@ MPS: MPS-0018
  limitations under the License.
 -->
 
-<!-- Open items to settle before this draft is offered for numbering.
-     This block is removed at submission; it is not part of the MIP.
-
-     | Id | Item | Current default in the text |
-     |---|---|---|
-     | O1 | external co-author | named (Hector Bulgarini); the team that offered prior art in upstream discussion #223 is still to be answered and credited in Acknowledgements |
-     | O2 | coordinate the spec_version = 3 redeploy with the device-identity remedy for MIP-0013 erratum 8; caller pinning alone does not remedy it | SHOULD, in Backwards Compatibility |
-     | O3 | companion erratum to MIP-0013 AUTH-1, AUTH-2, AUTH-9 (section 12); wordings in .planning/grants-mip/erratum-wordings.md, to travel in the erratum PR | acceptance is an acceptance criterion |
-     | O4 | on-chain unit of kernel.blockTimeLessThan | resolved (E3): whole seconds since the UNIX epoch on ledger 9 (node 2.1.0), on the client and the node alike; the comparison is a transcript read enforced at client build (wall clock) and at node admission (block context), not a proof constraint; the never-expires arm records no read; the admission-time block time runs about one block interval plus a network-defined tolerance ahead of the wall clock (8.2 to 10.2 s measured on a 6 s-block localnet); recorded in the registry entry (section 14) |
-     | O5 | tombstone pruning and window enforcement | deferred to a circuit revision |
-     | O6 | one MIP or two | one MIP under MPS-0018; the split offered in the PR body |
-     | O7 | editor deviation from brief T3: rp_id_hash is committed under scope_salt (rp_commit) rather than stored clear, so the "observer does not learn the origin" claim of brief 5.5 holds for r1 grants | commitment; one extra opening on the p256 seam |
-     | O8 | editor deviation from brief section 7: the Expired to Active edge is dropped; renewal is revoke then issue, composable in one transaction | issue_grant does not evaluate expiry |
-     | O9 | the schemes draft is cited, not listed in Requires, per brief 10.1; the r1 checks and witness set are reproduced inline; MIP-0030 now has a number; profile and policy alignment remain | as sections 3.1 and 14 |
-     | O10 | enc_pk argument on the shielded grant twins, asserted equal to enc_key, so a rotation aborts a pending grant call rather than orphaning change | adopted |
-     | O11 | re-seal obligation toward other live read grants on every rotation | adopted as an authoriser MUST with a roster fallback |
-     | O12 | Replaces: none per the brief and the published family | adopted |
-     | O13 | Security Considerations rendered as a table where the published family uses bold-titled Sn bullets | table retained; the divergence is offered to the editors |
-     | O14 | approved deviation from brief T5: canonical JSON (RFC 8785, JCS) replaced by signing the `request` parameter bytes as received, with the proof carried as a detached `proof` fragment parameter and no canonicalisation step anywhere | adopted (sections 9.1 to 9.4, 9.6, R10, R21) |
-     | O15 | E1 folded, both stages, and the on-node conformance run (E2) with it: the grant seam is compiled and measured on the reference contract at spec_version 2 over the whole thirty-circuit roster, both grantee arms, 34 recipe vectors agreed three ways, and the seam is exercised on node. Every [CIRCUIT] item of the brief's section 13 is now settled, including the two that were open: proving times are measured for every circuit the on-node run exercised, which is three of the six grant twins (6.7), and the change-description precomputation is evidenced on node (6.5); the node's unit of block time is settled by E3 (O4) | both correction lists applied in the text; what remains is the residue named in Path to Active E2 and E6 and in Implementation |
-
-     Upstream dependencies: secp256r1 is available in Compact 0.35; r1
-     profile/policy review remains under MIP-0030. secp256k1 point operations (schnorr_bip340); a connector
-     structured-display surface (envelope-1 spend); WebAuthn PRF in target
-     browsers; the Open Wallet Standard handshake flag and mapping-table
-     acceptance; CAIP-10 for Midnight. Circuit and cryptographer evidence
-     items are the checkboxes of Path to Active. -->
-
-> **Reconciliation, 17 October 2026:** the schemes companion is now
-> [MIP-0030 (Draft)](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md), with no adopted k1 sunset. Recovery retirement
-> is normative in MIP-0013/MIP-0022 after upstream #385; reference #183 still
-> needs proof/node validation. This does not settle this draft's separate
-> AUTH-1/2/9 companion amendment, device-identity remedy, or acceptance gates.
+> **Draft scope.** This is a proposed grant-enabled account profile. Section
+> 12 defines its composition with MIP-0013, including the explicit changes
+> to AUTH-1 and AUTH-2 for grant calls. The reference schema is
+> `spec_version = 3`; historical v2 measurements are identified as such.
+> Implementation evidence is partial. The unchecked Path to Active items
+> are acceptance work, not claims of completed conformance.
 
 ## Table of contents
 
@@ -79,7 +52,7 @@ MPS: MPS-0018
   - [9. GrantRequest and the redirect binding](#9-grantrequest-and-the-redirect-binding)
   - [10. Sign-in](#10-sign-in)
   - [11. Ecosystem carriage](#11-ecosystem-carriage)
-  - [12. Companion erratum to MIP-0013 section 9](#12-companion-erratum-to-mip-0013-section-9)
+  - [12. Relationship to MIP-0013 and combined conformance](#12-relationship-to-mip-0013-and-combined-conformance)
   - [13. Invariants](#13-invariants)
   - [14. Versioning](#14-versioning)
 - [Rationale](#rationale)
@@ -97,8 +70,9 @@ MPS: MPS-0018
 This MIP specifies a second authoriser class behind the authorisation
 seam of MIP-0013, the **scoped grant**, and the ceremony by which a
 third party obtains one. A grant is a contract-maintained record in a
-custody account conforming to MIP-0012 and MIP-0013 that admits one
-grantee key of one registered signature scheme to a bounded subset of
+custody account conforming to MIP-0012 and the combined MIP-0013
+profile of section 12 that admits one
+grantee key of a signature scheme specified here to a bounded subset of
 the account's asset-facing operations: three spend circuits, one token
 color, a per-call cap, a cumulative cap, a bound on the value of any
 coin the grantee may touch, an optional recipient pin, and an expiry
@@ -130,7 +104,9 @@ across device entries, scoped grants) are permitted extensions that
 interact only with this seam and MUST NOT weaken any invariant of
 section 9". Its S7 records the gap: `add_device` grants full authority,
 so the only way to let a third party act on an account today is to make
-it a device. This document is the reserved extension.
+it a device. This document specifies that extension and states the required AUTH-1
+and AUTH-2 conformance changes in section 12; it does not silently
+reinterpret the parent specification.
 
 Today a dApp can hold a full device key (total compromise of asset
 release if the dApp is compromised, the authorisation MIP's S5) or hold
@@ -187,13 +163,13 @@ Out of scope:
   filed proposal, referred to below as "the sign-in MIP". Per-grantee or
   epoch-scoped viewing keys and the per-coin mirror are the MIP-0012 R9
   successor, the named dependency for spend without full disclosure.
-  The device-identity remedy for the authorisation MIP's erratum 8,
-  which records that removal retires a set element rather than a
-  device, is specified by that MIP's errata and recommended to share
-  this MIP's schema bump.
-- **Upstream dependencies.** The `schnorr_bip340` grantee arm (secp256k1
-  point operations); activation of the r1 arm (the secp256r1 language
-  surface); spend through wallet-provider keys (a connector surface
+  Device-wide retirement after duplicate enrolment is a separate problem:
+  MIP-0013 section 6 retires a supplied device entry, not every entry
+  that might represent the same key. This MIP does not claim to repair
+  that device lifecycle limitation.
+- **Deferred features.** A specified and evidenced `schnorr_bip340`
+  grantee profile; complete r1 grantee conformance under MIP-0030
+  (native secp256r1 is available); spend through wallet-provider keys (a connector surface
   displaying a decoded grant call); `.well-known` client metadata; a
   CAIP-10 account form for Midnight.
 - **Non-goals.** A new injected wallet API or connector method; a
@@ -222,7 +198,7 @@ Out of scope:
   key to a bounded subset of operations. **Grantee**: its holder: a
   browser dApp, a wallet provider, an agent, or the owner through a
   delegate key. **Grantee key**: a `(scheme, pk)` pair from the
-  signature-scheme registry, plus, for k1 only, an envelope id.
+  signature schemes of section 3, plus, for k1 only, an envelope id.
 - **Arm**: the per-scheme circuit family: `v1` (Schnorr over JubJub),
   `k1` (ECDSA over secp256k1), `r1` (ECDSA over secp256r1 through the
   WebAuthn envelope).
@@ -257,21 +233,32 @@ Out of scope:
 
 ### 3. Grantee keys and arms
 
-#### 3.1 Registered grantee arms
+#### 3.1 Grantee arms
 
-A grantee key is a `(scheme, pk)` pair from the signature-scheme
-registry of the authorisation MIP's successor scheme document
-(hereafter "the schemes MIP", cited in References and not yet
-numbered), plus, for `k1` only, an `envelope` id. Its rows are
-reproduced here; the `r1` row is registered when the schemes MIP
-receives a number and the secp256r1 surface ships, and the checks it
-needs are stated in full in sections 3.3 and 6.2.
+A grantee key is a `(scheme, pk)` pair from the arm table below, plus,
+for `k1` only, an `envelope` id. MIP-0013 specifies the JubJub signing
+boundary. [MIP-0030](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md)
+(hereafter "the schemes MIP") specifies the ECDSA digest and bounded
+WebAuthn obligations; it is a Draft, not a scheme registry. This MIP
+defines the grantee wire names and grant-specific byte recipes. Its
+conformance requirements are stated here, including key admissibility
+and profile checks in sections 3.3 and 6.2; existing reference support
+does not establish complete conformance to those requirements.
 
-| Arm | Scheme | Envelope | Registry status | Today |
+| Arm | Scheme | Envelope | Specification basis | Reference support |
 |---|---|---|---|---|
-| `v1` | Schnorr over JubJub | intrinsic (none) | Active | yes |
-| `k1` | ECDSA over secp256k1 | `0` none, `1` connector prefix | MIP-0030 k1; no adopted sunset | yes |
-| `r1` | ECDSA over secp256r1 through the WebAuthn envelope | intrinsic (WebAuthn message) | Active upon the secp256r1 surface | no |
+| `v1` | Schnorr over JubJub | intrinsic (none) | MIP-0013 and this MIP's grant recipes | implemented; evidence limits in Implementation |
+| `k1` | ECDSA over secp256k1 | `0` unprefixed digest envelope, `1` connector prefix | MIP-0030 and this MIP; no adopted sunset | implemented; enforcement mapping remains open |
+| `r1` | ECDSA over secp256r1 through the WebAuthn envelope | intrinsic (WebAuthn message) | MIP-0030 bounded profiles and this MIP | Compact 0.35 native P-256; bounded reference profile implemented; full conformance remains open |
+
+Before issuance, the authoriser and grantee MUST establish that the
+account implements the requested arm and, for `r1`, a compatible named,
+versioned WebAuthn profile. Each profile MUST state accepted forms and
+byte lengths, required fields and boundary checks, flag and extension
+rules, wire-to-circuit conversions, and conformance vectors. Unsupported
+forms MUST be refused, never truncated, reserialized, or padded to fit.
+An account's advertised capability is not evidence that its verifier
+enforces the profile; that enforcement is a proof obligation.
 
 `envelope` is the k1 digest selector and nothing else: the k1 arm
 verifies over `envelope_digest(envelope, h)`, where
@@ -284,18 +271,18 @@ from an envelope-0 grantee with the same key, origin, and slot; the two
 envelopes are not two wrappings of one challenge `h`. `envelope` is
 absent from the wire form and the identity preimage for `v1` and
 `r1`. No `2 = webauthn` envelope id is filed. The connector's
-`schnorr_bip340` scheme is reserved pending upstream secp256k1 point
-operations.
+`schnorr_bip340` scheme is reserved; this MIP does not define its grant
+arm.
 
 #### 3.2 Grantee forms
 
-| Form | Arm, envelope | Today | Origin proof at issuance | Scopes | Serves |
+| Form | Arm, envelope | Availability condition | Origin proof at issuance | Scopes | Serves |
 |---|---|---|---|---|---|
-| Per-dApp WebAuthn credential on the dApp origin | `r1` | pending | the assertion itself (`clientDataJSON.origin`) | all | browser dApps once secp256r1 ships |
-| Per-connection software key gated by a companion passkey on the dApp origin | `k1` envelope `0`, or `v1` | yes | WebAuthn assertion by the companion passkey over `request_digest`, which covers the software key | all | browser dApps now |
-| Wallet-provider key through the connector `signData` | `k1` envelope `1` | yes | as the software form; `signData` supplies possession only | `read` only | "connect my wallet to my account" |
-| Agent or vaulted key (`rdns:`, `mais:`) | `v1` or `k1` envelope `0` | yes | operator assertion in the non-browser binding, displayed as such | all | agents, servers |
-| Intra-user delegate (`self:<label>`) | `v1` or `k1` envelope `0` | yes | none: approved in person on the owner's own device | all | a second device, a script, a household member |
+| Per-dApp WebAuthn credential on the dApp origin | `r1` | compatible deployed profile | the assertion itself (`clientDataJSON.origin`) | all | browser dApps whose assertions fit the profile |
+| Per-connection software key gated by a companion passkey on the dApp origin | `k1` envelope `0`, or `v1` | deployed arm and companion ceremony | WebAuthn assertion by the companion passkey over `request_digest`, which covers the software key | all | browser dApps |
+| Wallet-provider key through the connector `signData` | `k1` envelope `1` | connector support and companion ceremony | as the software form; `signData` supplies possession only | `read` only | "connect my wallet to my account" |
+| Agent or vaulted key (`rdns:`, `mais:`) | `v1` or `k1` envelope `0` | deployed arm | operator assertion in the non-browser binding, displayed as such | all | agents, servers |
+| Intra-user delegate (`self:<label>`) | `v1` or `k1` envelope `0` | deployed arm | none: approved in person on the owner's own device | all | a second device, a script, a household member |
 
 Rules:
 
@@ -322,53 +309,49 @@ Rules:
 
 #### 3.3 Key validation
 
-Key validation is exactly the following and no more. The seam performs
-its half at every use. The authoriser's half is an obligation on the
-issuing client, and the contract cannot perform it: `issue_grant` takes
-`grant_id` and never the key, so a weak, off-curve, invalid-curve, or
-foreign key is given a live, well-formed record without complaint and
-the only thing that can refuse it is the seam at use (measured on node,
-Implementation).
+The authoriser MUST validate the grantee key before issuance. The grant
+seam MUST enforce key admissibility on every use, independently of that
+client check. `issue_grant` takes `grant_id`, not the grantee key, so
+the issuance circuit cannot validate the key: a record's existence is
+not proof of a valid credential. A directly issued record for an invalid
+key MUST confer no spend authority.
 
-| Arm | Check | In-circuit status |
+| Arm | Required checks | Enforcement evidence |
 |---|---|---|
-| `k1` | the coordinate pair `(0, 0)` rejected in either identity-flag encoding (the point at infinity) | measured on node in both encodings, which share one `grant_id` because the identity preimage binds `x` and `y` and not the flag, and which one assert refuses. On-curve membership is not checked: the cofactor is 1, so subgroup membership is vacuous, but an off-curve pair, a genuine point of another curve of the same shape, and another arm's coordinates carried as a `k1` key all pass the guard and the scope predicates and are refused only at step 6, as `invalid grant signature` |
-| `v1` | `[8]P != O` (the identity and the whole 8-torsion) | measured on node for the identity `(0, 1)`, refused at the cofactor-clearing assert. No other point outside the prime-order subgroup reaches the assert: the runtime's own curve operations abort on an order-2 point and on an off-curve pair, so such a key cannot be presented through this runtime at all and the operator sees a runtime error rather than a named assert |
-| `r1` | the point at infinity rejected; both coordinates below `p`; `y^2 == x^3 - 3x + b (mod p)` (SEC 1 point validation); at the authoriser, a CBOR Object Signing and Encryption (COSE) key that is not an uncompressed EC2 P-256 key with canonical coordinates is rejected | not evidenced in-circuit; the arm does not ship |
+| `k1` | canonical coordinates `0 <= x,y < p`; on-curve `y^2 == x^3 + 7 (mod p)`; non-identity key | Compact 0.35 runtime and native-input validation in the October review below; no full ECDSA proof coverage claimed |
+| `v1` | canonical, on-curve `pk` and `sig_r`, per MIP-0013 S2; `[8]pk != O`; subgroup semantics must prevent small-order or mixed-order components from admitting a forged signature | October review below distinguishes runtime rejection, native canonical-input checks and targeted Jubjub constraint/full-proof checks; arbitrary malicious internal witnesses are not exhaustively covered |
+| `r1` | canonical coordinates `0 <= x,y < p`; on-curve `y^2 == x^3 - 3x + b (mod p)`; non-identity key; the issuing client accepts only a CBOR Object Signing and Encryption (COSE) EC2 P-256 key with canonical coordinates | Compact 0.35 runtime and native-input validation in the October review below; bounded WebAuthn profile and grant-route conformance remain separate obligations |
 
-The `r1` key checks are not optional: under the identity key `Q = O`,
-ECDSA verification computes `R' = u1 * G`, so `s = 1` and
-`r = x(z * G) mod n` verify any message with no secret while passing
-every signature-side check of section 6.2 step 6. That would make an r1
-grant issued to `pk = O` spendable by anyone and, since the r1 origin
-proof is the assertion itself, let an attacker fabricate a
-`clientDataJSON` naming any origin. The identity key is an r1 negative
-vector of Testing item 5; the same correction is raised against the
-schemes MIP, whose section 3.3 item 5 lists signature-side checks only.
-The off-curve open item is settled on the two shipping arms, and not in
-the same way on both. On `v1` the rejection is real but it is the
-runtime's rather than the contract's, so a conformance suite can assert
-the abort and not its message. On `k1` it is settled in the negative:
-nothing stands between an invalid-curve key and the seam except the
-arithmetic of the signature check, which refuses such a key as
-`invalid grant signature`. That message is the absence of a
-curve-membership objection and not evidence that the seam verified
-anything, and an implementation MUST read it so. Before this MIP leaves
-Draft the `k1` seam either gains an on-curve assertion or this section
-stands as the record that curve membership on that arm rests on the
-signature arithmetic alone; Testing item 2 carries the measured
-off-curve and invalid-curve rows on both arms. The `r1` checks remain
-unevidenced in-circuit.
+For both ECDSA arms every verifier MUST enforce canonical scalars
+`1 <= r,s < n`, interpret the digest big-endian modulo the curve order,
+reject an identity verification result, and compare `R.x mod n` with
+`r`. Both high-S and low-S signatures are accepted. Implementations MAY
+discharge checks through native types or primitives only where their
+proof constraints enforce the requirement.
 
-GR-2 is an authoriser obligation and nothing more, measured as such: a
-key enrolled as a device of the account was issued a grant and spent
-under the grant seam, with the record advancing. The seam looks a
-grantee key up in `grants` under the grant tag family and finds a live
-record; nothing in the contract can see that the same key also holds a
-device entry, because device entries are salted rolling commitments and
-not stored keys. The two authorities stay disjoint in the sense GR-2
-states, in that no one credential satisfies both seams in one call, but
-the refusal to issue is enforceable off-chain only.
+The 15 October 2026 validation in [Passport PR #182](https://github.com/midnightntwrk/passport/pull/182)
+supersedes the September E2 observations for the pinned implementation.
+Its [report](https://github.com/midnightntwrk/passport/blob/1932fab4c422e301706d422648d558277e00af64/research/passport-ecc-validation.md#4-evidence-and-remaining-checks)
+and [recorded evidence](https://github.com/midnightntwrk/passport/blob/1932fab4c422e301706d422648d558277e00af64/contract/evidence/ecc-validation/README.md#results)
+cover the unchanged account compiled with Compact 0.35.0
+(`debb05f9414b9d1e176741c2be289bb32233f0fc`) and runtime 0.20.0.
+Both ECDSA arms rejected the tested identity, off-curve, wrong-curve and
+out-of-range signer keys at bootstrap, device and grant gates. Device
+signature tests rejected `r = 0`, `s = 0`, `r = n` and `s = n`, and
+accepted both high-S and low-S signatures. Native bootstrap-input checks
+also rejected malformed foreign-curve encodings; accepted ECDSA variants
+passed native preprocessing. The review claims no full ECDSA proof run
+or exhaustive malicious internal-witness coverage. Sampled rejection is
+evidence about those inputs, not a substitute for the remaining
+enforcing-layer review and grant-route conformance required by MIP-0030
+and Path to Active; it does not identify a missing scalar or point guard.
+
+Key disjointness is a different obligation. The authoriser MUST refuse
+known device-key reuse under section 3.2, but the contract cannot infer
+all enrolled keys from rolling device entries. Historical E2 issued a
+grant to an enrolled device key and exercised it successfully. Device
+and grant records and signature domains are separate; that separation
+does not establish that their underlying keys differ.
 
 #### 3.4 Wire forms of keys and off-chain signatures
 
@@ -379,33 +362,29 @@ the refusal to issue is enforceable off-chain only.
 | `k1`, `r1` | 128 hex: affine `x \|\| y`, each a 32-byte little-endian integer; SEC 1 inputs (compressed or uncompressed, big-endian) MUST be decompressed and byte-reversed per coordinate before use | `x`, `y` as given |
 | `v1` | 128 hex: affine `x \|\| y`, each a 32-byte little-endian canonical element of the BLS12-381 scalar field (the JubJub base field); `JubjubPoint` is opaque in Compact with no compression builtin, so the circuit binds the two coordinates, as the device family already does for `pk` and `sig_r` | `x`, `y` as given (64 bytes) |
 
-A wire coordinate at or above the field modulus is not the encoding of
-any point and MUST be rejected, never reduced: the compiled encoding
-writes the canonical residue of each coordinate, so only canonical
-coordinates reproduce the circuit's digest by plain SHA-256, and a
-coordinate of an on-curve point is always canonical. The rule is
-enforced by the encoding itself rather than by an assert: a `k1`
-coordinate pair presented as a `v1` key is refused by the client's own
-encoder as out of bounds for the prime field, before any transaction
-exists, so a cross-arm key in that direction never reaches the seam
-(measured on node, Implementation).
+A wire coordinate at or above the applicable field modulus MUST be
+rejected, never reduced. ECDSA signature scalars outside `1 <= r,s < n`
+MUST likewise be rejected rather than reduced. Only canonical values
+enter the byte recipes. The historical client encoder rejected one
+cross-arm key before building a transaction; that observation does not
+establish the in-circuit requirements of section 3.3 for other inputs.
 
-Wire `scheme` names, keyed to the registry arm. The arm, not the wire
+Wire `scheme` names, keyed to the arm. The arm, not the wire
 name, selects the DST marker of section 6.3 and the identity tag of
 section 4.3:
 
-| Wire `scheme` | Registry arm | DST marker | `envelope` member | Source |
+| Wire `scheme` | Arm | DST marker | `envelope` member | Source |
 |---|---|---|---|---|
 | `ecdsa_secp256k1_sha256` | `k1` | `k1:` | MUST, `0` or `1` | dApp connector specification |
 | `schnorr_bip340` | reserved | none | absent | dApp connector specification |
-| `schnorr_jubjub` | `v1` | empty | absent | this MIP, filed into the schemes MIP registry |
-| `ecdsa_secp256r1_webauthn` | `r1` | `r1:` | absent | this MIP, filed into the schemes MIP registry |
+| `schnorr_jubjub` | `v1` | empty | absent | this MIP |
+| `ecdsa_secp256r1_webauthn` | `r1` | `r1:` | absent | this MIP |
 
 Off-chain signatures by a grantee key over a fixed 32-byte digest `d`
 (`request_digest`, section 9.2; `signin_digest`, section 10). Every
 verifier MUST accept both `s` forms of an ECDSA signature, matching the
-in-circuit policy (SIG-4); a high-S vector per ECDSA arm that MUST verify
-is published with Testing item 5. Some verifier stacks enforce low-S by
+in-circuit policy of section 3.3 and MIP-0030 section 2. Testing item 5
+requires a high-S vector per ECDSA arm. Some verifier stacks enforce low-S by
 default and refuse a high-S signature as presented; such a verifier MUST
 normalise `s` to the low form before verifying, and the Rust reference
 does so.
@@ -591,8 +570,8 @@ every released amount, and equates grants. Salt reuse is a negative
 conformance item (Testing item 2). `scope_digest` is the single element
 through which the `issue_grant` device challenge binds the whole
 plaintext scope (AUTH-3 by collision resistance); flags enter as single
-bytes. The `scope` tag family is new here and its registration is an
-acceptance criterion. Its eighteen elements compile and hash as the
+bytes. The `scope` tag family's naming and compatibility review under
+MIP-0021 is an acceptance criterion (section 14). Its eighteen elements compile and hash as the
 raw concatenation, a 309-byte preimage; the other preimages of this
 section are 145 (`object_commit`), 80 (`spent_commit`), and 96
 (`rp_commit` and present `caller_commit`) bytes.
@@ -693,8 +672,8 @@ string from an envelope-1 grantee is `unsupported_scheme`.
 
 #### 6.1 Circuit list
 
-Per grantee arm `s` in `{jubjub, k256}` today and `{p256}` once the
-secp256r1 surface ships, a conforming contract exports exactly three
+For each supported grantee arm `s` in `{jubjub, k256, p256}`, a
+conforming contract exports exactly three
 grant twins over the unchanged custody chips, plus the pure circuits
 they and their callers need:
 
@@ -717,7 +696,7 @@ operation arguments, in this order:
 There is no nonce argument: the record's `nonce` is read in-circuit.
 The authorising material is witness data and MUST NOT be disclosed.
 
-Per device arm `a` in `{jubjub, k256}`, device-gated through the
+Per supported device arm `a` in `{jubjub, k256, p256}`, device-gated through the
 unchanged device seam:
 
 - `issue_grant_with_<a>(grant_id: Bytes<32>, <plaintext scope of section 4.2>, ...device auth): []`
@@ -733,9 +712,11 @@ unchanged device seam:
 No grant twin exists for `rotate_enc_key`, `add_device`,
 `remove_device`, `append_inbox`, or any lifecycle circuit. The
 original `spec_version = 2` grant roster carried 30 non-pure circuits
-(18 existing, 6 grant twins, 6 lifecycle circuits). The current two-arm
-reference carries 36 including recovery; the caller addition changes
-the schema and existing gates, adding no account entrypoints.
+(18 existing, 6 grant twins, 6 lifecycle circuits). The two-arm
+caller/recovery snapshot carried 36. The current profiled P-256
+reference carries 52; the caller restriction changes the schema and
+existing gates without adding account entrypoints. Roster size is an
+implementation inventory, not a requirement to deploy unsupported arms.
 
 #### 6.2 Seam chip, ordered steps
 
@@ -750,10 +731,10 @@ order:
 
 1. **Envelope and key guard.** `k256` first asserts `envelope == 0`
    (the envelope-1 read-only rule of section 3.2, enforced in-circuit
-   and not left to the authoriser), then, per section 3.3, rejects the
-   point at infinity in either encoding; `jubjub` asserts `[8]pk != O`;
-   `p256` rejects the identity and asserts the coordinates below `p` and
-   on the curve.
+   and not left to the authoriser), then enforces the ECDSA key
+   requirements of section 3.3, including canonical coordinates, on-curve
+   membership and non-identity. `jubjub` asserts `[8]pk != O`; `p256`
+   enforces the same ECDSA key requirements on its curve.
 2. **Identity.** `id = derive_grant_id_with_<s>(kernel.self(), pk, [envelope,] origin_hash, slot)`,
    disclosed; assert `grants.member(id)`; `g = grants.lookup(id)`. A
    lookup MUST be dominated by a membership assert, never combined with
@@ -786,28 +767,61 @@ order:
      `enc_pk == enc_key`, so a rotation between the grantee's signing
      and inclusion aborts the call instead of orphaning change.
 6. **Challenge and verification.** `h = challenge_<operation>_with_grant_<s>(...)`
-   over the preimage of section 6.3. `k256`:
-   `secp256k1EcdsaVerify(envelope_digest(envelope, h), sig, pk)`, both
-   `s` forms accepted. `jubjub`:
+   over the preimage of section 6.3. `k256` verifies
+   `secp256k1EcdsaVerify(envelope_digest(envelope, h), sig, pk)`;
+   `jubjub` verifies
    `ecMulGenerator(sig_s) == ecAdd(sig_r, ecMul(pk, h as Field))` with
-   the grinding rule of the authorisation MIP section 5.2. `p256` MUST
-   enforce its authorised WebAuthn profile's type, challenge, origin,
-   boundary and length checks as specified in the
-   [signature-schemes draft](mip-xxxx-signature-schemes.md). The signed
-   origin MUST match the browser `client_id` committed by `origin_hash`
-   using section 4.4's recipe; checking the RP hash alone is insufficient.
-   The WebAuthn request challenge is the 32-byte `h`; the signed
-   `clientDataJSON.challenge` field is its unpadded base64url encoding. The reference
-   reconstructs the complete supported JSON envelope; a supplied type/
-   challenge prefix alone does not establish profile conformance.
-   `authenticator_data` is exactly 37 bytes (ED flag clear, so an
-   extension-bearing assertion cannot verify) with
-   `authenticator_data[0..32] == rp_id_hash` and the user-present and
-   user-verified bits set;
-   `z = int_be(H(authenticator_data || H(client_data_json))) mod n`;
-   ECDSA verification of `(r, s)` against `pk` with `r != 0`, `s != 0`,
-   the recomputed point non-identity, and `R.x mod n == r`, both `s`
-   forms accepted; `signCount` carries no constraint.
+   the grinding rule of MIP-0013 section 5.2. Every arm also satisfies
+   section 3.3's point and scalar admissibility requirements.
+
+   `p256` MUST enforce a named, versioned bounded profile under
+   MIP-0030 section 3. The expected RP hash MUST open `rp_commit`, and
+   the signed origin MUST match the browser `client_id` committed by
+   `origin_hash` using section 4.4's recipe. Neither policy value may be
+   accepted as unchecked prover advice; checking the RP hash alone is
+   insufficient. The signed type MUST be `webauthn.get`; the signed
+   challenge MUST be the 43-character unpadded base64url encoding of
+   the recomputed 32-byte `h`.
+
+   This MIP requires UP and UV on every accepting WebAuthn route for
+   a grant credential. Its 37-byte `authenticator_data` profile requires
+   flags `0x05`, `0x0d`, or `0x1d`: UP and UV set, BS implies BE, and
+   AT, ED and reserved bits clear. Cross-origin assertions are not
+   accepted; each profile MUST declare and enforce its `topOrigin`
+   handling. `signCount` is signed in its
+   four-byte big-endian form but provides no replay protection.
+
+   The verifier MUST hash the complete, exact signed client data:
+   `z = int_be(H(authenticator_data || H(client_data_json))) mod n`.
+   A full-envelope profile MUST constrain every accepted byte. A
+   profile using W3C's limited-verification algorithm MUST name that
+   algorithm and enforce its fields and boundaries while hashing the
+   full message; it MUST state that this does not establish arbitrary
+   trailing JSON syntax. Supplied hashes, offsets and logical lengths
+   MUST be independently constrained, and unused buffer capacity MUST
+   not enter the message. Unsupported assertions MUST be rejected,
+   never truncated, reserialized or padded to fit.
+
+   The reference `wa-json134` profile reconstructs exactly 134 signed
+   bytes in `type`, `challenge`, `origin`, `crossOrigin` order, with a
+   21-byte exact origin, `crossOrigin:false`, and no additional members.
+   A supplied prefix alone does not establish conformance. Other named
+   profiles require their own stated byte bounds and conformance vectors;
+   a current reference profile is not a claim of general browser support.
+
+   Every reachable verifier accepting the credential MUST enforce its
+   authorised profile and this MIP's UP+UV policy. A single immutable
+   profile, a common enforced floor, or authenticated routing may
+   establish this; a weaker sibling verifier MUST NOT bypass it.
+   WebAuthn device routes used to issue grants or change grant-issuing
+   authority MUST also require UP+UV, so an UP-only management route
+   cannot enable indirect spending. This is this MIP's policy choice;
+   MIP-0030 leaves its common UV floor open.
+   Changes require an authorised policy-change procedure and MUST NOT
+   silently weaken an existing credential's policy.
+
+   Both ECDSA arms enforce `1 <= r,s < n`, a non-identity verification
+   result, and `R.x mod n == r`, accepting both high-S and low-S.
 7. **Write-back.** `grants.insert(id, g')` where `g'` is `g` with
    `nonce + 1` and `spent_commit = derive_grant_spent_commit(scope_salt, new_spent)`,
    spelled out as a full struct literal, each field disclosed; then
@@ -889,7 +903,7 @@ authorisation MIP's amended section 5.1 requires:
 
 `DST = H(pad(64, "midnight:account:grant:auth:<marker>v1:<operation>"))`
 
-with `<marker>` taken from the registry arm of the table in section 3.4
+with `<marker>` taken from the arm of the table in section 3.4
 and never derived from the wire `scheme` name: empty for `v1`, `k1:`
 for `k1`, `r1:` for `r1`; and `<operation>` one of
 `withdraw_unshielded`, `withdraw_shielded`,
@@ -910,7 +924,7 @@ twins, the `QualifiedShieldedCoinInfo` returned by `held_coin`,
 flattened in declaration order: `nonce` (32 bytes), `color` (32 bytes),
 `u128(value)`, `u64(mt_index)` (AUTH-10). `g.nonce` and `g.issued_at`
 are read from the record inside the circuit. ECDSA preimages exclude
-signature material (SIG-3); the JubJub arm grinds `grind_nonce` until
+signature material (MIP-0013 section 5); the JubJub arm grinds `grind_nonce` until
 the little-endian value of `h` is below the subgroup order (the
 authorisation MIP section 5.2). The shielded ECDSA challenge has
 thirteen declared tuple members (the `QualifiedShieldedCoinInfo` is one
@@ -1064,8 +1078,8 @@ The record publishes the operation flags, `read`, `per_call_cap`, `cap`,
 it commits to `color`, the recipient pin, `max_coin_value`, the dApp
 host, and `spent`. `grant_id` is a stable per-grant pseudonym disclosed
 on every call, unequal across accounts because `kernel.self()` is in the
-preimage; its relation to AUTH-9 is settled by the companion erratum of
-section 12.
+preimage. AUTH-9 continues to protect device handles; grant disclosure
+and the limits of its hiding argument are specified here and in section 12.
 
 #### 6.7 Cost and deploy budget
 
@@ -1073,9 +1087,10 @@ Over the corresponding device twin a grant twin replaces two
 device-entry hashes with one identity hash and three commitment hashes,
 and adds one map lookup and insert, one widened comparison, one kernel
 comparison, and on shielded twins one inbox insert. Measured on the
-reference contract at `spec_version = 2` over the whole thirty-circuit
-roster, both device arms and both grantee arms; prover keys are rounded
-from the measured bytes:
+historical reference contract at `spec_version = 2` over its thirty-circuit
+roster, both device arms and both grantee arms. These are not current v3
+deploy budgets; current caller and P-256 inventories are linked in
+Implementation. Prover keys are rounded from the measured bytes:
 
 | Circuit | k | Rows | Prover key |
 |---|---|---|---|
@@ -1131,9 +1146,10 @@ while the k256 unshielded grant twin at 64,355 needs k=17), and the
 prover key is not a function of k alone (at k=17 a jubjub circuit is
 about 197 MB and a k256 circuit about 235 MB; at k=16 the split is about
 99 MB against 117 MB), so an implementation quotes k, rows, and key
-sizes as measured and never predicts one from another. The p256 twins
-are unmeasured; the standalone gate anchors recorded in Implementation
-are expectations only for that arm.
+sizes as measured and never predicts one from another. These measurements predate
+the native p256 twins. Their later compiled row/key inventory is in
+`contract/P256-MEASUREMENTS.md`; it does not supply grant-spend proving
+times on node.
 
 Proving times, measured at the proof provider and so excluding building,
 balancing, and submission, on the reference stack (node 2.1.0, proof
@@ -1159,7 +1175,7 @@ the reference implementation).
 
 Verifier keys depend on the circuit's shape and not on k: 2,745 bytes
 for every k256 circuit and 2,313 for every jubjub circuit (the deposits
-2,121 and 1,353). The thirty-circuit roster (33 with p256) carries
+2,121 and 1,353). The historical thirty-circuit v2 roster carries
 74,286 verifier bytes against a 50,000-byte per-block write limit, with
 about 9,138 bytes of deploy overhead beyond the keys; waves are
 mandatory independently of the grant circuits, since the eighteen
@@ -1507,7 +1523,7 @@ calls into one transaction or submits them in sequence.
 | `grants` | MUST | non-empty array of `{slot, scope, bounds}`; distinct slots; unknown strings are `invalid_scope` |
 | `bounds` | MUST when any withdraw string; MUST be absent otherwise | `color`, `per_call_cap`, `cap`, `max_coin_value`, `expires_at` (`0` = never, explicit), `recipient` (null or typed), optional `caller` (64 lowercase hex contract-address bytes, no prefix; omission means unrestricted); a read-only element is issued with the all-zero object and caps of section 5.1 rule 7 |
 | `read_pk` | MUST when `read` is requested or implied | per section 8 item 1 |
-| `state` | MUST | opaque, at least 128 bits of entropy, at most 512 characters, bound to the dApp's browser session, echoed verbatim |
+| `state` | MUST in the browser binding; MUST be absent otherwise | opaque, at least 128 bits of entropy, at most 512 characters, bound to the dApp's browser session, echoed verbatim |
 | `nonce` | MUST | 32 random bytes, hex; one-time within the validity window |
 
 Every member listed is the complete member set: an object carrying an
@@ -1631,7 +1647,10 @@ Each parameter MUST appear exactly once; a missing or repeated
 
 #### 9.4 Authoriser processing
 
-In order:
+In order. Steps 1 and 2 apply only to the browser binding. A non-browser
+authoriser instead receives the exact `request` and `proof` strings over
+the non-redirect channel of section 9.2; it MUST reject `redirect_uri`
+and `state`, and returns its response over that same channel.
 
 1. Verify that the request arrived by top-level navigation in a
    top-level browsing context: the page sets
@@ -1647,10 +1666,10 @@ In order:
    or parse, or an object with an unknown, duplicated, or wrongly typed
    member, is `invalid_request`.
 4. Verify `v`, `chain`, `aud`, `iat`, `exp`, `nonce` freshness, and
-   the `Proof` object against `request_digest`. Reject with an in-place
-   error page (no redirect) if `redirect_uri` is not `https`, not
-   same-origin with `client_id`, or carries a fragment.
-5. Verify the scheme is registered and the account is capable
+   the `Proof` object against `request_digest`. In the browser binding,
+   reject with an in-place error page (no redirect) if `redirect_uri`
+   fails section 9.1's scheme, same-origin or fragment rules.
+5. Verify the scheme is specified in section 3 and the account is capable
    (`spec_version >= 3` for this schema, and the arm deployed per the authoriser's own
    record, since verifier keys are not a specified chain read); check
    `bounds`, the implications, and the envelope-1 read-only rule.
@@ -1669,12 +1688,13 @@ In order:
    key and both covered by the consent screen's read sentence; use that
    key for exactly the signatures of this ceremony and discard it;
    prove; submit; wait for inclusion (SHOULD; `pending` is the
-   fallback); seal the viewing secret if `read`; redirect.
+   fallback); seal the viewing secret if `read`; deliver the response
+   through the applicable binding (section 9.6).
 
 The order matters because the derived device key is signing material
 for any device-gated challenge (S18).
 
-The authoriser MUST NOT display or log `state`, MUST set
+In the browser binding the authoriser MUST NOT display or log `state`, MUST set
 `Referrer-Policy: no-referrer`, MUST NOT load third-party resources on
 the consent page, and MUST redirect with status 303, never 307.
 
@@ -1722,8 +1742,10 @@ name is displayed. The screen MUST display:
     created on bank.example", "your wallet's key"), and a short
     fingerprint the dApp is instructed to show on its side;
 12. that the connection, its scope bounds, its expiry, and its call
-    count are publicly visible on chain (its color, counterparty,
-    amounts, and dApp host are not);
+    count are publicly visible on chain; the grant record hides its
+    colour, recipient pin, spent amount, and dApp host, but unshielded
+    transfers and exercised contract relationships retain the disclosures
+    stated in Security Considerations;
 13. that the transaction is paid by the account;
 14. that the grant can be revoked from any device.
 
@@ -1754,7 +1776,7 @@ repetitions are index-aligned with the request.
 | `account` | granted, pending | contract address hex |
 | `grant_id` | granted, pending; per record | hex |
 | `scope_salt` | granted, pending; per record | hex |
-| `scope` | granted, pending; per record | the approved plaintext scope as a JSON object, `base64url(UTF-8 JSON)`, in any serialisation: the four flags, `color`, `recipient_kind`, `recipient`, `max_coin_value`, `per_call_cap`, `cap`, `expires_at`; it is not signed, and the dApp verifies it against chain state (section 9.7) |
+| `scope` | granted, pending; per record | the approved plaintext scope as a JSON object, `base64url(UTF-8 JSON)`, in any serialisation: the four flags, `color`, `recipient_kind`, `recipient`, `max_coin_value`, `per_call_cap`, `cap`, `expires_at`, and optional `caller` in the request's address encoding (omitted means unrestricted); it is not signed, and the dApp verifies it against chain state (section 9.7) |
 | `tx` | pending, optionally granted | transaction identifier |
 | `view` | granted with `read` | GrantViewSeal v1, base64url (section 8) |
 | `error`, `error_description` | error, denied | from the tables below |
@@ -1784,11 +1806,11 @@ Errors delivered to a validated `redirect_uri`:
 |---|---|---|
 | `unsupported_version` | `v` unknown | |
 | `unsupported_chain` | `chain` not served by this authoriser | |
-| `unsupported_scheme` | scheme not in the registry, or arm not deployed on the account; a withdraw string requested by an envelope-1 grantee | |
+| `unsupported_scheme` | scheme not specified in section 3, or arm not deployed on the account; a withdraw string requested by an envelope-1 grantee | |
 | `invalid_scope` | unknown string, the reserved `signin` string, bounds inconsistent or present on a read-only element, implication violated, no on-chain effect requested, duplicate `slot` | |
 | `origin_mismatch` | attested `clientDataJSON.origin` differs from `client_id` | |
 | `invalid_proof` | signature, challenge, type, or `rpIdHash` check failed; key not on curve, the identity, or weak; extension-bearing assertion; `signature` type in the browser binding | |
-| `account_not_capable` | account `spec_version < 2` | |
+| `account_not_capable` | account `spec_version < 3` | |
 | `read_unavailable` | this authoriser does not hold the account viewing secret | |
 | `access_denied` | the user declined this request | `Rejected` |
 | `permission_rejected` | the user declined and asked not to be asked again for this `client_id` | `PermissionRejected` |
@@ -1814,7 +1836,10 @@ reconnect (section 9.8).
   actions); MUST verify `active`, `epoch`, `gen`, that `object_commit`
   opens under the returned `scope_salt` and the returned plaintext object
   fields, that `rp_commit` opens to its own `rp_id_hash` (r1) or to zero,
-  and that every returned field equals or attenuates its request; and
+  that `caller_commit` opens under the same salt to the returned caller
+  (or is zero for an unrestricted grant), and that every returned field
+  equals or attenuates its request. A requested caller restriction MUST
+  remain the same restriction in the returned record; and the dApp
   only then moves the pending key into use. Redirect parameters are
   hints.
 - A `grant_id` or opening that does not match MUST be treated as
@@ -1939,38 +1964,81 @@ authoriser's RP identifier cannot be derived by another host, so a
 second authoriser needs its own `add_device` and interacts with AUTH-5;
 one device key MUST NOT be enrolled for more than one authoriser host.
 
-### 12. Companion erratum to MIP-0013 section 9
+### 12. Relationship to MIP-0013 and combined conformance
 
-Three invariants of the authorisation MIP are, as written, falsified by
-any grant twin. This MIP does not reinterpret them; they are read as
-amended by a companion erratum whose acceptance is an acceptance
-criterion and whose wording travels in the erratum pull request: AUTH-1
-admits a grant record whose scope admits the call as an authoriser
-credential beside a device entry; AUTH-2 is scoped to device-authorised
-calls, with the obligation that any other authoriser class define its
-own contract-held freshness element, cover and advance it on every call,
-and never advance `auth_nonce` (GR-5); AUTH-9 is scoped to device
-handles, with a stable per-grant identifier permitted under a stated
-hiding argument (GR-15). Widening "device" to cover grantees is rejected
-(R1). Every conformance item of the authorisation MIP remains
-device-only and passes unchanged on a `spec_version = 3` account; its
-rejection matrix and deposit-independence item gain grant-side
-counterparts in Testing, which do not replace them.
+This MIP defines an optional grant-enabled account profile over MIP-0012
+and MIP-0013. MIP-0013 section 4 anticipates scoped grants, but its
+AUTH-1 and AUTH-2 literally require a device signature and advancement
+of `auth_nonce` for every gated call. Accounts implementing this MIP
+MUST claim conformance to the combined profile defined here, not to
+those two requirements unchanged. These adaptations apply only to
+accounts implementing this MIP; device-only MIP-0013 accounts are
+unaffected. A separate amendment to MIP-0013 is not a prerequisite for
+this proposal; this section is the proposed normative conformance delta.
+
+1. **Device authority is preserved.** Device-authorised calls MUST
+   retain MIP-0013's credential validation, current-epoch membership,
+   challenge binding, device-entry rotation and `auth_nonce`
+   advancement. ECDSA device arms additionally follow MIP-0030. Grant
+   issuance, revocation and revoke-all remain device-authorised under
+   section 7. A grant is never a device entry and MUST NOT contribute
+   to `device_count` or the last-device check.
+2. **AUTH-1 for grant calls.** Only the three grant spend twins may use
+   a grant as their authority. Each MUST verify the grantee signature
+   against the key used to recompute `grant_id`, require a live record
+   issued by a device, and enforce the record's operation, object,
+   caller and quantitative bounds before releasing assets (GR-1,
+   GR-3, GR-4, GR-7 and GR-19). A grantee signature alone does not
+   establish authority. Device and grant records and signature domains
+   remain separate; the authoriser's refusal of device-key reuse is
+   an off-chain obligation, as section 3.3 states.
+3. **AUTH-2 for grant calls.** A grant challenge MUST cover that
+   record's contract-held `nonce` and `issued_at`. Every successful
+   grant call MUST advance its own nonce, and MUST NOT read or advance
+   `auth_nonce` or modify a device entry. A signature authorises at
+   most one executed call and MUST NOT become usable after revocation
+   and re-issuance (GR-5, GR-6 and GR-12). Other state changes, such as
+   spending the same coin, may still invalidate a pending device call.
+4. **Recovery and revocation.** Every grant call MUST enforce the
+   current account epoch and grant generation. Recovery finalisation
+   MUST render all pre-finalisation grants unusable, including grants
+   issued while recovery was pending. No later epoch change may
+   reactivate them without fresh device-authorised issuance. Clearing
+   or rotating device entries alone is insufficient (GR-8 and GR-9).
+5. **AUTH-9 remains a device rule.** Its device-handle privacy
+   requirements are unchanged. Grant uses may disclose a stable
+   `grant_id`, so uses of the same grant are linkable. The account-
+   bound identity, per-connection keys and salted scope commitments
+   provide only the hiding properties stated in sections 4 and 6.6
+   and Security Considerations; publicly known candidate keys can
+   weaken them. This permission does not permit a stable device
+   handle or disclosure of a device key through a grant record.
+6. **Other guarantees and tests.** AUTH-3 through AUTH-8 and AUTH-10
+   continue to apply to device operations. Grant operations MUST
+   satisfy the corresponding call-binding, non-exfiltration,
+   revocation and state-isolation requirements in this MIP. The
+   MIP-0013 device conformance suite remains required on an extended
+   account; passing grant tests does not replace it. The grant tests
+   additionally cover replay, scope rejection, recovery and the
+   independence of device and grant freshness. Completion of those
+   tests is an acceptance criterion, not an assertion that the current
+   reference implementation has already passed every item.
 
 ### 13. Invariants
 
 A conforming implementation MUST satisfy all of the following, in
 addition to the custody MIP's INV-1 through INV-8, the authorisation
-MIP's AUTH-1 through AUTH-10 as amended by section 12, and the schemes
-MIP's SIG-1 through SIG-5 for the arms it deploys.
+MIP's device requirements and the explicit combined profile of section
+12. ECDSA arms MUST satisfy MIP-0030 sections 2 and 3, as applied to the
+grant challenges and credential bindings specified here.
 
 | Id | Normative statement | Upstream |
 |---|---|---|
 | GR-1 (single seam, closed operation set) | Every grant-authorised operation is verified inside the account contract by the grant seam, which exists only as the grant twins of the three withdraw circuits. | INV-1 |
-| GR-2 (authority disjointness) | Grant keys are looked up only in `grants` under grant tag families; no credential satisfies both a device seam and a grant seam; an authoriser refuses to issue a grant to a key enrolled as a device of the same account. | SIG-1 |
+| GR-2 (authority separation) | Grant authority is looked up only in `grants` under grant signature domains, separately from device authority. The authoriser MUST refuse to issue a grant to a key it knows is enrolled as a device of the same account; the contract does not enforce key-set disjointness (3.3). | section 12; MIP-0030 section 1 |
 | GR-3 (contract-maintained identity) | `grant_id` is a deterministic commitment to `(account, arm, key, [envelope,] origin_hash, slot)` recomputed in-circuit at every use; one tuple has at most one live record; a key's records at one origin number at most 256 and are enumerable; only device-gated circuits create, retire, or re-scope a record; a grant twin writes only its own record's `nonce` and `spent_commit`. | |
-| GR-4 (full binding) | Every grant challenge covers the account address, the per-operation tag, the grantee key, `grant_id`, `issued_at`, every operation argument, every consumed witness value, and the record's `nonce`; every private argument is pinned by equality against the record or the ledger. | AUTH-3, AUTH-10, SIG-2, custody S5 |
-| GR-5 (per-grant single use, owner liveness) | Every grant call binds the record's `nonce` as read from state and advances it; identical resubmission fails; grant calls never read or advance `auth_nonce`. | AUTH-2 as amended |
+| GR-4 (full binding) | Every grant challenge covers the account address, the per-operation tag, the grantee key, `grant_id`, `issued_at`, every operation argument, every consumed witness value, and the record's `nonce`; every private argument is pinned by equality against the record or the ledger. | AUTH-3, AUTH-10, MIP-0030 section 2, custody S5 |
+| GR-5 (per-grant single use, owner liveness) | Every grant call binds the record's `nonce` as read from state and advances it; identical resubmission fails; grant calls never read or advance `auth_nonce`. | AUTH-2 under section 12 |
 | GR-6 (incarnation isolation) | Every grant-call challenge and the sign-in message bind `issued_at`, so a signature against one issuance of an id verifies against no other. | |
 | GR-7 (in-circuit scope over consumed values) | Operation flag, the color and value of the coin actually consumed, the caps, the recipient pin, `expires_at`, `active`, `epoch`, `gen`, and `enc_key` equality are asserted before any custody chip executes; an out-of-scope call fails at proving or verification, never at application discretion. | |
 | GR-8 (contract-derived lifecycle fields) | `epoch`, `gen`, `issued_at`, and the commitments are written by the contract from ledger state and the plaintext the approver signed; no grant can be pre-planted for a future epoch or generation. | |
@@ -1979,8 +2047,8 @@ MIP's SIG-1 through SIG-5 for the arms it deploys.
 | GR-11 (no widening) | A record's scope is immutable after issue; modification is revoke then issue under fresh device authorisation; the approver may narrow and never widen. | |
 | GR-12 (owner-only lifecycle, non-interference) | The lifecycle circuits are device-gated; a grant call changes no device entry, `device_count`, `auth_nonce`, `enc_key`, or any other grant's record; grants never count toward the last-device rule. | AUTH-5 |
 | GR-13 (round monotonicity) | Issue, revoke, revoke-all, and every grant call strictly increase `round`. | INV-7 |
-| GR-14 (key validity) | Every grantee key is rejected at every use, and at issuance, by exactly the per-arm checks of section 3.3, including the identity key on every arm and SEC 1 validation on `r1`. | authorisation MIP S2 and its erratum 6 on weak device keys |
-| GR-15 (bounded disclosure) | A grant call discloses `grant_id`, the record update, the kernel comparison argument, and the custody chip's disclosures, and never the grantee key, origin, dApp host, slot, salt, openings, or signature; no grant field records any part of a held coin's description in the clear. | INV-2; AUTH-9 as amended |
+| GR-14 (key validity) | The authoriser MUST perform the issuance key checks of section 3.3, and the grant seam MUST perform the specified in-circuit checks at every use. `issue_grant` receives an opaque grant id and does not itself validate the grantee key. Invalid keys cannot authorise a conforming spend. | MIP-0030 section 2; section 3.3 |
+| GR-15 (bounded disclosure) | A grant call discloses `grant_id`, the record update, the kernel comparison argument, and the custody chip's disclosures, and never the grantee key, origin, dApp host, slot, salt, openings, or signature; no grant field records any part of a held coin's description in the clear. | INV-2; AUTH-9 device boundary in section 12 |
 | GR-16 (consent equals record) | Every plaintext scope field is an argument of `issue_grant` and enters the device challenge through `scope_digest`; consent renders from those fields and a possession-and-origin-proven request and precedes the ceremony that produces signing material; the dApp verifies the recorded grantee on return. | |
 | GR-17 (redirect binding) | The authoriser acts only on a request whose possession proof, computed over the request bytes as received, shows a credential on the requesting origin, whose `aud` names it, whose window is current and `nonce` unseen, whose `redirect_uri` is same-origin with the attested `client_id` and matched exactly, and whose `state` it echoes; the binding is chosen by the transport; the response carries no bearer artefact or key list; the dApp treats its grant as live only after recomputing `grant_id` and reading the record from chain. | RFC 9700 sections 2.1, 4.1.3, 4.10; RFC 9207 |
 | GR-18 (read is a capability, and it is total) | `read` is declarative and the ledger does not enforce a read scope; a grant with `read` confers the whole viewing capability until rotation; the secret is delivered sealed to a bound `read_pk`; rotate-before-share precedes every read issuance and every rotation re-seals or flags the other live read grants; a read revocation rotates `enc_key`; every inbox reader verifies each entry against chain data. | custody MIP R9, S2, section 6.5 |
@@ -2018,23 +2086,33 @@ measurements below describe the base grants implementation.
 - **Scheme.** A grant scheme is a new tag prefix under the authorisation
   MIP section 10's "policy structure" clause, with `grant` as the
   policy-structure segment; a revision of any construction is a new
-  trailing version segment. Registry status: `v1` Active; `k1` Interim
-  with the schemes MIP's sunset, envelope-1 grantees `read`-only; `r1`
-  Active upon the schemes MIP receiving a number and the secp256r1
-  surface shipping; `schnorr_bip340` reserved. The registry entry
+  trailing version segment. This Draft specifies `v1`, `k1` and `r1`
+  grant arms; it does not assign independent standards-lifecycle status
+  to them. MIP-0030 is Draft and specifies no adopted k1 sunset.
+  Envelope-1 grantees remain `read`-only. r1 grant conformance remains
+  incomplete despite available native secp256r1; `schnorr_bip340` is
+  reserved by this proposal. The evidence record
   records the block-time unit as measured (E3): whole seconds since the
   UNIX epoch on ledger 9 (node 2.1.0), enforced at client build and at
   node admission, with the admission-time block time about one block
   interval plus a network-defined tolerance ahead of the wall clock.
-- **Tag families**, all to be registered under the MPS-0027 registry (an
-  acceptance criterion):
+- **Tag families.** The byte recipes below preserve the reference
+  implementation's domains. MIP-0021 specifies a `[vN]` suffix and
+  explicitly rejects a central registry; this proposal's existing
+  `:vN` forms are therefore not a claim of conformity to that naming
+  convention. Before adoption, review MUST settle whether these domains
+  are retained as explicitly documented compatibility forms or revised
+  with new vectors and migration rules. Renaming a tag silently would
+  change grant identities or signatures. No registry submission is
+  assumed.
 
   | Family | Convention | Members |
   |---|---|---|
   | `midnight:account:grant:id:{v1,k1:v1,r1:v1}` | raw 32-byte pad, tuple element | identity preimage |
-  | `midnight:account:grant:{obj,spent,rp,scope}:v1` | raw 32-byte pad, tuple element | commitments and the scope digest |
+  | `midnight:account:grant:{obj,spent,rp,caller}:v1` | raw 32-byte pad, tuple element | scope and caller commitments |
+  | `midnight:account:grant:scope:v2` | raw 32-byte pad, tuple element | current scope digest, including `caller_commit`; scope:v1 is historical only |
   | `midnight:account:grant:auth:{v1,k1:v1,r1:v1}:<operation>` | hashed from a 64-byte pad | per-twin DST; the 64-byte width is a normative budget on operation names |
-  | `midnight:account:auth:{v1,k1:v1}:{issue_grant,revoke_grant,revoke_all_grants}` | the existing device family (the `k1` auth family stayed at `:k1:v1` when the device and boot families moved to `:k1:v2`; verified against the reference before publication) | lifecycle DSTs |
+  | `midnight:account:auth:{v1,k1:v1,r1:v1}:{issue_grant,revoke_grant,revoke_all_grants}` | the existing device family (the `k1` auth family stayed at `:k1:v1` when the device and boot families moved to `:k1:v2`; verified against the reference before publication) | lifecycle DSTs |
   | `midnight:account:grant:{origin:v1,request:v1,signin:v1}` | raw pad prefix at the width that fits (32, 64, 64), off-chain | `origin_hash`, `request_digest`, `signin_digest` |
   | `midnight:account:grant:{view,read}:v1` | ASCII HKDF `info` and PRF input | GrantViewSeal; `read_pk` derivation |
 
@@ -2059,12 +2137,13 @@ is what the account-custody prototype evidenced on a devnet node.
 Merging device and grant twins was rejected: a circuit conditional
 evaluates both sides and would double every call's cost.
 
-**R2. An explicit map with a contract-recomputed identity.** The
-authorisation MIP's erratum 8 was proven on-node: a register keyed by an
-opaque, client-derived commitment cannot enforce "one credential, one
-live record". The alternatives:
+**R2. An explicit map with a contract-recomputed identity.** The device
+lifecycle limitation described in MIP-0013 section 6 is duplicate
+enrolment: retiring one rolling entry does not necessarily retire every
+entry associated with the same key. Grant identity is recomputed at use
+so that one `(key, origin, slot)` tuple cannot select another live record. The alternatives:
 
-| Shape | Enumerable | Targeted revocation | Erratum 8 | AUTH-9, INV-2 |
+| Shape | Enumerable | Targeted revocation | Duplicate-credential records | AUTH-9, INV-2 |
 |---|---|---|---|---|
 | Rolling single-use entries in a `Set` | no | races the grantee | avoided | complete |
 | Grant entries in `devices` | no | as devices | inherited; drifts `device_count` | as devices |
@@ -2073,8 +2152,8 @@ live record". The alternatives:
 | `Map` keyed by a contract-recomputed `grant_id` (this MIP) | by id | instant | one live record per `(key, origin, slot)` | per-grant pseudonym hiding in key entropy |
 
 The rolling set is the privacy-preserving successor for call count and
-status. Contract-written `epoch` and `gen` mean erratum 7's pre-planting
-of an entry for a future epoch has no grant analogue. In-circuit
+status. Contract-written `epoch` and `gen` prevent a client from
+pre-planting a grant for a future epoch or generation. In-circuit
 derivation of `grant_id` inside `issue_grant` was rejected: it
 multiplies the issue circuits by the grantee arms, and the authoriser
 holds the derived device key during the ceremony anyway; the dApp's
@@ -2101,9 +2180,9 @@ per-connection key and, for r1, inside a salted commitment. Fetched
 (CORS) dependency to consent and is the recorded extension. Passkeys are
 relying-party scoped, so a passkey registered for the dApp is a second
 credential on the dApp origin with a P-256 key, hence `r1` is the
-first-class arm; until secp256r1 ships, a companion passkey attesting
-the origin over a digest that covers a software key is the only
-construction on today's toolchain. A key-only proof with a
+first-class arm; a companion passkey attesting
+the origin over a digest that covers a software key is the alternative
+for clients not using the native r1 grant profile. A key-only proof with a
 "self-asserted" label was rejected because a user shown it will click
 approve. The authoriser performs the write because a dApp-performed
 write would make the dApp balance fees at connect time, tie the artefact
@@ -2171,7 +2250,7 @@ measured rather than specified here, which is why section 5.1 states
 | R7 change | `max_coin_value`; the change entry as a bound argument appended in the same circuit; `enc_pk == enc_key` | a standalone `append_inbox` twin | the twin wrote unbounded entries under a no-value scope; the equality makes a rotation abort the call rather than orphan change |
 | R10 request transport | one base64url JSON object in the fragment on both legs, signed as transmitted, with a detached `proof` parameter | loose query parameters; a canonicalised object; a JWS container (R21) | a single parameter value is the signed unit and needs no canonicalisation; the fragment stays out of logs and `Referer`, not out of history (S19) |
 | R12 sign-in | grant-backed, address-disclosing | an identity-only grant; a verifiable-random-function (VRF) identity | an identity-only grant costs a transaction for plain login; address hiding belongs to the sign-in MIP; the target credentials only sign |
-| R14 wire names | connector spellings plus two registry spellings | registry short names | wallets already emit the connector strings |
+| R14 wire names | connector spellings plus this MIP's two spellings | private short names | wallets already emit the connector strings |
 | R15 network | no `network_id` cell; the wire `chain` member | a network cell; MIP-0008 in `Requires` | independent deployments already differ by address; a cell the ledger does not assert separates nothing; the record embeds no network identifier, so MIP-0008 is cited, not required; no cell defeats a state-preserving fork |
 | R16 document shape | one MIP under MPS-0018 | a separate connection MIP | the grant is the reserved extension of two MIPs under MPS-0018; the split is offered if editors object |
 | R17 lifecycle | tombstones kept; lazy expiry; a generation counter; renewal of an expired record is revoke then issue | deletion on revoke; automatic cleanup; an expiry test in `issue_grant` | enumerability needs a residue; a time-dependent `issue_grant` costs a kernel comparison for a transition composition already provides |
@@ -2183,14 +2262,21 @@ measured rather than specified here, which is why section 5.1 states
 
 ### Acceptance Criteria
 
-- [ ] External co-author named; the offer of a compatible scoped-grant
-      primitive in the upstream discussion answered.
-- [ ] MIP number assigned; the companion PR appending this MIP to
-      MPS-0018's Recommended MIPs merged.
-- [ ] Editors' acceptance of the companion erratum covering AUTH-1,
-      AUTH-2, and AUTH-9 (section 12).
-- [ ] Every tag family of section 14 registered under the MPS-0027
-      registry once it ratifies.
+These criteria govern adoption and conformance maturity. An unchecked
+item is not a prerequisite for submitting this document as a Draft
+under MIP-0001. The proposal's requirements are distinct from the
+partial implementation evidence below.
+
+- [x] External co-author named: Hector Bulgarini.
+- [ ] Prior-art offer in discussion #223 followed up and any adopted
+      contribution attributed.
+- [ ] MIP number assigned; MPS-0018's `MIP` header and Recommended MIPs
+      list updated with this proposal.
+- [ ] Editors accept the explicit combined conformance profile in
+      section 12 and its relationship metadata. No separately merged
+      MIP-0013 amendment is assumed.
+- [ ] Domain-separator compatibility with MIP-0021 settled as described
+      in section 14; any changed byte recipe has replacement vectors.
 - [ ] Independent cryptographer review, findings addressed, of the grant
       challenge and `issued_at`, the transitive binding of openings, the
       hiding of `grant_id` and the salted commitments, the
@@ -2198,8 +2284,8 @@ measured rather than specified here, which is why section 5.1 states
       key validation, GrantViewSeal and the `read_pk` derivation,
       `signin_digest`, the `envelope_digest` separation, and the
       fork-replay statement.
-- [x] E1: the grant arm on the reference contract at `spec_version = 2`,
-      both stages complete: the two cells and structs, the pure
+- [x] E1 (historical v2 baseline): the grant arm on the reference
+      contract at `spec_version = 2`, both stages complete: the two cells and structs, the pure
       derivations, the seam chips and three grant twins on each grantee
       arm, and the three lifecycle circuits on each device arm, with k,
       rows, and prover-key size measured over the whole thirty-circuit
@@ -2213,28 +2299,40 @@ measured rather than specified here, which is why section 5.1 states
       since what the reference localnet refuses is the funding leg, a
       small contract call carrying a NIGHT unshielded input that
       balancing pairs with a NIGHT change output
-      (`evidence/grants-e4-proving-*.json`); and the p256 twins wait on
-      the secp256r1 surface.
+      ([unshielded evidence](../../../contract/GRANTS-E2.md#20260916-the-unshielded-grant-twins-on-node-grants-e4)).
+      The later P-256 grant twins compile under Compact 0.35, and the
+      23 October 2026 run exercises `wa-json134` unshielded grant spends
+      on node (Implementation and E11). E1 does not certify the later
+      caller-bound schema or the P-256 profile.
 - [ ] E2: Testing item 2 green on a node, each case ending with the
-      invariants it exercises. Held: twelve rejection rows and nine
-      grantee-key rows green on node, each ending with no transaction
-      and a byte-identical ledger snapshot either side; the
-      within-the-margin expiry row, which is built and submitted and
-      then refused at admission with the ledger byte-identical either
-      side; and the device-key control that measures GR-2. Open, so
+      invariants it exercises. Held: twelve rejection rows and eight
+      grantee-key rows against on-chain state, each ending with no
+      transaction and the recorded six-field snapshot unchanged; a ninth
+      key row refused by the client encoder before a transaction exists;
+      the within-the-margin expiry row, built and submitted then refused
+      at admission with that same snapshot unchanged; and the device-key
+      control that measures GR-2. These historical snapshots cover
+      `round`, `auth_nonce`, `inbox_count`, `device_count`,
+      `grant_generation` and grant-map size, not complete state. Open, so
       the box does not close: the faults Testing
-      item 2 lists as green off-node only (the issue rules, the
-      out-of-scope operation flag, recipient-kind mismatch, a wrong
-      envelope, and a prior-incarnation opening) and those that have not
-      run at all (a cumulative wrap attempt, a foreign-color witness
-      coin, the two clock-skew rows on a grant twin, stale epoch, stale
-      generation, the salt-reuse flag, the two-slot revocation row, and
-      the vacuous-verifier control), and the revoke-plus-issue row over
-      an expired but unrevoked id rather than a live one.
+      item 2 lists as green off-node only (the remaining issue rules,
+      recipient-kind mismatch, a wrong envelope, cumulative overflow and
+      foreign witness color) and the remaining cases named there. The later
+      unshielded run also holds the out-of-scope operation, wrong
+      `spent_prev`, and tampered-signature rows against a funded chain
+      state; these are build-time refusals, not node-admission refusals.
+      The 23 October 2026 recovery node run adds stale-grant-epoch and
+      prior-incarnation refusals, same-key slot isolation on both arms,
+      and refusal to overwrite an expired but unrevoked record, with
+      the tracked-state comparisons described in Implementation.
+      Stale generation is structurally unreachable while revoke-all
+      clears the register and needs an explicit
+      conformance argument. Revoke plus issue over an expired but
+      unrevoked id remains distinct from the already exercised live id.
 - [x] E3: the on-chain unit of `kernel.blockTimeLessThan` and the
       never-expires arm pinned on a ledger-9 network and recorded in the
-      registry entry, with past, future, zero, and wrong-unit cases
-      (registry entry: ledger 9, node 2.1.0, whole seconds since the
+      evidence record, with past, future, zero, and wrong-unit cases
+      (evidence record: ledger 9, node 2.1.0, whole seconds since the
       UNIX epoch; enforcement at client build and at node admission;
       admission-time block time about one block interval plus a
       network-defined tolerance ahead of the wall clock).
@@ -2242,20 +2340,32 @@ measured rather than specified here, which is why section 5.1 states
       read-only grant, a two-element batch, and a zero-DUST refusal.
 - [ ] E5: the vectors of Testing item 5 published, the Rust side linking
       no compiled contract module.
-- [ ] E6: the deploy budget and wave plan of Testing item 6. Held: the
-      thirty-circuit roster deployed on node in three waves at the
-      measured per-update ceiling of section 6.7, each update at the
-      authority counter read from chain, with retirement landing in the
-      last one. Open, so the box does not close: the `spec_version = 1`
-      control, which needs a compiled pre-grants build of the contract.
+- [ ] E6: the deploy budget and wave plan of Testing item 6 for the
+      submitted schema and supported arms. Historical evidence holds
+      the thirty-circuit v2 roster in three waves and the caller-bound
+      thirty-six-circuit roster in seven waves. The profiled P-256
+      deployment records a fifty-two-circuit inventory and ten waves
+      ([profile guide](../../../contract/WEBAUTHN.md)). These are
+      distinct source and toolchain snapshots, not interchangeable
+      sizing claims. The pre-grants compatibility control remains open.
 - [ ] E7: the read handover of Testing item 7, including the
       two-delegate re-seal case.
 - [ ] E8, E9, E10: Testing items 8, 9, and 10 (item 9 green on node;
-      item 10 partial, with the leg that rotates `enc_key` between
-      signing and submission still open; item 8 not run).
-- [ ] E11: an r1 grantee end to end once the secp256r1 surface ships
-      (Testing item 12); until then the r1 arm and `schnorr_bip340` are
-      marked pending in the registry.
+      item 10 includes the recorded rotation between grant signing and
+      the attempted call, refused at build with no inbox append in the
+      snapshot. Complete state and UTXO snapshots were not recorded;
+      item 8 not run).
+- [x] E11: an r1 grantee end to end under an explicitly supported
+      WebAuthn profile (Testing item 12), satisfied for the bounded
+      `wa-json134` unshielded path. The 23 October 2026 full-account suite
+      records three grantee spends and sixteen build-time refusals;
+      a separate three-operation fixture adds identity-key and
+      authenticator-extension (ED/suffix) refusals against indexed state
+      using the original constructor, circuits and verifier keys.
+      Implementation distinguishes their execution layers and scope.
+      General browser support, P-256 shielded grant spends and a successful
+      forwarded P-256 call are not established by these runs.
+      `schnorr_bip340` has its own independent arm and implementation status.
 - [ ] A public reference implementation passing E2 as its conformance
       suite with the E5 vectors published.
 - [ ] A second independent implementation of the grantee side (a wallet
@@ -2270,26 +2380,28 @@ measured rather than specified here, which is why section 5.1 states
 
 ### Implementation Plan
 
-1. Name the external co-author and settle the open items with the
-   Foundation and the editors; fold the outcomes into the text.
-2. Extend the reference contract to `spec_version = 3` and run E1, E2,
-   E6, E9, and E10 (E1 and E3 are held; E2, E6, and E10 are held in
-   part and their residue is named in the acceptance criteria); correct
-   any byte recipe the compiled encoding contradicts and publish the E5
-   vectors.
-3. Build a reference authoriser page and a reference dApp against the
-   text and run E4 and E7; then E8 with the reference signer as agent.
-4. Commission the cryptographer review; fold findings in before editor
-   numbering if substantive.
-5. Open the companion PRs: MPS-0018 Recommended MIPs; the authorisation
-   MIP erratum of section 12; the custody MIP R9 wording note; the r1
-   key-validation correction against the schemes MIP.
-6. Register tag families when the MPS-0027 registry lands; file the two
-   registry spellings and the grantee rows into the schemes MIP.
-7. Submit for editor numbering; open a Discussion; raise the origin
-   binding in MIP-0015's open question thread; iterate.
-8. Run E11 when the secp256r1 surface ships and move the r1 arm to
-   Active.
+1. Review this self-contained Draft and its executable reference in
+   Passport first. A subsequent canonical submission follows MIP-0001,
+   presenting section 12's AUTH-1/2 conformance delta, the MIP-0021
+   domain-naming decision, and the evidence gaps explicitly. Link any
+   assigned number from MPS-0018; a parent-MIP cross-reference may be
+   added during that review.
+2. Complete the grant rejection, recovery, caller and r1 matrices
+   against the current schema. Re-run the device suite alongside them.
+   Publish vectors for the current scope digest and every supported
+   grantee profile; retain historical evidence with its original scope.
+3. Build and exercise the reference authoriser and dApp ceremony,
+   read handover, reconnect and re-seal paths (E4, E7 and E8). Validate
+   the byte recipes with an independent implementation.
+4. Commission independent cryptographer review and address its findings
+   before requesting adoption. In particular, resolve validation-layer
+   coverage, commitment hiding, replay and WebAuthn policy questions.
+5. Settle domain-separator compatibility and the proposed wire spellings
+   with the relevant maintainers. Confirm the custody viewing-capability
+   interaction and the Open Wallet Standard mapping or document divergence.
+6. Complete the remaining Path to Active criteria and then request the
+   lifecycle transition required by MIP-0001. Draft publication itself
+   does not assert completion of those criteria.
 
 ## Backwards Compatibility Assessment
 
@@ -2304,9 +2416,9 @@ by maintenance update. A grant-capable account therefore exposes
 `spec_version = 3`, and **an existing v1 or v2 account cannot gain this
 schema by maintenance update**; migration is a new account and is
 out of scope. Clients MUST read `spec_version` before requesting a grant
-and MUST report `account_not_capable` otherwise. The redeploy SHOULD be
-shared with the device-identity remedy for the authorisation MIP's
-erratum 8, since accounts are not yet deployed at scale.
+and MUST report `account_not_capable` otherwise. This schema change does
+not repair duplicate device enrolment or device-wide retirement; those
+remain separate from grant conformance.
 
 **Custody MIP.** A grant is an "authorisation-policy object behind the
 same seam" (its section 2). INV-1: grants are inside the seam. INV-2: no
@@ -2320,13 +2432,14 @@ unchanged custody chips. S5 is discharged in section 6.2. GrantViewSeal
 is a new container with its own numbering; a companion note to R9 is
 raised on the write channel the viewing secret opens.
 
-**Authorisation MIP.** Additive in every existing circuit and cell, so
-its conformance suite passes unchanged. AUTH-3 to AUTH-8 and AUTH-10 hold
-as written for devices; GR-4, GR-5, GR-9, and GR-12 give the grant
-analogues; AUTH-1, AUTH-2, and AUTH-9 are read per section 12. Device
-keys, wallet keys under MIP-0003, and wallets unaware of this standard
-are unaffected. The schemes MIP gains two registry spellings, a grantee
-Status per arm, and the r1 key-validation correction.
+**Authorisation MIP.** Section 12 preserves the device path and defines
+an explicit AUTH-1/2 adaptation for the additional grant path. Extended
+accounts MUST pass the device suite as well as the grant suite; this is
+not a claim that every current reference path has already passed.
+AUTH-9 remains a device-handle requirement. Wallet keys under MIP-0003
+retain their existing meaning. MIP-0030 supplies the ECDSA and WebAuthn
+rules; this MIP defines the grant-specific domains, credential binding
+and wire spellings.
 
 ## Security Considerations
 
@@ -2336,19 +2449,28 @@ a bound `read_pk`, the declarative flag for audit, rotation on revoke,
 the disclosure sentence as the first consent item, and the custody MIP's
 R9 successor as the named dependency for spend without full disclosure.
 
-**Observability (normative).** A passive observer of the register
-learns, per account, the number of connections ever made (records
-including tombstones), and for each the admitted operations, whether it
-holds `read`, its caps, its expiry, its call count, and its status; from
-a call it learns which grant acted. It does not learn the grantee key,
-the origin, the dApp host, the color, the counterparty (except a
-contract recipient, which the send path publishes regardless), or any
-amount. This is within INV-2 (the caps are the owner's policy, not a
-coin's value) and, per the companion erratum, outside AUTH-9's scope.
-The authoriser is privileged: it knows `scope_salt` for every grant it
-issued and, if it retains it, can open every commitment from public
-state indefinitely, which is why section 4.2 says it SHOULD NOT retain
-the salt.
+**Observability (normative).** A passive observer of current register
+state learns the retained grant records, including retained tombstones,
+and each record's admitted operations, read flag, caps, expiry, call
+count and status. This is not the number of all connections ever made:
+revoke-all may clear the map, and one connection can hold multiple slots.
+An observer retaining transaction history can retain past records and
+link calls by `grant_id` even after clearing. A caller restriction is
+visible, and exercising it reveals the authenticated immediate caller.
+
+The grant record does not publish the grantee key, origin, dApp host,
+held coin color, recipient pin or spent amount in clear. This hiding
+claim depends on secret per-connection key material and fresh salts;
+known candidate keys and salt disclosure weaken it as described above.
+Custody operations retain their own disclosures: unshielded transfers
+publish color, amount and recipient; contract recipients and exercised
+caller relationships are visible. GR-15 does not conceal those facts.
+The caps are public policy values, not held coin values. AUTH-9's device
+protection remains unchanged under section 12.
+
+The authoriser knows `scope_salt` for every grant it issued and, if it
+retains it, can open the corresponding commitments from public state
+indefinitely; section 4.2 therefore says it SHOULD NOT retain the salt.
 
 | | Attack | Mitigation |
 |---|---|---|
@@ -2363,10 +2485,10 @@ the salt.
 | S9 | Scope creep or upward adjustment | only device-gated circuits write scope; attenuation only; modify is revoke plus issue (7.2) |
 | S10 | Object-scope bypass through the witness coin | `coin.color` and `coin.value` asserted before the chip (6.2 step 5) |
 | S11 | Change orphaning, including by a rotation racing a pending call | `max_coin_value`; the change entry appended in the same transaction; `enc_pk == enc_key` (6.2 step 5) |
-| S12 | Revocation escape (the erratum 8 pattern) | contract-recomputed identity; bounded `slot`; tombstone read at use; roster reconciliation (7.5) |
+| S12 | Revocation escape through duplicate credential records | contract-recomputed identity; bounded `slot`; tombstone read at use; roster reconciliation (7.5) |
 | S13 | Device compromise not contained by `remove_device` | `revoke_all_grants` composed with a compromise removal (7.3) |
-| S14 | Epoch or generation confusion, pre-planting (erratum 7) | `epoch`, `gen`, `issued_at` contract-written and asserted at use (GR-8) |
-| S15 | Weak or identity keys (erratum 6) | the per-arm table of 3.3, including SEC 1 validation on r1; off-curve negative vectors |
+| S14 | Epoch or generation confusion, future-state pre-planting | `epoch`, `gen`, `issued_at` contract-written and asserted at use (GR-8) |
+| S15 | Weak, off-curve or identity keys | the per-arm table of 3.3, including SEC 1 validation on r1; off-curve negative vectors |
 | S16 | Origin spoofing through a free parameter | browser origin is browser-attested; optional contract caller enforcement uses the ledger's `kernel.caller()`, never a self-asserted address (6.2.1); the two identities are distinct |
 | S17 | Consent deception by dApp-supplied strings or units | consent from the exact plaintext scope and the proven `client_id`; no dApp strings; atomic units; hex color (9.5) |
 | S18 | Consent as a Document Object Model (DOM) event on a page holding signing material | consent precedes the ceremony; the assertion challenge is the issue challenge; the derived key is used once; `frame-ancestors 'none'`, top-window check, `Cross-Origin-Opener-Policy` (9.4) |
@@ -2384,7 +2506,7 @@ the salt.
 | S30 | Cross-network replay after a state-preserving fork | no cell defeats it; `kernel.self()` plus never reusing deploy content; expiry and revocation on the surviving chain (R15) |
 | S31 | Kernel argument disclosure per call | `expires_at` is public anyway |
 | S32 | Maintenance authority above the seam | grant circuits in the wave plan; authority retired after the last wave (6.7) |
-| S33 | Malleated ECDSA twins | both `s` forms accepted; inert because `nonce` advances (SIG-4) |
+| S33 | Malleated ECDSA twins | both `s` forms accepted; inert because `nonce` advances (MIP-0030 section 2) |
 | S34 | Pending private key stored before consent | non-extractable storage SHOULD; unavoidable in kind |
 | S35 | Concurrent coin selection | a fee-wasting race, or the loser refused by the node as a double spend; never a mis-spend, and never a proving failure, since proving consults the commitment tree and not the nullifier set (INV-5) |
 | S36 | Fee-payment linkability | a dApp paying DUST from an address linked to its identity links itself to the account; outside the contract |
@@ -2393,19 +2515,108 @@ the salt.
 
 ## Implementation
 
-**Caller extension (2026-10-01).** The reference uses Compact 0.35.0,
-runtime 0.20.0 and `spec_version = 3`. Both device arms bind the new
-scope:v2 digest; all six grant-spend circuits enforce the caller pin.
+**Evidence scope.** The measurements below belong to the source and
+stack snapshots each evidence record identifies. Compilation, circuit
+simulation, node execution with a software authenticator, and a live
+browser ceremony establish different claims. None alone establishes
+complete conformance to every requirement of this MIP.
+
+**Caller extension (2026-10-01).** The recorded run uses Compact 0.35.0,
+runtime 0.20.0 and `spec_version = 3`. Its JubJub and k256 device arms
+bind scope:v2 and all six grant-spend circuits enforce the caller pin.
 The [caller implementation guide](../../../contract/GRANTS-CALLER.md)
-records reproduction, conformance evidence and the forwarding compiler
-limitation. The following E1/E2 rows retain their historical scope:v1
-measurements and are not measurements of the caller extension.
+records a JubJub unshielded spend via a contract, the `A -> B -> account`
+case, direct/wrong-caller/replay refusals, and a proved forged-context
+submission refused by the node. The k256 and shielded caller predicates
+are covered offline. P-256 later shares the same scope digest and gate;
+that run does not exercise it. The following E1/E2 rows retain their
+historical scope:v1 measurements and are not measurements of the caller
+extension or the P-256 arm.
+
+**P-256 profile.** The reference implements
+[`wa-json134`](../../../contract/WEBAUTHN.md), with a 134-byte canonical
+client-data object, a 21-byte origin, 37-byte authenticator data, and
+UP+UV required. Other JSON shapes, origin lengths, and authenticator
+extensions are outside this implementation profile. The
+[compiled inventory](../../../contract/P256-MEASUREMENTS.md) contains
+all three P-256 grant-spend circuits. The
+[offline suite](../../../contract/src/tests/p256-offline.ts) exercises
+a P-256 owner and grantee, including RP binding, scope, signature,
+replay, and revocation checks. The earlier
+[recorded node suite](../../../contract/evidence/p256-webauthn/conformance-and-proving.json)
+uses an OpenSSL software authenticator for account calls, including
+P-256 device-authorised grant issuance and revocation; it does not
+exercise a P-256 grantee spend.
+
+The 23 October 2026 [grant suite](../../../contract/src/tests/p256-grants.ts)
+and its [node evidence](../../../contract/evidence/grants-completion-20261023/p256-grants-conformance.json)
+establish the `wa-json134` unshielded end-to-end milestone on the full
+52-operation account with an OpenSSL software authenticator. Eleven recorded funding/lifecycle
+transactions include three proved and included grantee spends of 5 units
+each, reducing the funded non-native balance from 100 to 85. Sixteen
+negative cases exercise origin/RP/profile/signature binding, scope,
+replay, revocation, incarnation isolation, read-only exclusion and root
+caller rejection. They fail during circuit build against indexed state,
+with zero prover or submission calls and identical serialized
+`ContractState` before and after; they are not submitted invalid proofs.
+The profile case uses a valid ES256 signature over unsupported client
+JSON. Source and artifact hashes are recorded and checked unchanged
+throughout the run.
+
+The separate [refusal fixture](../../../contract/src/tests/p256-grant-refusals.ts)
+and its [recorded results](../../../contract/evidence/grants-completion-20261023/p256-grant-refusals.json)
+complete the bounded Testing item 12 negative cases. This unfunded fixture
+deploys only three original account operations, retaining the original
+constructor and verifier keys; it is not a full conforming account.
+Three included setup transactions deploy it, activate its owner and issue
+a real P-256 grant. An identity grantee fails at the Compact point-coordinate
+accessor during client execution, before grant lookup. A signed 37-byte
+authenticator header with ED set fails the circuit's profile flag check;
+a genuine signed 44-byte assertion carrying ED and a CBOR extension-map
+suffix fails the runtime's `Bytes<37>` argument encoding. A valid ordinary
+assertion passes authentication and reaches the expected unfunded custody
+guard. All four calls leave serialized `ContractState` unchanged and make
+zero prover or submission calls. The 18 source/artifact hashes remain
+unchanged through the run, and all 13 entries shared with the full-account
+run match. These are execution/encoding refusals against node-backed state,
+not rejected proofs or a complete adversarial ECDSA proof audit.
+
+The separate
+[live browser result](../../../contract/evidence/p256-webauthn/browser-flow.md)
+is an account encryption-key rotation, not the connection ceremony or
+a grant spend. E4, general browser support, P-256 shielded grant spends
+and successful forwarded P-256 calls remain outside these results.
+
+**Recovery.** The reference implements `recover_finalise`, including
+an epoch increment and complete retirement of old device entries. The
+[historical node run](../../../contract/evidence/rec-1-9-recovery-conformance.json)
+exercises recovery and successor control. The expanded
+[node suite](../../../contract/src/tests/recovery-conformance.ts), its
+[23 October 2026 results](../../../contract/evidence/grants-completion-20261023/rec-1-9-recovery-conformance.json)
+and the [validation report](../../../contract/GRANTS-COMPLETION.md)
+also establish the grant sequence. A pre-existing JubJub grant and a
+k256 grant issued during the pending window fail after each of two
+recovery finalisations. Each finalisation leaves exactly its authorised
+successor device. That successor revokes and re-issues both grant ids;
+old-incarnation signatures fail even with fresh openings and nonce zero,
+while fresh signatures spend 5 units on each arm without changing device
+authority. The run also establishes same-key two-slot revocation
+isolation on both arms and refusal to overwrite an expired but unrevoked id.
+
+The negative cases fail during client build against funded on-chain state,
+not at node admission. Before/after comparisons cover `round`, `auth_nonce`,
+epoch, device count and entries, grant records and generation, unshielded
+balances, inbox count, pending-recovery status and `enc_key`; they are
+tracked-state snapshots, not complete serialized `ContractState` or UTXO
+comparisons. The expanded [simulator](../../../contract/src/tests/recovery-sim.ts)
+also passes these cases. Its cumulative-overflow and foreign-witness-color
+cases on both shielded twins of both arms remain offline-only evidence.
 
 | Evidence held | What it establishes |
 |---|---|
 | the account-custody prototype's v0 grants on a devnet node (withdraw only, one color, cumulative cap, tombstone revoke, epoch-scoped, bearer grantee) | in-circuit cap, color, tombstone, and epoch enforcement at the seam |
 | the wallet-key gate experiment on a ledger-9 network (k=15 and k=16; 31,046 and 32,900 rows; 0.5 to 0.8 s) | the k256 envelope arm compiled and measured; the connector prefix as envelope `1` |
-| the P-256 in-circuit experiment against a real platform assertion (k=16, 36,466 rows, 1.1 to 1.2 s) | the r1 WebAuthn envelope |
+| the earlier P-256 in-circuit experiment against a real platform assertion (k=16, 36,466 rows, 1.1 to 1.2 s) | historical custom-stack envelope evidence; not the later Compact 0.35 account or grant proving cost |
 | the reference implementation's wave deploy and block-limit numbers | the deploy budget rule of section 6.7 |
 | E3: the kernel block-time comparison on a ledger-9 node (node 2.1.0): 21 unit and enforcement cases and a 13-case admission-time sweep over a probe contract carrying the seam's comparison shape, each case recording the host clock, the node head, the client phase reached, and the node outcome | the unit is whole seconds since the UNIX epoch on the client and the node alike; the comparison is a transcript read (one public input, no constraints) enforced at client build against the wall clock and at node admission against the node's block context, never by the proof; the never-expires arm records no read; the admission-time block time ran 8.2 to 10.2 s ahead of the wall clock on a 6 s-block localnet; the client-side and node-side refusal texts of section 6.4 |
 | the cross-contract-calls experiment | composition in one transaction |
@@ -2413,34 +2624,37 @@ measurements and are not measurements of the caller extension.
 | E1 stage two: the roster completed on the same contract (the jubjub grantee seam and its three twins, the remaining k256 twin, the three lifecycle circuits on the jubjub device arm, the client and Rust signer surfaces for both grantee arms, and an off-node suite of 121 checks over both arms), with the whole thirty-circuit roster measured from 311 rows at k=9 to 97,568 at k=17 | the six grant twins and six lifecycle circuits of section 6.1 exist on both arms with no exported signature changed; the cost table of section 6.7 and the seam's per-arm row cost; the `v1` challenge and lifecycle recipes of section 6.3 and their measured preimage widths, agreed three ways over 34 vectors and three pinned signatures; the `v1` key guard of section 3.3 and the runtime's refusal of every other point outside the prime-order subgroup |
 | E2: the conformance run on a ledger-9 localnet (node 2.1.0, indexer 4.4.0-rc.2, proof server 9.0.0-rc.6), twelve evidence groups from one account and one chain: the three-wave deploy and a cross-arm enrolment, issuance across both device arms, grant spends on both grantee arms, a twelve-row rejection matrix, ten grantee-key rows, the expiry rows with their transaction transcripts read back, composition of two calls on one contract, the one-coin race, the change prediction, and every proof of the run timed at the proof provider, with the per-update ceiling bisected to one verifier key by a separate probe over throwaway accounts | the seam behaves on node as specified on both grantee arms; the change-precomputation rule and the `mt_index` retry rate of section 6.5; the refusal points and wrapper texts of section 6.4; the key-validation findings of section 3.3, including GR-2 as an authoriser obligation the contract cannot enforce; the composition mechanics of section 7.4; the wave plan, the per-update ceiling, and the proving times of section 6.7; the expiry horizon of section 5.1; Testing items 1, 3, and 9 green and items 2, 6, 10, and 11 in part |
 
-Not yet held: any connection protocol on Midnight and the origin
-binding it carries (E4); the read handover (E7); agent and self
-grantees (E8); the r1 arm and its in-circuit key checks, which wait on
-the secp256r1 surface (E11); the off-chain constructions of Testing item
-5 (`request_digest`, `signin_digest`, the `read_pk` derivation,
-GrantViewSeal, the negative key vectors, and the r1 vectors); the
-`spec_version = 1` control of Testing item 6; the recovery epoch bump of
-Testing item 11, which waits on the recovery seam; the leg of Testing
-item 10 that rotates `enc_key` between signing and submission; the
-faults Testing item 2 lists as not run on node; the on-node behaviour
-and proving cost of the jubjub contract-recipient twin, which the run
-never called, and of either unshielded twin over NIGHT, which the
-reference localnet cannot fund (both are held on node over a non-native
-color, `evidence/grants-e4-spend-*.json`); and the independent
-cryptographer review the acceptance criteria require.
+The [later unshielded run](../../../contract/GRANTS-E2.md#20260916-the-unshielded-grant-twins-on-node-grants-e4)
+adds five successful non-native-color spends across the JubJub and k256
+grantee arms, proving samples for both twins, and fourteen build-time
+rejection rows against funded chain state. The historical NIGHT
+funding refusal is narrower than a general prohibition on unshielded
+calls; it does not invalidate these successful grant spends.
 
-The reference contract now carries the two cells, the two structs, the
-pure derivations, the seam chips and three grant twins on each grantee
-arm, three lifecycle circuits on each device arm, and
-`spec_version = 3`, and the Rust signer produces bit-identical
-`grant_id`, commitments, and `k1` and `v1` challenges from the byte
-recipes alone. A static consent page implementing section
-9 and a dApp implementing the return leg and sign-in, each runnable
-locally, are the E4 and E7 artefacts. Companion documents: the MPS-0018
-Recommended MIPs bullet, the erratum of section 12, the custody MIP R9
-note, and the schemes MIP registry rows and r1 correction. This MIP
-contains no implementation code; the reference implementation is an
-acceptance criterion.
+Still outstanding for this MIP: the complete connection ceremony and
+its two-origin attack suite (E4); GrantViewSeal read handover and
+re-sealing (E7); the specified agent/self connection forms (E8); the remaining
+cross-implementation constructions of Testing item 5; the pre-grants
+compatibility control; the remaining rejection cases; and independent
+cryptographer review. The key-rotation leg of Testing item 10 has
+historical build-refusal evidence with the snapshot limits stated there.
+General account
+viewing-key sharing experiments do not by themselves establish the
+GrantViewSeal protocol required here. The historical E2 run also leaves
+the JubJub contract-recipient twin without an on-node measurement, and
+the non-native unshielded run establishes no NIGHT grant spend.
+
+The source implements three grant twins and three device-authorised
+lifecycle circuits per deployed arm at `spec_version = 3`. The
+[scope:v2 vectors](../../../contract/src/tests/vectors/grants-v3.json)
+extend the earlier scope:v1 vectors to the caller commitment; the Rust
+signer reproduces the `k1` and `v1` constructions without a compiled
+contract module. A static consent page and a dApp implementing the
+return leg, sign-in and read handover remain reference-client work.
+This MIP's combined-conformance rules are stated in section 12; they do
+not depend on an unsubmitted companion amendment. This MIP contains no
+implementation code, and its reference implementation and full
+conformance suite remain acceptance criteria.
 
 ## Testing
 
@@ -2451,7 +2665,9 @@ claim. Verify owner-signature binding of the pin, retained grantee
 signature/freshness checks, and caller-independent transcripts for the
 unrestricted branch. Wrong-caller checks cover both arms and all six
 spend gates; on-node composition and the forged-context control are
-reported separately in the caller implementation guide.
+reported separately in the caller implementation guide. The recorded
+caller matrix predates P-256 integration; the same checks MUST cover
+any additional deployed grantee arm before claiming its conformance.
 
 Conformance is demonstrated by a suite exercising, against a real node,
 the following. Each item names the invariants it exercises.
@@ -2462,8 +2678,9 @@ the following. Each item names the invariants it exercises.
    Expiry rows: a record with `expires_at = 0` and one with
    `expires_at = head + 3600` each execute on node with state advancing,
    and the `0` record produces no time read in the transcript (GR-7).
-   Status: green on node. Issuance from both device arms; a
-   within-scope spend on both grantee arms, with `nonce`,
+   Status: green on node for the recorded JubJub/k256 baseline.
+   Issuance from both device arms; a within-scope spend on both
+   grantee arms, with `nonce`,
    `spent_commit`, and `round` advancing and `auth_nonce` unchanged;
    and both expiry rows on the grant twins themselves, the accepted
    transactions read back through the indexer to show that the `0`
@@ -2476,7 +2693,8 @@ the following. Each item names the invariants it exercises.
    reference localnet refuses the funding leg, a small contract call
    carrying a NIGHT unshielded input that balancing pairs with a NIGHT
    change output; that is a property of the network the run used rather
-   than a gap in the item.
+   than a failure of the non-native-color result. The P-256 grantee
+   path is tracked separately in item 12.
 2. **Rejection matrix.** The same call aborts with no state change under
    each single fault: out-of-scope operation; over `per_call_cap`; over
    `cap`; a cumulative wrap attempt; a wrong `spent_prev` opening; a
@@ -2513,11 +2731,16 @@ the following. Each item names the invariants it exercises.
    error of the challenge cast or `invalid grant signature`
    (section 6.4).
 
-   Status: partial. Every row below that is green on node left the
-   ledger snapshot byte-identical either side, and every one but the
-   admission-margin row ended with no transaction at all, that row
-   being built, proved, and submitted and then refused at admission.
-   Green on node: over `per_call_cap`; over `cap`; a wrong `spent_prev`
+   Status: partial. Historical rejection rows with before/after
+   snapshots left the recorded fields unchanged: six fields in E2
+   (`round`, `auth_nonce`, `inbox_count`, `device_count`,
+   `grant_generation`, grant-map size), with the relevant unshielded
+   balance added in the later unshielded run. The cross-arm client-encoder
+   refusal has no such snapshot. These are not complete-state comparisons.
+   Every rejection except the admission-margin row ended before submission;
+   that row was built, proved and submitted, then refused at admission.
+   Green against on-chain state: an out-of-scope operation flag on the
+   unshielded twin; over `per_call_cap`; over `cap`; a wrong `spent_prev`
    opening; a witness coin
    above `max_coin_value`; wrong recipient under a pin; a
    stale `enc_pk`; revoked; `expires_at` in the past; `expires_at`
@@ -2529,20 +2752,34 @@ the following. Each item names the invariants it exercises.
    an order-2 point and an off-curve pair on `v1` (secp256k1 has prime
    order, so the identity is its only small-order point);
    `device_count` untouched across every row; and the device-key
-   control above. Green off-node only, in the circuit simulator: an
-   out-of-scope operation flag, recipient-kind mismatch, a wrong
-   envelope, a prior-incarnation opening against a re-issue, and the
-   issue rules (re-issue of a live id refused, issue over an absent id
-   succeeding, revoke of an absent id aborting, revoke of a tombstone
-   aborting). Not run anywhere: a cumulative wrap attempt; a witness
-   coin of another color; the two clock-skew rows on a grant twin (E3
-   carries them on a probe contract); stale epoch, since no circuit
-   bumps `device_epoch` until the recovery seam lands; stale
-   generation, structurally unreachable while `revoke_all_grants`
-   clears the register; the reused-`scope_salt` harness flag; the
-   two-slot revocation row; and the vacuous-verifier control. Revoke
+   control above. The
+   [23 October 2026 recovery run](../../../contract/evidence/grants-completion-20261023/rec-1-9-recovery-conformance.json)
+   additionally holds same-key two-slot revocation isolation on both arms,
+   refusal to overwrite an expired but unrevoked id, stale grants after
+   two recovery epochs, and old-incarnation signature refusal using fresh
+   openings and nonce zero. These negative calls abort during client build
+   against funded chain state with the tracked fields in Implementation
+   unchanged; successor-issued grants spend successfully on both arms.
+   Green off-node only, in the circuit simulator: recipient-kind mismatch,
+   a wrong envelope, and the remaining issue rules (re-issue of a live id
+   refused, issue over an absent id succeeding, revoke of an absent id
+   aborting, revoke of a tombstone aborting). The expanded recovery simulator also
+   passes, on both JubJub and k256, a legitimate spend of `2^128 - 2`
+   followed by an attempted spend of 2 with the correct `spent_prev`,
+   refused at the cumulative cap before narrowing; a foreign-color witness
+   supplied under the admitted color's lookup key on both shielded twins
+   (four cases), refused as `scope object mismatch`.
+   Not run anywhere: the two clock-skew rows on a grant twin (E3 carries
+   them on a probe contract), the reused-`scope_salt` harness flag, and
+   the vacuous-verifier control. Revoke
    plus issue over one id in one transaction is green, but over a live
    id, where this item asks it of an expired but unrevoked one.
+   Stale generation cannot be reached through the specified lifecycle
+   while `revoke_all_grants` clears the register; conformance evidence
+   MUST state that structural argument rather than report an unrun
+   stale-record test as passing. The key results above concern the
+   JubJub/k256 baseline; P-256 profile results are distinguished in
+   Implementation and item 12.
 3. **Owner liveness.** A pending owner signature still verifies after a
    grant call; a permissionless deposit between grantee signing and
    submission does not invalidate the grantee's call (GR-5; AUTH-8).
@@ -2590,19 +2827,29 @@ the following. Each item names the invariants it exercises.
    challenge commits to its own nonce point and grinding nonce, so it
    cannot exist before it is signed and a suite verifies such a
    signature rather than pinning it. Pending are the r1 challenges and
-   signature vectors, `request_digest`, `signin_digest`, the `read_pk`
-   derivation, GrantViewSeal, and the negative key vectors.
-6. **Deploy budget.** The full `spec_version = 2` roster deployed in
+   signature vectors agreed across the three implementations,
+   `request_digest`, `signin_digest`, the `read_pk` derivation,
+   GrantViewSeal, and the complete negative key-vector corpus. The later
+   [scope:v2 vector file](../../../contract/src/tests/vectors/grants-v3.json)
+   contains 36 Compact/TypeScript/Rust derivation vectors for the caller
+   extension. P-256/OpenSSL verification fixtures are separate evidence,
+   not a substitute for the full three-implementation corpus.
+6. **Deploy budget.** The full submitted `spec_version = 3` roster deployed in
    waves within the per-block parameters; authority retirement after the
    last wave; a `spec_version = 1` account shown unable to gain grants
    (GR-3, GR-13; Backwards Compatibility). Status: partial. Green on
    node for the three-wave deploy of the thirty-circuit roster at the
    measured per-update ceiling of section 6.7, each update at the
    authority counter read from chain, and for the retirement landing in
-   the same update as the last batch. Missing: the `spec_version = 1`
-   control, which needs a compiled pre-grants build of the contract that
-   the reference tree does not carry, since its source is the version-2
-   one.
+   the same update as the last batch. This is historical v2 evidence.
+   The caller guide separately records seven waves for its v3
+   thirty-six-circuit snapshot, and the WebAuthn profile guide records
+   ten for its fifty-two-circuit snapshot. A conformance report MUST
+   identify the source revision, arm roster, toolchain and measured
+   verifier inventory it deploys. Missing: the pre-grants compatibility
+   control, which requires building the historical v1 source and
+   exercising the attempted grant installation; source availability in
+   Git history is not evidence that this experiment has run.
 7. **Read handover.** Read-only grant; seal, decrypt, verify the secret
    against `enc_key`, inbox walk with commitment verification; rotate-
    before-share hides spent history; a second read grant issued and the
@@ -2640,21 +2887,50 @@ the following. Each item names the invariants it exercises.
     source, where the append is inside the circuit, and on the chain
     showing no other contract action between the call and the appended
     entry; the suite's own assertion is the `inbox_count` delta across
-    the call, which is weaker. Missing: a `rotate_enc_key` between
-    signing and submission shown to abort the call with no orphaned
-    change, which the stale-`enc_pk` row of item 2 does not cover, since
-    it proves the abort and says nothing about the change.
+    the call, which is weaker. The historical
+    [stale-`enc_pk` row](../../../contract/evidence/grants-e2-rejections-grants-conformance-rejections.json)
+    also signs a JubJub shielded grant call, includes the owner's
+    `rotate_enc_key_with_k256`, then attempts the original call. It is
+    refused at build with `stale encryption key`; no transaction is
+    submitted, and all six recorded fields remain unchanged, including
+    `inbox_count` at 5 before and after. This establishes the rotation
+    refusal and no inbox append in that run. It does not include a
+    complete-state or UTXO snapshot and does not by itself exhaust the
+    no-orphaned-change obligation.
 11. **Kill totality.** `revoke_all_grants` and a recovery epoch bump each
     inert every record; re-issue under the new generation or epoch
-    succeeds (GR-9). Status: partial. Green on node for
-    `revoke_all_grants`: the generation bumped, the register cleared, a
-    pre-kill grant refused as `unknown grant` with no state change, and a
-    re-issue under the new generation spending. Missing: the recovery
-    epoch bump, which no circuit in the roster performs until the
-    recovery seam lands, so that half cannot be run here at all.
-12. **r1 grantee.** End to end once the secp256r1 surface ships; an
-    extension-bearing assertion and the identity key as negative cases;
-    `rp_commit` opened at the seam (GR-14, GR-15).
+    succeeds (GR-9). Status: satisfied for the recorded JubJub/k256
+    paths. Historical E2 holds `revoke_all_grants`: the generation bumped,
+    the register cleared, a pre-kill grant refused as `unknown grant`
+    with its recorded snapshot unchanged, and a
+    re-issue under the new generation spending. The
+    [23 October 2026 recovery node run](../../../contract/evidence/grants-completion-20261023/rec-1-9-recovery-conformance.json)
+    holds a pre-existing JubJub grant and a pending-window k256 grant
+    invalid across two recovery epochs, each leaving exactly the
+    authorised successor device. Successor re-issuance admits fresh
+    unshielded spends on both arms; prior-incarnation signatures with
+    fresh openings and nonce zero fail. Refusals occur during client
+    build with the tracked snapshots unchanged, as detailed in Implementation.
+12. **r1 grantee.** End-to-end issuance, spend and revocation under an
+    explicitly supported WebAuthn profile, with profile-invalid and
+    identity-key assertions refused and `rp_commit` opened at the seam
+    (GR-14, GR-15). For the reference `wa-json134` profile, an
+    extension-bearing assertion is a negative case; another permitted
+    profile MUST state its own envelope acceptance rules. Status: satisfied
+    for the bounded `wa-json134` unshielded path.
+    The [23 October 2026 node run](../../../contract/evidence/grants-completion-20261023/p256-grants-conformance.json)
+    holds `wa-json134` issuance, three unshielded grantee spends,
+    revocation/re-issuance, RP binding, and sixteen build-time negative
+    cases, including a valid ES256 signature over unsupported client JSON.
+    The separate [three-operation fixture](../../../contract/evidence/grants-completion-20261023/p256-grant-refusals.json)
+    uses the original constructor, circuits and verifier keys to hold
+    identity-key, ED-flag and genuine signed-extension-suffix refusals
+    against indexed state, plus an ordinary-authentication control.
+    Implementation distinguishes its runtime point, circuit policy and
+    fixed-size encoding boundaries from the full-account spend evidence.
+    The software authenticator establishes neither the connection ceremony
+    nor general browser support, and these runs do not cover P-256 shielded
+    grant spends or successful forwarded P-256 calls.
 
 ## References
 
@@ -2667,12 +2943,16 @@ the following. Each item names the invariants it exercises.
   the viewing capability, R9, S5).
 - [MIP-0013](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0013-account-authorisation.md):
   Multi-key Account Authorisation for Custody Contracts (the device
-  seam, AUTH-1 to AUTH-10, errata 6 to 8); its
+  seam and AUTH-1 to AUTH-10; combined conformance is specified in section
+  12 of this proposal); its
   [discussion](https://github.com/midnightntwrk/midnight-improvement-proposals/discussions/244)
   (the VRF objection, R12).
-- ECDSA Authorisation for Custody Accounts (MIP-0030;
-  draft, number pending): registry, r1 WebAuthn envelope, k1 interim
-  arm, SIG-1 to SIG-5.
+- [MIP-0030](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0030-ecdsa-account-authorisation.md):
+  ECDSA Authorisation for Custody Accounts (Draft); signing boundary,
+  ECDSA validation, WebAuthn profiles and policy downgrade protection.
+- [MIP-0021](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0021-domain-separation.md):
+  Domain Separation Convention; the naming compatibility question is
+  stated in section 14.
 - [MIP-0003](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0003-ecdsa-support.md):
   ECDSA support (the connector `signData` `scheme` discriminator).
 - [MIP-0008](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0008-caip-2-network-identifiers.md):
@@ -2686,7 +2966,8 @@ the following. Each item names the invariants it exercises.
   Identity Standard
   ([PR #110](https://github.com/midnightntwrk/midnight-improvement-proposals/pull/110)).
 - [MPS-0027](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0027-domain-separation.md):
-  Domain Separation for Midnight Hash Constructions (the tag registry).
+  Domain Separation for Midnight Hash Constructions (the problem
+  statement addressed by MIP-0021; it does not supply a tag registry).
 - [MPS-0029](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mps/mps-0029-compact-caller-identity.md):
   Caller identity in Compact circuits.
 - Upstream proposals and discussions: Private Mandate Tokens
@@ -2724,48 +3005,30 @@ the following. Each item names the invariants it exercises.
 
 **Evidence**
 
-- The reference implementation, the account-custody prototype, and the
-  wallet-key gate, P-256, cross-contract-calls, and Schnorr-wallet
-  experiments named in Implementation live in the
-  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
-  repository; the commit the evidence was taken at is recorded on
-  submission.
-- E1, both stages (Implementation): the findings at
-  `contract/GRANTS-E1.md` and the vectors at
-  `contract/src/tests/vectors/grants-e1.json` on the branch
-  `nicolasdp/grants-seam-e1` of the
-  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
-  repository.
-- E2 (Implementation): the findings at `contract/GRANTS-E2.md` and the
-  evidence at `contract/evidence/grants-e2-*.json`, twelve files, one
-  per group (deploy, issue, spend, rejections, liveness, direct, kill,
-  keys, expiry, composition, concurrency, and proving), together with
-  the ceiling bisection at `contract/evidence/wave-ceiling.json`, on the
-  branch `nicolasdp/grants-seam-e1` of the
-  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
-  repository.
-- E3 (Implementation): the findings at `contract/GRANTS-E3.md` and the
-  evidence at `contract/evidence/block-time-unit.json` and
-  `contract/evidence/block-time-sweep.json` on the branch
-  `nicolasdp/grants-seam-e1` of the
-  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
-  repository.
-- The unshielded grant twins on node (Implementation): the findings in
-  the 2026/09/16 section of `contract/GRANTS-E2.md` and the evidence at
-  `contract/evidence/grants-e4-*.json`, five files, one per group
-  (funding, issue, spend, rejections, and proving), together with the
-  per-shape dismissal pricing at `contract/evidence/dismiss-cost.json`,
-  on the branch `nicolasdp/grants-unshielded-twins` of the
-  [midnightntwrk/passport](https://github.com/midnightntwrk/passport)
-  repository.
+The reference source and evidence links below are pinned to Passport
+commit `3fa1b32585032305f3dbef15476dd5fe7fca8a4b`. The reports retain the
+compiler, ledger and schema versions of their respective runs; a pinned
+current snapshot does not turn a historical v2 run into v3 conformance.
+
+- [Reference contract](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/contracts/account.compact)
+  and [P-256 arm](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/contracts/account-p256.compact).
+- [E1 measurements](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/GRANTS-E1.md)
+  and [recipe vectors](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/src/tests/vectors/grants-e1.json).
+- [E2 conformance and unshielded follow-up](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/GRANTS-E2.md),
+  with its per-group JSON evidence under
+  [contract/evidence](https://github.com/midnightntwrk/passport/tree/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/evidence).
+- [E3 block-time measurements](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/GRANTS-E3.md).
+- [Caller restriction and v3 evidence](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/GRANTS-CALLER.md).
+- [P-256 measurements and evidence boundaries](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/P256-MEASUREMENTS.md).
+- [Recorded recovery conformance run](https://github.com/midnightntwrk/passport/blob/3fa1b32585032305f3dbef15476dd5fe7fca8a4b/contract/evidence/rec-1-9-recovery-conformance.json).
 
 ## Acknowledgements
 
 The Input Output Group Advanced Research and Creativity department and
 the Midnight Foundation. The connector specification and MIP-0015
-maintainers, for the vocabulary this MIP reuses. The team that offered a
-compatible scoped-grant primitive in the upstream discussion, to be named
-here once the offer is answered.
+maintainers, for the vocabulary this MIP reuses. The scoped-grant
+prior-art offer in discussion #223 is recorded in References; evaluation
+and attribution of any adopted contribution remain follow-up work.
 
 ## Copyright Waiver
 

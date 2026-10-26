@@ -1,0 +1,163 @@
+{
+  "testId": "p256-grant-refusals",
+  "name": "conformance",
+  "fileName": "p256-grant-refusals.json",
+  "verdict": "PASS",
+  "description": "Node-backed P-256 grant identity and bounded wa-json134 authenticator-extension refusals",
+  "note": "Three original account operations deployed with original source and verifier keys. The real issued grant is unfunded. Invalid inputs never reach proving/submission and leave serialized state unchanged; valid ordinary authentication reaches the expected custody guard. This restricted fixture does not establish full account conformance.",
+  "details": {
+    "account": "e531f87d6a043e8da2b8f9d2807fabdf6cb8efbb869c442d01e738e2d351b860",
+    "schema": 3,
+    "profile": "wa-json134",
+    "deployedInterface": [
+      "activate_initial_device_with_jubjub",
+      "issue_grant_with_jubjub",
+      "withdraw_unshielded_with_grant_p256"
+    ],
+    "maintenanceAuthority": {
+      "committeeSize": 0,
+      "threshold": 1
+    },
+    "transactions": [
+      {
+        "label": "minimal diagnostic deployment",
+        "txId": "001585f4e6e680fbb404a9d3fecd6efb4a2432d1fe684b4829798f69481a6ea8f1",
+        "blockHeight": 482,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "activate jubjub owner",
+        "txId": "00e889c71c1f9c44a73eacd1838c1e42399e6119d66955d5be19db68e832297d8e",
+        "blockHeight": 485,
+        "status": "SUCCESS"
+      },
+      {
+        "label": "issue real P-256 grant",
+        "txId": "00206d206a5e2107b8d137ed297f5d90506e23ff16421832d1ea18f6081705a3f0",
+        "blockHeight": 489,
+        "status": "SUCCESS"
+      }
+    ],
+    "refusals": [
+      {
+        "label": "identity grantee key",
+        "stage": "native-point-validation",
+        "control": false,
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: cannot extract the x-coordinate of the secp256r1 identity point",
+        "stateHash": "7eae86519102ed867acc7146a2bfdb5b49f3865207bc623785e5620b239ffc89"
+      },
+      {
+        "label": "ED flag in fixed-size authenticator-data prefix",
+        "stage": "circuit-profile-policy",
+        "control": false,
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: WebAuthn flags require UP and UV",
+        "stateHash": "7eae86519102ed867acc7146a2bfdb5b49f3865207bc623785e5620b239ffc89"
+      },
+      {
+        "label": "signed ED assertion with CBOR extension-map suffix",
+        "stage": "fixed-size-argument-encoding",
+        "control": false,
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: type error: withdraw_unshielded_with_grant_p256 argument 11 (argument 12 as invoked from Typescript) at account-p256.compact line 345 char 1; expected value of type struct P256GrantAuth<pk: Secp256r1Point, policy: struct WebAuthnPolicy<rp_id_hash: Bytes<32>, origin: Bytes<21>>, authenticator_data: Bytes<37>, sig: struct Secp256r1EcdsaSignature<r: Secp256r1Scalar, s: Secp256r1Scalar>> but received { pk: { x: 9866596910007735902046198753793896845662987847957813470459230556010954802281n, y: 55911035055375499317778381419419119730436845733797691847419796590994039736529n, identity: false }, policy: { rp_id_hash: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99 }, origin: Uint8Array [Uint8Array] { 0: 104, 1: 116, 2: 116, 3: 112, 4: 58, 5: 47, 6: 47, 7: 108, 8: 111, 9: 99, 10: 97, 11: 108, 12: 104, 13: 111, 14: 115, 15: 116, 16: 58, 17: 56, 18: 57, 19: 55, 20: 51 } }, authenticator_data: Uint8Array [Uint8Array] { 0: 73, 1: 150, 2: 13, 3: 229, 4: 136, 5: 14, 6: 140, 7: 104, 8: 116, 9: 52, 10: 23, 11: 15, 12: 100, 13: 118, 14: 96, 15: 91, 16: 143, 17: 228, 18: 174, 19: 185, 20: 162, 21: 134, 22: 50, 23: 199, 24: 153, 25: 92, 26: 243, 27: 186, 28: 131, 29: 29, 30: 151, 31: 99, 32: 133, 33: 0, 34: 0, 35: 0, 36: 0, 37: 161, 38: 100, 39: 116, 40: 101, 41: 115, 42: 116, 43: 245 }, sig: { r: 39762649405409911115985599154770569940880920651711903608327424901328110480887n, s: 37519681017152070500183657910110935617933276595259431829864244300446702542060n } }",
+        "stateHash": "7eae86519102ed867acc7146a2bfdb5b49f3865207bc623785e5620b239ffc89"
+      },
+      {
+        "label": "valid wa-json134 assertion reaches custody",
+        "stage": "custody-positive-control",
+        "control": true,
+        "message": "Error: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: no balance for color",
+        "stateHash": "7eae86519102ed867acc7146a2bfdb5b49f3865207bc623785e5620b239ffc89"
+      }
+    ],
+    "provenance": {
+      "./p256-grant-refusals.ts": {
+        "bytes": 11880,
+        "sha256": "02ef79f7e21fd5d3fa1a59ddbccfcd1cbd4f184d566d32685e70ba5144768f0d"
+      },
+      "./p256-fixtures.ts": {
+        "bytes": 1974,
+        "sha256": "2e381e5cece4814b2e71de9920649851191e73b6ac997c72addcb94c8c2995ee"
+      },
+      "../wallet/account.ts": {
+        "bytes": 40657,
+        "sha256": "c77ca763e13a349b3bc8b32c6218ff60511d041a99aed699456417ea0a64580b"
+      },
+      "../wallet/signer.ts": {
+        "bytes": 39435,
+        "sha256": "4c3d593c0947641a116bfca059de399c1fcff24d37c430a38bbbf493c8e3cc8b"
+      },
+      "../wallet/signer-p256.ts": {
+        "bytes": 5787,
+        "sha256": "5a2b9e646283425fefcdf2f70dd058976aa772b1c11a10522df0eaa059787c76"
+      },
+      "../wallet/webauthn.ts": {
+        "bytes": 8610,
+        "sha256": "b49c26fcb9a405885e18c44e40e94b20ca7c2c18c638344557b7a5b18602c108"
+      },
+      "../../package-lock.json": {
+        "bytes": 112661,
+        "sha256": "a57a8056dfa3989a6fb237f0ff071b172f4864082173ba9c4274c09eac9bee51"
+      },
+      "../../contracts/account.compact": {
+        "bytes": 130095,
+        "sha256": "ef1e3d6eb873e91e205c12e07f33cda744d228470dd43a4794cb3784447fd6ae"
+      },
+      "../../contracts/account-p256.compact": {
+        "bytes": 19918,
+        "sha256": "50aca789d611fab99292725a64a8231e0a6509ca726fdb1e23babf96e0ad9fd4"
+      },
+      "../../contracts/webauthn.compact": {
+        "bytes": 4778,
+        "sha256": "04e84a53c6ffd2701a7f07820ef6becf2ffee06e05de9ca9dfd9e2b33ce7dedb"
+      },
+      "../../contracts/managed/account/contract/index.js": {
+        "bytes": 1695762,
+        "sha256": "afdc3aaa5bb426329122427ed65876bd820fc5bb452c02cb4eb48a7b97ed5697"
+      },
+      "../../contracts/managed/account/compiler/contract-manifest.json": {
+        "bytes": 37703,
+        "sha256": "3b48c46e4d21097e1839fc982db17022df9466e22c48f84fdceaa3f98f83d3a0"
+      },
+      "../../contracts/managed/account/zkir/activate_initial_device_with_jubjub.bzkir": {
+        "bytes": 1993,
+        "sha256": "18a73910ac9c1db1ae52a8c48abcbd891838d75206c5da48eb1338fd0db622ce"
+      },
+      "../../contracts/managed/account/keys/activate_initial_device_with_jubjub.verifier": {
+        "bytes": 2313,
+        "sha256": "b33fa139d34231f6ba1144a4ac3e947b35e679e8e91d31b554d7ff916932931e"
+      },
+      "../../contracts/managed/account/zkir/issue_grant_with_jubjub.bzkir": {
+        "bytes": 10152,
+        "sha256": "19887b86c759417a93ff30f90830e479ef987f5df2785a2ff9f42668cf8b0a99"
+      },
+      "../../contracts/managed/account/keys/issue_grant_with_jubjub.verifier": {
+        "bytes": 2313,
+        "sha256": "008fa78514089341d53ead256a5f8878eb630d3f60741f3bc6bd34d41a84b2f7"
+      },
+      "../../contracts/managed/account/zkir/withdraw_unshielded_with_grant_p256.bzkir": {
+        "bytes": 92588,
+        "sha256": "e7b394a60fe6deb93b52bd109b48005e861fbedb40d3da03587a37f94044cb9e"
+      },
+      "../../contracts/managed/account/keys/withdraw_unshielded_with_grant_p256.verifier": {
+        "bytes": 2745,
+        "sha256": "0e0800a7594733b079f1c88f27855fe6af44d858c6ee0ae69bec4281aa26b4b5"
+      }
+    },
+    "extensionAssertions": {
+      "fixedPrefixBytes": 37,
+      "flags": 133,
+      "extendedBytes": 44,
+      "cborSuffixHex": "a16474657374f5",
+      "authenticatorDataHex": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97638500000000a16474657374f5",
+      "signedClientDataSha256": "5657949e0b0d537ddaaf68e6f36beab143f861f187bfb586e405b413c607d58e",
+      "signatureDerSha256": "3e0d560964f86054cc43268b0932b9085713e7e6769412a3cbc4ce337896fffa",
+      "signatureVerifiedIndependently": true
+    },
+    "limitation": "The current wa-json134 profile excludes authenticator extensions. These controls do not claim that extension-bearing WebAuthn assertions are invalid in general."
+  },
+  "ranAt": "2026-10-23T16:12:02.571Z",
+  "stack": {
+    "node": "midnightntwrk/midnight-node:2.1.0-rc.4",
+    "indexer": "ghcr.io/midnightntwrk/indexer-standalone:4.4.0-rc.6-b5e6c809",
+    "proofServer": "midnightntwrk/proof-server:9.0.0-rc.8"
+  }
+}

@@ -672,6 +672,16 @@ export class CustodyAccount {
 
   // ── Scoped grants (scoped-grants MIP): ledger reads ──────────────────────
 
+  /** Refuse an older schema before asking a device to approve a v3 grant.
+   *  GrantScope gained caller_commit in v3, including for unrestricted
+   *  grants, so a v2 account cannot consume this client's scope digest. */
+  private async requireGrantCapability(): Promise<void> {
+    const version = (await this.ledgerState()).spec_version;
+    if (typeof version !== 'bigint' || version < 3n) {
+      throw new Error('account_not_capable: scoped grants require spec_version >= 3');
+    }
+  }
+
   /** The record under a grant id, or null when the map has no entry (a
    *  revoked grant is a record with `active == false`, not null). */
   async grantRecord(grantId: Uint8Array): Promise<GrantRecord | null> {
@@ -713,6 +723,7 @@ export class CustodyAccount {
    * device signature.
    */
   async issueGrant(device: AnyDevice, grantId: Uint8Array, scope: PlainScope, scopeSalt: Uint8Array): Promise<TxResult> {
+    await this.requireGrantCapability();
     assertIssueRules(scope);
     const digest = scopeDigest(scopeSalt, scope);
     const ctx = await this.callContext();
@@ -753,6 +764,7 @@ export class CustodyAccount {
   // ── Scoped grants: lifecycle (low level: caller supplies the Authorisation)
 
   async issueGrantWithAuth(grantId: Uint8Array, scope: PlainScope, scopeSalt: Uint8Array, a: Authorisation): Promise<TxResult> {
+    await this.requireGrantCapability();
     const name = `issue_grant_with_${a.arm}`;
     const r = await submitWithDustRetry(name, () => this.handle.callTx[name](
       grantId, ...scopeArgs(scope), scopeSalt, ...authArgs(a),
