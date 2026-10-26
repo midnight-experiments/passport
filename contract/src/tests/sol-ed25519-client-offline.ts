@@ -9,7 +9,12 @@
 //      `signMessage`; Ledger and Trezor off-chain only. Every request a
 //      mocked wallet receives is recorded: no wallet is asked for a format it
 //      cannot sign, at enrolment, at approval or at restore, and the adapters
-//      refuse such bytes before calling the wallet.
+//      refuse such bytes before calling the wallet. Only the wallet's features
+//      the connected account lists count: a Backpack or Solflare offering
+//      both formats whose account lists only signMessage (or only the
+//      off-chain feature) signs in that format alone; an account without a
+//      features list supports none and is asked nothing; another wallet's
+//      probe asks only what its account lists.
 //   2. The signer check: a signature that does not come from the expected key
 //      over the exact bytes asked is refused before proving, at every place a
 //      signature comes back (device and grantee approvals, both signatures of
@@ -23,9 +28,12 @@
 //      different blinds; the record carries the format and caches the blind;
 //      a non-deterministic wallet is refused at enrolment, before any
 //      transaction.
-//   4. Restore: the cache; the stored format; every format the wallet can
-//      sign when nothing is stored, with the messages of a device enrolled
-//      through another format, for both roles.
+//   4. Restore: the cache; the stored format, its blind checked against the
+//      account (the same key and format through a deterministic wallet with
+//      another nonce rule refused with the remedy, the enrolling wallet
+//      restored); every format the wallet can sign when nothing is stored,
+//      with the messages of a device enrolled through another format, for
+//      both roles.
 //   5. The format probe of a wallet-standard wallet outside the named
 //      families: raw first, then off-chain, each signature checked by the
 //      signer check; the prompts counted; a wallet that passes neither
@@ -33,6 +41,12 @@
 //      a probe text and its signature refused as an approval and as a blind
 //      request, never stored; a restore without a record moving past a
 //      refused format.
+//   6. Use counters, against a ledger that rolls the entry and advances
+//      auth_nonce as the seam does: a device at 4095 calls, then finds 4096
+//      (two probes) and a fresh device object 4097 by the scan; 5000; stale
+//      known counters; a new epoch; an entry above auth_nonce refused until
+//      its counter is given, then used; recover_cancel at 4100; uncached
+//      restores at 4500 and 5000.
 //
 // Writes $EVIDENCE_DIR/sol-ed25519-client-offline.json when EVIDENCE_DIR is set.
 
@@ -47,6 +61,7 @@ import { SignerMismatchError, blindFormats, blindFormatName, blindMessageBytes, 
 import {
   ED25519_L, SolEd25519Device, SolEd25519Grantee, addDeviceWithSolEd25519, authoriseSolDevice, authoriseSolGrantee, checkSolSignature,
   deriveSolBlind, deriveSolGranteeBlind, parseSolRosterEntry, restoreSolBlind, restoreSolGranteeBlind, solBlindSignedBytes, solDeviceFinds,
+  authoriseSolDeviceOn, recoverCancelWithSolEd25519, resolveSolEd25519Counter, rotateEncKeyWithSolEd25519, solEd25519AuthArgs,
   solGranteeBlindSignedBytes, solKeyHints, solRosterEntry, solSignerFormats, solSoftwareSigner, type SolEd25519LifecycleSurface, type SolSigner,
 } from '../wallet/signer-sol-ed25519.js';
 import {
@@ -117,11 +132,13 @@ const answerOf = (mode: Mode, bytes: Uint8Array, seed: Uint8Array): Uint8Array =
  *  another key than the one it reports); `offchain` is the advertised
  *  off-chain feature's message versions (absent: no feature); `envelope`
  *  'other' makes the wallet report another off-chain message than the one
- *  asked. */
-function standardWallet(o: { name: string; seed: Uint8Array; offchain?: number[]; signMessage?: boolean; answer?: Uint8Array; envelope?: 'same' | 'other'; signed?: 'same' | 'other'; raw?: Mode; off?: Mode }) {
+ *  asked. The account lists every feature of the wallet, as a wallet's
+ *  account does, unless `accountFeatures` gives its list (null: no list). */
+function standardWallet(o: { name: string; seed: Uint8Array; offchain?: number[]; signMessage?: boolean; answer?: Uint8Array; envelope?: 'same' | 'other'; signed?: 'same' | 'other'; raw?: Mode; off?: Mode;
+  accountFeatures?: string[] | null }) {
   const calls: Call[] = [];
   const publicKey = keyOf(o.seed);
-  const account = { address: base58Encode(publicKey), publicKey };
+  const account: { address: string; publicKey: Uint8Array; features?: string[] } = { address: base58Encode(publicKey), publicKey };
   const signWith = o.answer ?? o.seed;
   const features: Record<string, unknown> = { 'standard:connect': { version: '1.0.0', connect: async () => ({ accounts: [account] }) } };
   if (o.signMessage !== false) {
@@ -151,6 +168,7 @@ function standardWallet(o: { name: string; seed: Uint8Array; offchain?: number[]
     };
   }
   const wallet: SolStandardWallet = { name: o.name, features };
+  if (o.accountFeatures !== null) account.features = o.accountFeatures ?? Object.keys(features);
   return { wallet, account, calls, publicKey };
 }
 /** A hardware wallet over a software key (off-chain only), recording every
@@ -180,14 +198,38 @@ function foreignSigner(seed: Uint8Array, other: Uint8Array, opts: { from?: numbe
     count: () => n,
   };
 }
-/** An account surface whose live entries are `entries` at epoch 0, and whose
+/** A deterministic Ed25519 signer of `seed` with another nonce rule than
+ *  RFC 8032 (r from another hash of the secret prefix): it signs the same
+ *  bytes the same way every time and its signatures verify under the key,
+ *  but they are not RFC 8032's. Counts its signatures. */
+function otherNonceSigner(seed: Uint8Array): SolSigner & { count: () => number } {
+  const L = ed25519.Point.Fn.ORDER;
+  const le = (b: Uint8Array) => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
+  const leb = (v: bigint) => { const o = new Uint8Array(32); let x = v; for (let i = 0; i < 32; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
+  const sha512 = (...p: Uint8Array[]) => { const h = createHash('sha512'); for (const x of p) h.update(x); return new Uint8Array(h.digest()); };
+  const e = ed25519.utils.getExtendedPublicKey(seed);
+  let n = 0;
+  return {
+    publicKey: keyOf(seed), formats: ['raw'],
+    sign: (m: Uint8Array) => {
+      n++;
+      const r = le(sha512(sha512(enc.encode('another nonce rule'), e.prefix).subarray(0, 32), m)) % L;
+      const R = ed25519.Point.BASE.multiply(r).toBytes();
+      const k = le(sha512(R, e.pointBytes, m)) % L;
+      return new Uint8Array([...R, ...leb((r + k * e.scalar) % L)]);
+    },
+    count: () => n,
+  };
+}
+/** An account surface whose live entries are `entries` at epoch 0, at
+ *  `authNonce` (at least every entry's counter, as on a ledger), and whose
  *  calls are recorded (none may happen after a refusal). */
-function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
+function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 0n) {
   const set = new Set(entries.map(hex));
   const txs: string[] = [];
   const surface: SolEd25519LifecycleSurface = {
     addressBytes: address,
-    ledgerState: async () => ({ auth_nonce: 0n, device_epoch: 0n, devices: { member: (e: Uint8Array) => set.has(hex(e)) } }),
+    ledgerState: async () => ({ auth_nonce: authNonce, device_epoch: 0n, devices: { member: (e: Uint8Array) => set.has(hex(e)) } }),
     callTx: new Proxy({}, { get: (_t, name) => async () => { txs.push(String(name)); return { public: { txId: `tx-${txs.length}` } }; } }) as any,
   };
   return { surface, txs };
@@ -282,6 +324,48 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
   await refused(G, 'an account whose address is not its key is refused', /address and key disagree/, () => solStandardSigner(phantom.wallet, { address: base58Encode(keyOf(seedOf('x'))), publicKey: keyOf(s) }));
   await refused(G, 'a signer that lists a format twice is refused', /a format twice/, () => solSignerFormats({ publicKey: keyOf(s), sign: () => new Uint8Array(64), formats: ['raw', 'raw'] }));
   await refused(G, 'a signer that lists an unknown format is refused', /has no format/, () => solSignerFormats({ publicKey: keyOf(s), sign: () => new Uint8Array(64), formats: ['raw', 'eip712-v1' as any] }));
+
+  // The connected account's own features (WalletAccount.features): only the wallet's features the account
+  // lists are used, before the family rules; an account without a list supports none.
+  const RAW_ONLY = [SOL_SIGN_MESSAGE_FEATURE], OFF_ONLY = [SOL_SIGN_OFFCHAIN_MESSAGE_FEATURE];
+  for (const family of ['Backpack', 'Solflare'] as const) {
+    const w = standardWallet({ name: family, seed: s, offchain: [1], accountFeatures: RAW_ONLY });
+    const signer = solStandardSigner(w.wallet, w.account);
+    const r = await deriveSolBlind(signer, req);
+    ok(G, `${family} offering both formats, its account only signMessage: raw chosen and signed, off-chain never asked`,
+      JSON.stringify(signer.formats) === '["raw"]' && r.format === 'raw' && eq(r.blind, rP.blind) && methods(w.calls) === 'signMessage,signMessage', methods(w.calls));
+    await refused(G, `... its adapter refuses off-chain bytes without asking (${family})`, /cannot sign the offchain format; not asked/, () => signer.sign(solBlindSignedBytes(keyOf(s), req, 'offchain')));
+    ok(G, `... and was asked nothing more (${family})`, w.calls.length === 2);
+    const w2 = standardWallet({ name: family, seed: s, offchain: [1], accountFeatures: OFF_ONLY });
+    const signer2 = solStandardSigner(w2.wallet, w2.account);
+    const r2 = await deriveSolBlind(signer2, req);
+    ok(G, `${family} offering both formats, its account only off-chain: off-chain signed, raw never asked`,
+      JSON.stringify(signer2.formats) === '["offchain"]' && r2.format === 'offchain' && eq(r2.blind, rB.blind) && methods(w2.calls) === 'signOffchainMessage,signOffchainMessage', methods(w2.calls));
+    await refused(G, `... its adapter refuses raw bytes without asking (${family})`, /cannot sign the raw format; not asked/, () => signer2.sign(solBlindSignedBytes(keyOf(s), req, 'raw')));
+    const w3 = standardWallet({ name: family, seed: s, offchain: [1], accountFeatures: null });
+    const signer3 = solStandardSigner(w3.wallet, w3.account);
+    await refused(G, `${family}, an account with no features list: no format, refused before the wallet is asked`, /lists no format/, () => deriveSolBlind(signer3, req));
+    ok(G, `... asked nothing (${family})`, w3.calls.length === 0 && signer3.formats.length === 0);
+  }
+  {
+    const w = standardWallet({ name: 'Phantom', seed: s, offchain: [1], accountFeatures: [...RAW_ONLY, ...OFF_ONLY] });
+    ok(G, 'Phantom whose account lists both: raw only (the family rule after the intersection)', JSON.stringify(solStandardSigner(w.wallet, w.account).formats) === '["raw"]');
+    const wo = standardWallet({ name: 'Phantom', seed: s, accountFeatures: OFF_ONLY });
+    ok(G, 'Phantom whose account lists only off-chain (which Phantom never signs): no format', solStandardSigner(wo.wallet, wo.account).formats.length === 0);
+    const wx = standardWallet({ name: 'Solflare', seed: s, accountFeatures: [...RAW_ONLY, ...OFF_ONLY] });
+    ok(G, 'an account listing a feature its wallet does not offer: not used (Solflare without the off-chain feature: raw)', JSON.stringify(solStandardSigner(wx.wallet, wx.account).formats) === '["raw"]');
+    const ws = standardWallet({ name: 'Solflare', seed: s, offchain: [1] });
+    ok(G, 'an account features value that is not a list of names: no format', solStandardSigner(ws.wallet, { ...ws.account, features: SOL_SIGN_MESSAGE_FEATURE as any }).formats.length === 0
+      && JSON.stringify(solStandardSigner(ws.wallet, { ...ws.account, features: [7, null] as any }).formats) === '[]');
+    // another wallet: the probe asks only what the account lists
+    const wp = standardWallet({ name: 'Some Wallet', seed: s, offchain: [1], accountFeatures: OFF_ONLY });
+    const probe = await probeSolWalletFormats(wp.wallet, wp.account, { nonce: () => seedOf('account features probe') });
+    ok(G, 'another wallet whose account lists only off-chain: the probe asks off-chain only, and it is the enrolment format',
+      probe.format === 'offchain' && JSON.stringify(probe.advertised) === '["offchain"]' && methods(wp.calls) === 'signOffchainMessage', methods(wp.calls));
+    const wn = standardWallet({ name: 'Some Wallet', seed: s, offchain: [1], accountFeatures: null });
+    const pn = await probeSolWalletFormats(wn.wallet, wn.account, { nonce: () => seedOf('account features probe 2') });
+    ok(G, 'another wallet, an account with no features list: nothing advertised, nothing asked, cannot enrol', pn.format === undefined && pn.advertised.length === 0 && wn.calls.length === 0);
+  }
 }
 
 // ── 2. The signer check (FR-016) ────────────────────────────────────────────
@@ -429,8 +513,8 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
   const phantom = solStandardSigner(phantomW.wallet, phantomW.account);
   const enrolled = await deriveSolBlind(phantom, req);
   const entry = (blind: Uint8Array, k = 2n) => new SolEd25519Device({ publicKey: K, blind }).entryAt(acct, 0n, k);
-  const { surface } = accountSurface(acct, [entry(enrolled.blind)]);
-  const finds = solDeviceFinds(surface, K, 16n);
+  const { surface } = accountSurface(acct, [entry(enrolled.blind)], 2n);
+  const finds = solDeviceFinds(surface, K);
   const ledger = hardwareWallet('ledger', s);
   const backpackW = standardWallet({ name: 'Backpack', seed: s, offchain: [1] });
   const backpack = solStandardSigner(backpackW.wallet, backpackW.account);
@@ -455,14 +539,26 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
     && b1.matches[0].format === 'raw' && eq(b1.matches[0].blind, enrolled.blind) && methods(backpackW.calls.slice(nb)) === 'signMessage,signMessage,signOffchainMessage,signOffchainMessage',
     methods(backpackW.calls.slice(nb)));
   const offRec = await deriveSolBlind(backpack, req);
-  const both = accountSurface(acct, [entry(enrolled.blind), entry(offRec.blind, 0n)]);
-  const b2 = await restoreSolBlind(backpack, { ...req, finds: solDeviceFinds(both.surface, K, 16n) });
+  const both = accountSurface(acct, [entry(enrolled.blind), entry(offRec.blind, 0n)], 2n);
+  const bothFinds = solDeviceFinds(both.surface, K);
+  const b2 = await restoreSolBlind(backpack, { ...req, finds: bothFinds });
   ok(G, 'a key enrolled in both formats: both devices found', b2.ok === true && b2.matches.length === 2 && b2.matches.map((m) => m.format).join(',') === 'raw,offchain',
     b2.ok === true ? b2.matches.map((m) => m.format).join(',') : b2.message);
   const nb2 = backpackW.calls.length;
-  const b3 = await restoreSolBlind(backpack, { ...req, stored: { format: 'offchain' }, finds });
+  const b3 = await restoreSolBlind(backpack, { ...req, stored: { format: 'offchain' }, finds: bothFinds });
   ok(G, 'a stored off-chain record on a wallet of both formats: off-chain only, never the other format', b3.ok === true && b3.source === 'stored-format'
     && eq(b3.matches[0].blind, offRec.blind) && methods(backpackW.calls.slice(nb2)) === 'signOffchainMessage,signOffchainMessage');
+  // the cache lost, the same key and format through a deterministic wallet with another nonce rule: its two
+  // signatures verify and agree, but its blind is another, so the restore refuses it with the remedy
+  const otherNonce = otherNonceSigner(s);
+  const wantOther = 'No account was found with the privacy key this wallet derives in the raw format, the format this device was enrolled through. ' +
+    'A wallet that signs the request differently from the wallet used then derives another privacy key from the same wallet key. ' +
+    "Use that wallet, or add this wallet as a new device from another device of the account, or through the account's recovery.";
+  const o1 = await restoreSolBlind(otherNonce, { ...req, stored: { format: 'raw' }, finds });
+  ok(G, 'the cache lost, the same key through another deterministic nonce rule: refused with the remedy, not restored to another blind',
+    o1.ok === false && o1.reason === 'not-found' && o1.message === wantOther && otherNonce.count() === 2, o1.ok === false ? o1.message : 'restored another blind');
+  const back = await restoreSolBlind(phantom, { ...req, stored: { format: 'raw' }, finds });
+  ok(G, '... and the enrolling wallet restores it', back.ok === true && back.source === 'stored-format' && eq(back.matches[0].blind, enrolled.blind));
   const none = standardWallet({ name: 'Some Wallet', seed: s, signMessage: false });
   const sNone: SolSigner = { ...solStandardSigner(none.wallet, none.account), formats: [] };
   await refused(G, 'a wallet that signs no format: nothing asked', /lists no format/, () => restoreSolBlind(sNone, { ...req, finds }));
@@ -608,7 +704,7 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
     const acct = seedOf('probe account');
     const offRec = await deriveSolBlind(solSoftwareSigner(s), { ...req, format: 'offchain' });
     const { surface } = accountSurface(acct, [new SolEd25519Device({ publicKey: K, blind: offRec.blind }).entryAt(acct, 0n, 0n)]);
-    const finds = solDeviceFinds(surface, K, 4n);
+    const finds = solDeviceFinds(surface, K);
     for (const mode of ['refuse', 'other-key', 'other-bytes'] as const) {
       const w = other({ offchain: [1], raw: mode });
       let r: Awaited<ReturnType<typeof restoreSolBlind>>, err: any;
@@ -628,6 +724,112 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[]) {
     try { r = await restoreSolBlind(solStandardSigner(none.wallet, none.account), { ...req, finds }); } catch (e) { err = e; }
     ok(G, 'both formats refused: not found, both named as skipped, no blind', r !== undefined && r.ok === false && r.reason === 'not-found'
       && (r as any).skipped?.map((x: any) => x.format).join(',') === 'raw,offchain', r === undefined ? `stopped: ${String(err?.message ?? err)}` : undefined);
+  }
+}
+
+// ── 6. Use counters: no ceiling, the known counter first (R1-1) ─────────────
+//
+// A ledger that holds the device set at an epoch and, for every call it
+// accepts, does what the device seam does: the entry at the presented use
+// counter must be live; it is removed, the entry at the next counter is
+// inserted and auth_nonce advances by one. Membership probes are counted.
+{
+  const G = '6 counters';
+  const s = seedOf('counters'), K = keyOf(s);
+  const signer = solSoftwareSigner(s);
+  const rec = await deriveSolBlind(signer, { network: NETWORK, accountIndex: 0 });
+  const fresh = () => new SolEd25519Device({ publicKey: K, blind: rec.blind, signer });
+  const d = fresh();
+  const rolling = (authNonce: bigint, counter: bigint, epoch = 0n, account = seedOf(`counters account ${authNonce}/${counter}/${epoch}`)) => {
+    const set = new Set([hex(d.entryAt(account, epoch, counter))]);
+    const st = { authNonce, probes: 0, calls: [] as string[] };
+    const seam = (circuit: string, args: unknown[]) => {
+      const a = args.at(-1) as { pk: unknown; blind: Uint8Array; use_counter: bigint };
+      const e = hex(new SolEd25519Device({ publicKey: K, blind: a.blind }).entryAt(account, epoch, a.use_counter));
+      if (!set.has(e)) throw new Error('unknown device entry');
+      set.delete(e); set.add(hex(d.entryAt(account, epoch, a.use_counter + 1n))); st.authNonce++;
+      st.calls.push(`${circuit}@${a.use_counter}`);
+      return { public: { txId: `tx-${st.calls.length}` } };
+    };
+    const surface = {
+      addressBytes: account,
+      ledgerState: async () => ({ auth_nonce: st.authNonce, device_epoch: epoch, devices: { member: (e: Uint8Array) => { st.probes++; return set.has(hex(e)); } } }),
+      rotateEncKeyWithAuth: async (_k: Uint8Array, a: any) => seam('rotate_enc_key_with_sol_ed25519', solEd25519AuthArgs(a)).public,
+      callTx: new Proxy({}, { get: (_t, name) => async (...args: unknown[]) => seam(String(name), args) }) as any,
+      heldCoin: async () => { throw new Error('no coin'); },
+    } as any;
+    return { st, surface, isLive: (c: bigint) => set.has(hex(d.entryAt(account, epoch, c))) };
+  };
+  const rotate = async (acc: ReturnType<typeof rolling>, dev: SolEd25519Device) => {
+    const p0 = acc.st.probes;
+    const r = await rotateEncKeyWithSolEd25519(acc.surface, dev, SITE, rnd(32));
+    return { counter: r.auth.use_counter, probes: acc.st.probes - p0 };
+  };
+  // 4095 (one device since activation: its counter is auth_nonce), then across 4096
+  const a1 = rolling(4095n, 4095n);
+  const dev1 = fresh();
+  const c1 = await rotate(a1, dev1), c2 = await rotate(a1, dev1), c3 = await rotate(a1, fresh());
+  ok(G, 'a device at 4095 calls; its entry rolls to 4096; the same device object finds it with two probes; a fresh one finds 4097 by the scan',
+    c1.counter === 4095n && c1.probes === 4096 && c2.counter === 4096n && c2.probes === 2 && c3.counter === 4097n && c3.probes === 4098 && a1.st.authNonce === 4098n,
+    JSON.stringify([c1, c2, c3], (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
+  // 5000
+  ok(G, 'counter 5000 found (auth_nonce 5000, and 7000)', (await rotate(rolling(5000n, 5000n), fresh())).counter === 5000n
+    && await resolveSolEd25519Counter(rolling(7000n, 5000n).surface, fresh()) === 5000n);
+  // stale and wrong known counters fall back to the scan; an explicit counter is checked too
+  {
+    const acc = rolling(10n, 3n);
+    let good = true;
+    for (const known of [0n, 2n, 7n, 10n, 11n, 9000n]) {
+      const dev = fresh();
+      dev.noteCounter(acc.surface.addressBytes, 0n, known);
+      good &&= (await resolveSolEd25519Counter(acc.surface, dev)) === 3n && dev.knownCounter(acc.surface.addressBytes, 0n) === 3n
+        && (await resolveSolEd25519Counter(acc.surface, fresh(), { counter: known })) === 3n;
+    }
+    const dev = fresh(); dev.noteCounter(acc.surface.addressBytes, 0n, 3n);
+    const p0 = acc.st.probes;
+    good &&= (await resolveSolEd25519Counter(acc.surface, dev)) === 3n && acc.st.probes - p0 === 1;
+    ok(G, 'known counters 0, 2, 7, 10, 11 and 9000 that are not live, noted or given: the scan finds 3 and keeps it; a live known counter: one probe', good);
+  }
+  // a new epoch (after a recovery): the old epoch's known counter is not this epoch's
+  {
+    const dev = fresh();
+    const e0 = rolling(4100n, 4000n);
+    const before = await resolveSolEd25519Counter(e0.surface, dev);
+    const e1 = rolling(4101n, 0n, 1n, e0.surface.addressBytes);
+    const p0 = e1.st.probes;
+    const after = await resolveSolEd25519Counter(e1.surface, dev);
+    ok(G, 'a new epoch: the device re-enrolled at counter 0 found at the first probe; the old epoch\'s counter kept under its epoch',
+      before === 4000n && after === 0n && e1.st.probes - p0 === 1 && dev.knownCounter(e0.surface.addressBytes, 0n) === 4000n && dev.knownCounter(e0.surface.addressBytes, 2n) === undefined);
+  }
+  // an entry enrolled above auth_nonce (an entry-taking add_device): refused until its counter is given
+  {
+    const acc = rolling(20n, 9000n);
+    await refused(G, 'an entry at 9000 above auth_nonce 20, its counter not given: refused with the range scanned, nothing sent',
+      /no live entry for this device at the current epoch, at any use counter from 0 to auth_nonce \(20\)/, () => rotateEncKeyWithSolEd25519(acc.surface, fresh(), SITE, rnd(32)));
+    const dev = fresh(); dev.noteCounter(acc.surface.addressBytes, 0n, 9000n);
+    const x1 = await rotate(acc, dev), x2 = await rotate(acc, dev);
+    const viaOpts = await authoriseSolDeviceOn(rolling(20n, 9000n).surface, fresh(), SITE, { op: 'rotate_enc_key', newKey: rnd(32) }, { counter: 9000n });
+    ok(G, '... given (noteCounter), the calls present 9000 then 9001; given to authoriseSolDeviceOn, 9000', x1.counter === 9000n && x2.counter === 9001n
+      && viaOpts.use_counter === 9000n && acc.st.calls.length === 2);
+    await refused(G, 'noteCounter refuses a negative counter', /a use counter is a Uint<64>/, () => fresh().noteCounter(acc.surface.addressBytes, 0n, -1n));
+    await refused(G, 'noteCounter refuses 2^64', /a use counter is a Uint<64>/, () => fresh().noteCounter(acc.surface.addressBytes, 0n, 1n << 64n));
+  }
+  // recover_cancel past 4096 (the veto must never lock out)
+  {
+    const acc = rolling(4200n, 4100n);
+    const r = await recoverCancelWithSolEd25519(acc.surface, fresh(), SITE);
+    ok(G, 'recover_cancel at counter 4100', r.auth.use_counter === 4100n && acc.st.calls.at(-1) === 'recover_cancel_with_sol_ed25519@4100' && acc.isLive(4101n));
+  }
+  // an uncached restore past 4096
+  {
+    const acc = rolling(4600n, 4500n);
+    const finds = solDeviceFinds(acc.surface, K);
+    const r1 = await restoreSolBlind(signer, { network: NETWORK, accountIndex: 0, finds });
+    const r2 = await restoreSolBlind(signer, { network: NETWORK, accountIndex: 0, stored: { format: rec.format }, finds });
+    const acc5 = rolling(5000n, 5000n);
+    const r3 = await restoreSolBlind(signer, { network: NETWORK, accountIndex: 0, finds: solDeviceFinds(acc5.surface, K) });
+    ok(G, 'restores of a device at 4500 (no record, and the cache lost) and at 5000 find it', r1.ok === true && r1.source === 'search' && eq(r1.matches[0].blind, rec.blind)
+      && r2.ok === true && r2.source === 'stored-format' && r3.ok === true && eq(r3.matches[0].blind, rec.blind));
   }
 }
 

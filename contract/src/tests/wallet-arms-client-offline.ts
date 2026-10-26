@@ -45,15 +45,20 @@
 //                `formats`): codes, names and order; every other value
 //                refused
 //   restore      restoreBlind: a cached blind is used without a signature;
-//                the stored format re-derives the blind, and a wallet that
-//                cannot sign it is asked for nothing and told which format
-//                is needed; without a record every format the wallet signs
-//                is tried and each match listed, and a failure names the
-//                formats tried and those the device may have been enrolled
-//                through; grantee wording; user story 4, scenario 2 with
-//                real Ed25519 signatures (a raw blind is never derived from
-//                an off-chain-only wallet); malformed requests refused before
-//                the wallet is asked
+//                the stored format re-derives the blind, which is used only
+//                when it finds the device (a wallet that derives another
+//                blind in that format is refused with the remedy), and a
+//                wallet that cannot sign it is asked for nothing and told
+//                which format is needed; without a record every format the
+//                wallet signs is tried and each match listed, and a failure
+//                names the formats tried and those the device may have been
+//                enrolled through; grantee wording; user story 4, scenario 2
+//                with real Ed25519 signatures (a raw blind is never derived
+//                from an off-chain-only wallet); the same key and format
+//                through a deterministic wallet with another nonce rule
+//                (Ed25519 and EIP-191 secp256k1, real signatures) refused,
+//                the enrolling wallet restored; malformed requests refused
+//                before the wallet is asked
 //   signer       checkSigner: the expected signer passes; any other is
 //                refused before proving, naming another key only when the
 //                signature verifies under it (the key a wallet reports is
@@ -925,19 +930,20 @@ const formatsReport: Record<string, { formats: string[]; names: string[] }> = {}
 //
 // A model wallet per case: derive(format) stands for the wallet signing the
 // blind request in that format twice (its blind a fixed function of the
-// format), and finds(blind) for testing the account's entries. Each case
-// records which formats the wallet was asked for: never one it cannot sign,
-// and none when the blind is cached.
+// format and of the wallet), and finds(blind) for testing the account's
+// entries (enrolled by the same wallet unless `enrolledBy` names another).
+// Each case records which formats the wallet was asked for: never one it
+// cannot sign, and none when the blind is cached.
 
 interface RestoreCase { case: string; scheme: string; role: string; result: string; asked: string[]; tested: string[]; message?: string }
 const restoreCases: RestoreCase[] = [];
 {
   const blindOf = (scheme: string, format: string, seed: string) => sha(new TextEncoder().encode(`${scheme}/${format}/${seed}`));
   const run = async (name: string, scheme: BlindScheme, opts: {
-    role?: 'device' | 'grantee'; stored?: { format: string; cached?: boolean }; wallet: string[]; enrolled: string[];
+    role?: 'device' | 'grantee'; stored?: { format: string; cached?: boolean }; wallet: string[]; enrolled: string[]; enrolledBy?: string;
   }) => {
     const asked: string[] = [], tested: string[] = [];
-    const account = new Set(opts.enrolled.map((f) => hex(blindOf(scheme, f, name))));
+    const account = new Set(opts.enrolled.map((f) => hex(blindOf(scheme, f, opts.enrolledBy ?? name))));
     const r = await restoreBlind({
       scheme, role: opts.role, walletFormats: opts.wallet,
       stored: opts.stored && { format: opts.stored.format, ...(opts.stored.cached ? { blind: blindOf(scheme, opts.stored.format, name) } : {}) },
@@ -958,11 +964,26 @@ const restoreCases: RestoreCase[] = [];
       let x = await run(`${scheme} cache ${f}`, scheme, { stored: { format: f, cached: true }, wallet: [], enrolled: [f] });
       assert.ok(x.r.ok === true && x.r.source === 'cache' && eq(x.r.matches[0].blind, blindOf(scheme, f, `${scheme} cache ${f}`)));
       assert.deepEqual([x.asked, x.tested], [[], []]);
-      // 2. The stored format, the cache lost, a wallet that signs it: derived once, in that format.
+      // 2. The stored format, the cache lost, a wallet that signs it: derived once, in that format, and tested.
       x = await run(`${scheme} stored ${f}`, scheme, { stored: { format: f }, wallet: all, enrolled: [f] });
       assert.ok(x.r.ok === true && x.r.source === 'stored-format' && x.r.matches.length === 1 && x.r.matches[0].format === f);
       assert.ok(eq(x.r.ok === true ? x.r.matches[0].blind : new Uint8Array(), blindOf(scheme, f, `${scheme} stored ${f}`)), 'the stored format re-derives the blind');
-      assert.deepEqual([x.asked, x.tested], [[f], []]);
+      assert.deepEqual([x.asked, x.tested], [[f], [f]]);
+      // 2b. The stored format, the cache lost, a wallet that derives another blind in it (the device was
+      // enrolled by another wallet of the same key): refused, nothing else derived, the remedy given.
+      for (const role of ['device', 'grantee'] as const) {
+        x = await run(`${scheme} ${role} stored ${f}, another wallet's blind`, scheme, { role, stored: { format: f }, wallet: all, enrolled: [f], enrolledBy: `${scheme} enrolling wallet` });
+        assert.ok(x.r.ok === false && x.r.reason === 'not-found', `${scheme} ${role} stored ${f}: a blind that finds nothing is not a match`);
+        assert.deepEqual([x.asked, x.tested], [[f], [f]], 'derived once, in the stored format only, and tested');
+        if (x.r.ok === false) {
+          assert.deepEqual([x.r.tried, x.r.untried], [[f], []]);
+          const what = role === 'device' ? 'device' : 'grant';
+          assert.ok(x.r.message.startsWith(`${role === 'device' ? 'No account was found' : 'No grant was found'} with the privacy key this wallet derives in the ${blindFormatName(scheme, f)} format, the format this ${what} was ${role === 'device' ? 'enrolled' : 'issued'} through.`), x.r.message);
+          assert.ok(x.r.message.endsWith(role === 'device'
+            ? 'Use that wallet, or add this wallet as a new device from another device of the account, or through the account\'s recovery.'
+            : 'Use that wallet, or ask the issuing account\'s owner for a new grant to this wallet.'), x.r.message);
+        }
+      }
       // 3. The stored format, a wallet that cannot sign it: nothing derived, the format named.
       const without = all.filter((g) => g !== f);
       x = await run(`${scheme} stored ${f}, wallet without it`, scheme, { stored: { format: f }, wallet: without, enrolled: [f] });
@@ -1034,10 +1055,74 @@ const restoreCases: RestoreCase[] = [];
     const named = await restoreBlind({ scheme: 'sol_ed25519', stored: { format: 'raw' }, ...wallet });
     assert.ok(named.ok === false && named.reason === 'format-unavailable' && named.message.includes('derived in the raw format'));
     assert.deepEqual(asked, ['offchain'], 'the off-chain-only wallet signed the off-chain request only');
-    const restored = await restoreBlind({ scheme: 'sol_ed25519', stored: { format: 'raw' }, walletFormats: ['raw', 'offchain'], derive: async (f) => blindIn(f), finds: async () => false });
+    const restored = await restoreBlind({ scheme: 'sol_ed25519', stored: { format: 'raw' }, walletFormats: ['raw', 'offchain'], derive: async (f) => blindIn(f), finds: async (b) => eq(b, enrolled) });
     assert.ok(restored.ok === true && eq(restored.matches[0].blind, enrolled), 'a raw-signing wallet with the stored format re-derives the enrolled blind');
     restoreCases.push({ case: 'sol_ed25519 user story 4 scenario 2 (real signatures)', scheme: 'sol_ed25519', role: 'device', result: 'not-found, then format-unavailable, then stored-format', asked, tested: [], message: none.ok === false ? none.message : '' });
     ok('restore');
+  }
+
+  // The same key and format through a deterministic wallet with another nonce
+  // rule, with real signatures: both of its signatures verify under the key
+  // and equal each other (the sign-twice check passes), but they are not the
+  // enrolling wallet's, so the blind it derives differs. With the cache lost,
+  // the stored-format restore must refuse that blind with the remedy; the
+  // enrolling wallet restores. Ed25519: RFC 8032 against a nonce taken from
+  // another hash of the same secret; EIP-191 secp256k1: RFC 6979 against
+  // RFC 6979 with a fixed additional input.
+  {
+    const ED_L = ed25519.Point.Fn.ORDER;
+    const leInt = (b: Uint8Array) => { let v = 0n; for (let i = b.length - 1; i >= 0; i--) v = (v << 8n) | BigInt(b[i]); return v; };
+    const leBytes = (v: bigint) => { const o = new Uint8Array(32); let x = v; for (let i = 0; i < 32; i++) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
+    const sha512 = (...p: Uint8Array[]) => { const h = createHash('sha512'); for (const x of p) h.update(x); return new Uint8Array(h.digest()); };
+    const otherNonceSign = (seed: Uint8Array, m: Uint8Array) => {
+      const e = ed25519.utils.getExtendedPublicKey(seed);
+      const r = leInt(sha512(sha512(new TextEncoder().encode('another nonce rule'), e.prefix).subarray(0, 32), m)) % ED_L;
+      const R = ed25519.Point.BASE.multiply(r).toBytes();
+      const k = leInt(sha512(R, e.pointBytes, m)) % ED_L;
+      return new Uint8Array([...R, ...leBytes((r + k * e.scalar) % ED_L)]);
+    };
+    const edSeed = rnd(32), edKey = ed25519.getPublicKey(edSeed);
+    const edText = blindMessageBytes({ scheme: 'sol_ed25519', network: 'undeployed', identity: edKey, accountIndex: 0 });
+    const k1Secret = be(0x1234567n), k1Address = evmAddressOf(secp256k1.Point.fromBytes(secp256k1.getPublicKey(k1Secret, false)).toAffine());
+    const k1Text = blindMessageBytes({ scheme: 'evm_k256', network: 'undeployed', identity: k1Address, accountIndex: 0 });
+    const k1Digest = keccak_256(new Uint8Array([...new TextEncoder().encode(`\x19Ethereum Signed Message:\n${k1Text.length}`), ...k1Text]));
+    const additional = new Uint8Array(32).fill(0x5a);
+    const k1Sign = (extra?: Uint8Array) => {
+      const rec = secp256k1.sign(k1Digest, k1Secret, { prehash: false, format: 'recovered', ...(extra ? { extraEntropy: extra } : {}) });
+      return new Uint8Array([...rec.subarray(1), 27 + rec[0]]);
+    };
+    const wallets: { scheme: BlindScheme; format: string; enrolling: () => Uint8Array; other: () => Uint8Array; verifies: (sig: Uint8Array) => boolean }[] = [
+      { scheme: 'sol_ed25519', format: 'raw', enrolling: () => ed25519.sign(edText, edSeed), other: () => otherNonceSign(edSeed, edText),
+        verifies: (sig) => ed25519.verify(sig, edText, edKey) },
+      { scheme: 'evm_k256', format: 'eip712-v1', enrolling: () => k1Sign(), other: () => k1Sign(additional),
+        verifies: (sig) => eq(evmAddressOf(secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27).recoverPublicKey(k1Digest).toAffine()), k1Address) },
+    ];
+    for (const w of wallets) {
+      const blindFrom = (sign: () => Uint8Array) => {
+        const a = sign(), b = sign();
+        assert.ok(w.verifies(a) && w.verifies(b), `${w.scheme}: both signatures verify under the key`);
+        assert.ok(sameCanonicalSignature(w.scheme, a, b), `${w.scheme}: the wallet is deterministic (the sign-twice check passes)`);
+        return deriveBlind(w.scheme, canonicalSignature(w.scheme, a));
+      };
+      const enrolled = blindFrom(w.enrolling);
+      assert.ok(!eq(enrolled, blindFrom(w.other)), `${w.scheme}: another nonce rule gives another blind for the same key, format and request`);
+      for (const role of ['device', 'grantee'] as const) {
+        const tested: Uint8Array[] = [];
+        const request = (sign: () => Uint8Array) => ({ scheme: w.scheme, role, stored: { format: w.format }, walletFormats: [w.format],
+          derive: async () => blindFrom(sign), finds: async (b: Uint8Array) => { tested.push(b); return eq(b, enrolled); } });
+        const other = await restoreBlind(request(w.other));
+        assert.ok(other.ok === false && other.reason === 'not-found', `${w.scheme} ${role}: the other wallet's blind is refused`);
+        assert.ok(other.ok === false && other.message.endsWith(role === 'device'
+          ? 'add this wallet as a new device from another device of the account, or through the account\'s recovery.'
+          : 'ask the issuing account\'s owner for a new grant to this wallet.'), other.ok === false ? other.message : '');
+        const same = await restoreBlind(request(w.enrolling));
+        assert.ok(same.ok === true && same.source === 'stored-format' && eq(same.matches[0].blind, enrolled), `${w.scheme} ${role}: the enrolling wallet restores`);
+        assert.equal(tested.length, 2, 'each derived blind is tested once');
+        restoreCases.push({ case: `${w.scheme} ${role} stored format, another deterministic nonce rule (real signatures)`, scheme: w.scheme, role,
+          result: 'not-found, then stored-format', asked: [w.format, w.format], tested: [w.format, w.format], message: other.ok === false ? other.message : '' });
+        ok('restore');
+      }
+    }
   }
 
   // Refusals: a malformed request throws before the wallet is asked.
@@ -1056,7 +1141,9 @@ const restoreCases: RestoreCase[] = [];
   // finds must answer true to match.
   const truthy = await restoreBlind({ ...base, derive: async () => new Uint8Array(32), finds: async () => 1 as any });
   assert.ok(truthy.ok === false && truthy.reason === 'not-found', 'only `true` is a match');
-  console.log(`  ✓ restore: ${tally.restore.pass} cases (cache, stored format, format unavailable, search over every format the wallet signs, matches in two formats, no device, no format, grantee wording; user story 4 scenario 2 with real Ed25519 signatures); the wallet never asked for a format it cannot sign; ${tally.restore.refused} malformed requests refused`);
+  const truthyStored = await restoreBlind({ ...base, stored: { format: 'raw' }, derive: async () => new Uint8Array(32), finds: async () => 1 as any });
+  assert.ok(truthyStored.ok === false && truthyStored.reason === 'not-found', 'only `true` is a match for a blind derived in the stored format');
+  console.log(`  ✓ restore: ${tally.restore.pass} cases (cache, stored format, a stored-format blind that finds nothing refused, format unavailable, search over every format the wallet signs, matches in two formats, no device, no format, grantee wording; user story 4 scenario 2 with real Ed25519 signatures; another deterministic nonce rule refused with real Ed25519 and secp256k1 signatures); the wallet never asked for a format it cannot sign; ${tally.restore.refused} malformed requests refused`);
 }
 
 // ── The signer check: refused before proving, another key named only if verified ─
