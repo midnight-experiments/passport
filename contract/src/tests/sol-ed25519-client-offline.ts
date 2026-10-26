@@ -898,7 +898,7 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 
     const t = long.st.ticks;
     ok(G, 'a scan of 5,001 probes finds 5000, yields between chunks (other work runs), and not inside the first chunk',
       found === 5000n && t.length === 5001 && t[t.length - 1] > t[0] && new Set(t).size >= 5 && t[255] === t[0], `${new Set(t).size} tick values`);
-    // aborted mid-scan through a helper: stops at the chunk boundary, nothing signed or sent
+    // aborted mid-scan through a helper: stops at the chunk boundary, the wallet not asked, nothing sent
     const ctl = new AbortController();
     const mid = ledgerOf(5000n, 5000n, 'abort');
     mid.st.onProbe = (n) => { if (n === 1000) ctl.abort(new Error('the user left the page')); };
@@ -906,7 +906,7 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 
     const counting: SolSigner = { publicKey: signer.publicKey, formats: signer.formats, sign: (m) => { asked++; return signer.sign(m); } };
     let err: any;
     try { await rotateEncKeyWithSolEd25519(mid.surface, fresh(counting), SITE, rnd(32), { signal: ctl.signal }); } catch (e) { err = e; }
-    ok(G, 'aborted at probe 1,000: refused at the chunk boundary (1,024 probes) with a clear error and the reason as cause; nothing signed',
+    ok(G, 'aborted at probe 1,000: refused at the chunk boundary (1,024 probes) with a clear error and the reason as cause; the wallet not asked, nothing sent',
       !!err && /^sol_ed25519: the use-counter scan was aborted after 1024 probes$/.test(err.message) && err.cause?.message === 'the user left the page' && mid.st.probes === 1024 && asked === 0,
       String(err?.message ?? err));
     // aborted mid-scan through issue_grant, which resolves the counter on its own ledger read
@@ -915,7 +915,7 @@ function accountSurface(address: Uint8Array, entries: Uint8Array[], authNonce = 
     gmid.st.onProbe = (n) => { if (n === 300) gctl.abort(); };
     await refused(G, 'issue_grant aborted during its scan: at the chunk boundary (512 probes)', /^sol_ed25519: the use-counter scan was aborted after 512 probes$/,
       () => issueGrantWithSolEd25519(gmid.surface, fresh(counting), SITE, {} as any, {} as any, { signal: gctl.signal }));
-    ok(G, '... nothing signed', asked === 0 && gmid.st.probes === 512);
+    ok(G, '... the wallet not asked, nothing sent', asked === 0 && gmid.st.probes === 512);
     // an aborted signal refuses every caller before the ledger is read and the wallet asked
     const dead = new AbortController(); dead.abort();
     const signal = dead.signal;
