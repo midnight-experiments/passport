@@ -436,6 +436,25 @@ export class SolEd25519Device {
     return pureCircuits.derive_device_entry_with_sol_ed25519({ bytes: contractAddress }, this.pk, h.pk_bytes, h.pk_x, this.blind, epoch, counter);
   }
 
+  /** Use counters by account and epoch: the last one confirmed live, or
+   *  noted by the caller. Not persisted (a resolution without one scans). */
+  private readonly counters = new Map<string, bigint>();
+
+  /** The use counter resolveSolEd25519Counter tries first for
+   *  `contractAddress` at `epoch`. */
+  knownCounter(contractAddress: Uint8Array, epoch: bigint): bigint | undefined {
+    return this.counters.get(counterKey(contractAddress, epoch));
+  }
+
+  /** Notes `counter` as this device's use counter on `contractAddress` at
+   *  `epoch`: the next resolution checks it first, against the ledger. The
+   *  way to reach an entry enrolled at a counter above auth_nonce, which the
+   *  resolution's scan does not reach. */
+  noteCounter(contractAddress: Uint8Array, epoch: bigint, counter: bigint): void {
+    if (typeof counter !== 'bigint' || counter < 0n || counter >= 1n << 64n) throw new Error('sol_ed25519: a use counter is a Uint<64>');
+    this.counters.set(counterKey(contractAddress, epoch), counter);
+  }
+
   bootCommitment(salt: Uint8Array): Uint8Array {
     const h = this.keyHints;
     return pureCircuits.derive_boot_commitment_with_sol_ed25519(salt, this.pk, h.pk_bytes, h.pk_x, this.blind);
@@ -709,37 +728,89 @@ export interface SolEd25519CustodySurface extends SolEd25519AccountSurface {
   heldCoin(color: Uint8Array): Promise<{ nonce: Uint8Array; color: Uint8Array; value: bigint; mt_index: bigint }>;
 }
 
-/** How far the restore scan and the counter resolver look (one bound). */
-export const SOL_ED25519_COUNTER_SCAN = 4096n;
+// ── Use counters ─────────────────────────────────────────────────────────────
+//
+// A device's live entry is at the use counter its next call presents. Every
+// circuit that enrols a device of this arm inserts its entry at counter 0 (the
+// activation and add_device_with_sol_ed25519 derive it so), and every
+// successful device-gated call removes the caller's entry at counter c and
+// inserts it at c + 1 in the transaction that advances auth_nonce by one.
+// auth_nonce starts at 0 and never decreases (recovery's finalisation
+// advances it too, and clears the device set). So an entry enrolled at
+// counter 0 is live at a counter no greater than auth_nonce, and a scan of
+// 0..auth_nonce finds it, however many calls the device has made. Upstream's
+// add_device_with_jubjub, _with_k256 and _with_p256 take an already-derived
+// entry, whose counter the contract cannot read: an entry derived at a
+// counter k > 0 is live at k, and the scan reaches it only while
+// k <= auth_nonce; above that, the caller gives k (SolEd25519Device.noteCounter,
+// or the resolver's `counter`). From a counter the device held once, its
+// counter now is at most auth_nonce higher (one per call, and auth_nonce
+// counts every call), so the scan forward from a known counter reaches
+// known + auth_nonce, which also follows such an entry.
 
-/** The device's current use counter: the first counter whose entry is live
- *  at the current epoch (MIP-0013 S11 rescan). */
-export async function resolveSolEd25519Counter(account: SolEd25519AccountSurface, device: SolEd25519Device, limit = SOL_ED25519_COUNTER_SCAN): Promise<bigint> {
-  const l = await account.ledgerState();
-  for (let k = 0n; k < limit; k++) {
-    if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k))) return k;
+const counterKey = (contractAddress: Uint8Array, epoch: bigint) => `${toHex(contractAddress)}/${epoch.toString()}`;
+
+/** The first live counter in the order: `known` (when given), forward from it
+ *  through known + authNonce, then from 0 up to it (or through authNonce
+ *  without a known counter); undefined when none is live. At most
+ *  2 x authNonce + 2 probes. */
+function liveCounter(isLive: (counter: bigint) => boolean, authNonce: bigint, known?: bigint): bigint | undefined {
+  if (known !== undefined) {
+    if (typeof known !== 'bigint' || known < 0n) throw new Error('sol_ed25519: a known use counter is a non-negative bigint');
+    for (let k = known; k <= known + authNonce; k++) if (isLive(k)) return k;
   }
-  throw new Error('sol_ed25519: no live entry for this device (rescan limit reached)');
+  const end = known !== undefined && known <= authNonce ? known : authNonce + 1n;
+  for (let k = 0n; k < end; k++) if (isLive(k)) return k;
+  return undefined;
+}
+
+type SolLedgerView = Awaited<ReturnType<SolEd25519AccountSurface['ledgerState']>>;
+
+/** The counter of `device`'s live entry in the ledger state `l`, kept as the
+ *  device's known counter (see resolveSolEd25519Counter). */
+function counterIn(l: SolLedgerView, account: SolEd25519AccountSurface, device: SolEd25519Device, counter?: bigint): bigint {
+  const known = counter ?? device.knownCounter(account.addressBytes, l.device_epoch);
+  const found = liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce, known);
+  if (found === undefined) {
+    throw new Error(`sol_ed25519: no live entry for this device at the current epoch, at any use counter from 0 to auth_nonce (${l.auth_nonce})` +
+      `${known !== undefined ? `, or from the known counter ${known} through ${known + l.auth_nonce}` : ''}: not a device of this account, or an entry enrolled at a counter above auth_nonce (give it with noteCounter)`);
+  }
+  device.noteCounter(account.addressBytes, l.device_epoch, found);
+  return found;
+}
+
+/** The use counter of `device`'s live entry on `account` at the current
+ *  epoch (MIP-0013 S11): the known counter first (`opts.counter`, else the
+ *  last one this device object confirmed for the account and epoch, or one
+ *  noted with noteCounter), then every counter forward from it through
+ *  known + auth_nonce, then from 0 up to it. That scan is complete for every
+ *  entry enrolled at counter 0 (see "Use counters"), so a device never stops
+ *  being found after many calls. The counter found becomes the known one, so
+ *  the next call finds its successor with one more probe. */
+export async function resolveSolEd25519Counter(account: SolEd25519AccountSurface, device: SolEd25519Device, opts: { counter?: bigint } = {}): Promise<bigint> {
+  return counterIn(await account.ledgerState(), account, device, opts.counter);
 }
 
 /** A restore's test for a device blind (restoreSolBlind `finds`): whether
  *  the key with that blind has a live entry on `account` at the current
- *  epoch, at any counter below the scan bound. */
-export function solDeviceFinds(account: SolEd25519AccountSurface, key: Uint8Array | string, limit = SOL_ED25519_COUNTER_SCAN): (blind: Uint8Array) => Promise<boolean> {
+ *  epoch, at any counter from 0 to auth_nonce. */
+export function solDeviceFinds(account: SolEd25519AccountSurface, key: Uint8Array | string): (blind: Uint8Array) => Promise<boolean> {
   const k = parseSolanaPublicKey(key);
   return async (blind) => {
     const device = new SolEd25519Device({ publicKey: k, blind });
     const l = await account.ledgerState();
-    for (let c = 0n; c < limit; c++) if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, c))) return true;
-    return false;
+    return liveCounter((c) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, c)), l.auth_nonce) !== undefined;
   };
 }
 
 /** Authorises the next device-gated call of `device` on `account`: the
- *  ledger's auth_nonce, the resolved counter, the message, the signature. */
-export async function authoriseSolDeviceOn(account: SolEd25519AccountSurface, device: SolEd25519Device, site: string, o: SolDeviceOperation): Promise<SolEd25519Authorisation> {
+ *  ledger's auth_nonce and the resolved counter (one read of the ledger;
+ *  `opts.counter` is a counter the caller knows, checked first), the
+ *  message, the signature. */
+export async function authoriseSolDeviceOn(account: SolEd25519AccountSurface, device: SolEd25519Device, site: string, o: SolDeviceOperation,
+  opts: { counter?: bigint } = {}): Promise<SolEd25519Authorisation> {
   const l = await account.ledgerState();
-  const counter = await resolveSolEd25519Counter(account, device);
+  const counter = counterIn(l, account, device, opts.counter);
   return authoriseSolDevice(device, { contractAddress: account.addressBytes, authNonce: l.auth_nonce }, site, o, counter);
 }
 
@@ -944,7 +1015,7 @@ export async function issueGrantWithSolEd25519(account: SolEd25519LifecycleSurfa
   grantee: SolGranteeFields, scope: SolIssueScope) {
   const o: SolDeviceOperation = { op: 'issue_grant', grantee, ...scope };
   const l = await account.ledgerState();
-  const counter = await resolveSolEd25519Counter(account, device);
+  const counter = counterIn(l, account, device);
   const auth = await authoriseSolDevice(device, { contractAddress: account.addressBytes, authNonce: l.auth_nonce }, site, o, counter);
   const scopeSalt = solGrantScopeSalt(device.blind, account.addressBytes, l.auth_nonce);
   const caller = { is_some: scope.caller !== null, value: { bytes: scope.caller ?? new Uint8Array(32) } };

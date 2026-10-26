@@ -31,6 +31,18 @@
 // first that passed the probe), a restore tries each. The adapters refuse,
 // without asking the wallet, bytes of a format it cannot sign.
 //
+// A wallet-standard wallet advertises features for all its accounts, and
+// each account lists the features it supports itself (`WalletAccount.features`:
+// "Feature names supported by the account. This must be a subset of the
+// names of features of the Wallet."): a wallet can offer off-chain signing
+// while a connected account (a hardware account behind it, say) supports
+// only `signMessage`. The adapters therefore use only the wallet's features
+// that the connected account lists (solAccountFeatures), before the family
+// rules. The standard makes the list part of every account, so an account
+// object without one (or with a value that is not a list of names) supports
+// no feature the client can rely on, and is asked for nothing: an adapter
+// that builds account objects itself must carry the account's `features`.
+//
 // A wallet may answer with another key than the one it reports (with two
 // extensions installed, one may answer requests made to the other's
 // wallet-standard entry). The adapters do not decide who signed: the arm's
@@ -58,7 +70,7 @@ export const SOL_SIGN_OFFCHAIN_MESSAGE_FEATURE = 'solana:signOffchainMessage';
 export type SolWalletFamily = 'phantom' | 'backpack' | 'solflare' | 'ledger' | 'trezor' | 'other';
 
 /** A wallet as the client meets it: its family and, for a wallet-standard
- *  wallet, the features it advertises (`wallet.features`). */
+ *  wallet, the features it offers the connected account (solAccountFeatures). */
 export interface SolWalletProfile {
   family: SolWalletFamily;
   features?: Readonly<Record<string, unknown>>;
@@ -70,8 +82,9 @@ export function solWalletFamily(name: unknown): SolWalletFamily {
   return n === 'phantom' || n === 'backpack' || n === 'solflare' ? n : 'other';
 }
 
-/** A wallet-standard account. */
-export interface SolStandardAccount { address: string; publicKey: Uint8Array }
+/** A wallet-standard account (`WalletAccount`): its address, its key and the
+ *  names of the features it supports. */
+export interface SolStandardAccount { address: string; publicKey: Uint8Array; features?: readonly string[] }
 
 /** `solana:signMessage`: signs exactly the bytes given. */
 export interface SolSignMessageFeature {
@@ -93,6 +106,18 @@ const feature = <T>(features: Readonly<Record<string, unknown>> | undefined, nam
   const f = features?.[name] as any;
   return f && typeof f[method] === 'function' ? (f as T) : undefined;
 };
+
+/** The features the adapters may use for `account`: the wallet's features
+ *  whose names the account lists, and none when the account lists none (see
+ *  the header). */
+export function solAccountFeatures(wallet: SolStandardWallet, account: SolStandardAccount): Readonly<Record<string, unknown>> {
+  const names = (account as { features?: unknown } | undefined)?.features;
+  const offered = wallet?.features ?? {};
+  const out: Record<string, unknown> = {};
+  if (!Array.isArray(names)) return out;
+  for (const n of names) if (typeof n === 'string' && Object.prototype.hasOwnProperty.call(offered, n)) out[n] = offered[n];
+  return out;
+}
 
 /** The wallet's raw signing feature, if it offers one. */
 export function solSignMessageFeature(features?: Readonly<Record<string, unknown>>): SolSignMessageFeature | undefined {
@@ -159,7 +184,8 @@ function offchainText(bytes: Uint8Array, key: Uint8Array): string {
 /**
  * A signer for a wallet-standard wallet's account (Phantom, Backpack,
  * Solflare, or another wallet). Its formats are solWalletFormats of the
- * wallet's family and features. Raw bytes go to `solana:signMessage`; an
+ * wallet's family and the features of the wallet the account lists
+ * (solAccountFeatures). Raw bytes go to `solana:signMessage`; an
  * off-chain message goes to `solana:signOffchainMessage` as its text, with
  * the account as the one required signer, and the wallet's own envelope,
  * when it returns it, must be exactly the bytes the client built. Whether the
@@ -169,7 +195,8 @@ export function solStandardSigner(wallet: SolStandardWallet, account: SolStandar
   const publicKey = parseSolanaPublicKey(walletBytes(account?.publicKey, 'account key', 32));
   if (typeof account.address === 'string' && account.address !== base58Encode(publicKey)) throw new Error('sol_ed25519: the account\'s address and key disagree');
   const name = typeof wallet?.name === 'string' ? wallet.name : 'the wallet';
-  const formats = solWalletFormats({ family: solWalletFamily(wallet?.name), features: wallet?.features });
+  const features = solAccountFeatures(wallet, account);
+  const formats = solWalletFormats({ family: solWalletFamily(wallet?.name), features });
   return {
     publicKey,
     formats,
@@ -178,14 +205,14 @@ export function solStandardSigner(wallet: SolStandardWallet, account: SolStandar
     sign: async (message: Uint8Array) => {
       const bytes = new Uint8Array(message);
       if (formatOf(bytes, formats, name) === 'raw') {
-        const [answer] = await solSignMessageFeature(wallet.features)!.signMessage({ account, message: bytes });
+        const [answer] = await solSignMessageFeature(features)!.signMessage({ account, message: bytes });
         if (answer?.signedMessage !== undefined && !same(walletBytes(answer.signedMessage, 'signed message'), bytes)) {
           throw new Error(`sol_ed25519: ${name} reports that it signed other bytes than asked; refused`);
         }
         return walletBytes(answer?.signature, 'signature', 64);
       }
       const text = offchainText(bytes, publicKey);
-      const [answer] = await solOffchainV1Feature(wallet.features)!.signOffchainMessage({ messageVersion: SOL_OFFCHAIN_VERSION, account, message: text, requiredSigners: [publicKey] });
+      const [answer] = await solOffchainV1Feature(features)!.signOffchainMessage({ messageVersion: SOL_OFFCHAIN_VERSION, account, message: text, requiredSigners: [publicKey] });
       if (answer?.signedOffchainMessage !== undefined && !same(walletBytes(answer.signedOffchainMessage, 'off-chain message'), bytes)) {
         throw new Error(`sol_ed25519: ${name} signed another off-chain message than the one asked; refused`);
       }
@@ -236,7 +263,8 @@ export interface SolFormatProbeAttempt { format: SolFormat; outcome: 'verified' 
 
 export interface SolFormatProbe {
   family: SolWalletFamily;
-  /** The formats the wallet advertises (solWalletFormats). */
+  /** The formats the wallet advertises for the account (solWalletFormats of
+   *  solAccountFeatures). */
   advertised: SolFormat[];
   /** False for a named family, whose rule is fixed and which is never asked. */
   probed: boolean;
@@ -262,7 +290,7 @@ export interface SolFormatProbe {
 export async function probeSolWalletFormats(wallet: SolStandardWallet, account: SolStandardAccount,
   opts: { others?: () => readonly Uint8Array[]; nonce?: () => Uint8Array } = {}): Promise<SolFormatProbe> {
   const family = solWalletFamily(wallet?.name);
-  const advertised = solWalletFormats({ family, features: wallet?.features });
+  const advertised = solWalletFormats({ family, features: solAccountFeatures(wallet, account) });
   if (family !== 'other') return { family, advertised, probed: false, ...(advertised.length > 0 ? { format: advertised[0] } : {}), attempts: [] };
   const signer = solStandardSigner(wallet, account, opts);
   const nonce = opts.nonce ? opts.nonce() : globalThis.crypto.getRandomValues(new Uint8Array(PROBE_NONCE_BYTES));
