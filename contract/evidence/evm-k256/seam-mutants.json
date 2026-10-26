@@ -2,7 +2,8 @@
   "what": "The arm's properties are held by functional tests, not by reading the source. Each mutant is a one-change edit of the arm's sources (contracts/account-evm-k256.compact, contracts/modules/EvmK256.compact, and the modules the arm's core, identity and format moved into: contracts/modules/K256Core.compact, contracts/modules/EvmIdentity.compact, contracts/modules/Eip712V1.compact), compiled --skip-zk in its own copy and run against the offline layer (every file of npm run test:evm_k256-offline, the shared wallet-arms suites, constraint-negative-offline and the viem cross-check) and the prover suite's JavaScript layer (EVM_K256_DRY=1, no proof server, every section), where a mutant that lets a refused forgery through fails that case's simulator half. A mutant is killed when a suite shows its effect: an accepted forgery (a call the unmutated copy refuses goes through), a broken honest call, or a changed output; a suite that only reports another refusal message does not count as a kill. The unmutated copy, compiled and run the same way, passes every suite (the control).",
   "testsAt": {
     "all": "wallet-arm-evm-eip712 0065058 (the tests and sources of that commit)",
-    "C18": "wallet-arm-evm-eip712 324bad9, the commit that adds the case killing it (it survived the tests of the commit above)"
+    "C18": "wallet-arm-evm-eip712 324bad9, the commit that adds the case killing it (it survived the tests of the commit above)",
+    "C4-C7-C8-P16": "the commit that adds contracts/probe-k256-core.compact and k256-core-probe-offline (the core alone); through the arm they are reviewed in each entry"
   },
   "control": {
     "verdict": "CONTROL PASS",
@@ -464,15 +465,18 @@
         "id": "P16",
         "mutation": "the zero-scalar assert deleted (r != 0 and s != 0: one assert in K256Core, which every seam's verification calls)",
         "file": "contracts/modules/K256Core.compact",
-        "killedBy": [],
-        "verdict": "EQUIVALENT",
-        "killKind": "message only (offline); refused at the proof server",
-        "equivalence": "No input distinguishes it: with K256Core's zero-scalar assert deleted, a zero scalar still cannot verify. In the circuit, r = 0 needs x(u1·G) to be 0 mod n, which no one can find, and s = 0 has no inverse: the ZKIR `inv` of the ECDSA relation is unsatisfiable for 0. Evidence: the offline suites refuse every zero-scalar approval with another message (\"invalid signature\", \"secp256k1 scalar field has no inverse for 0\"); the prover suite's JavaScript layer cannot build its patched copies (the assert text it bypasses is gone, a harness limitation, not a kill). At the proof server, against the mutant's own full key generation with the bypass lists naming only the asserts it still has (sections seam and core): all 33 zero-scalar forgeries (r = 0, s = 0 and (0, 0) at all 15 gated exports and the device seam) refused, the 16 with r = 0 at /check by a constraint of the circuit under test, the 17 with s = 0 by the proof server's witness computation (\"cannot invert zero of type Secp256k1Scalar\"), each after the honest call proved through the same patched copy. The assert is the attributable refusal and defence in depth.",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "changed output at K256Core alone (r = 0 no longer refused; the verification returns false); no forgery a test can build",
         "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ r = 0 is refused at the core (the honest key, digest and s) (NOT refused: the core accepted it); the pure circuit returned false",
           "offline: evm-k256-seam-offline (r, s) = (0, 0) refused by \"secp256k1 scalar field has no inverse for 0\"; evm-k256-grants-offline r = 0 refused by \"invalid grant signature\"",
           "prover: 16/16 r = 0 forgeries refused at /check (constraint), 17/17 s = 0 forgeries refused by the witness computation (cannot invert zero); 33/33 controls proved"
         ],
-        "review": "not reviewed"
+        "review": "reviewed (cross-agent audit, round 1): not equivalent; reclassified",
+        "argument": "Not equivalent: with r = 0, u2 = r/s = 0, so a signature verifies exactly when x(u1·G) is 0 mod n. That point exists (x = n is below the field prime, and (n, 0x98f66641cb0ae1776b463ebdee3d77fe2658f021db48e2c8ac7ab4c92f83621e) is on the curve), so for its discrete logarithm k, any non-zero digest scalar z and s = z/k give a signature with r = 0 that verifies under every key. No test can build that input (it needs k), and every r = 0 forgery a test can build is refused without the assert (the proof-server runs below). At K256Core alone the deletion is observable: r = 0 is no longer refused and the verification returns false, which k256-core-probe-offline catches. The assert stays: it refuses r = 0 outright instead of resting on the hardness of a discrete logarithm."
       },
       {
         "id": "P20",
@@ -1094,15 +1098,18 @@
         "id": "C4",
         "mutation": "O1 r != 0 deleted (s != 0 kept)",
         "file": "contracts/modules/K256Core.compact",
-        "killedBy": [],
-        "verdict": "EQUIVALENT",
-        "killKind": "message only (offline); refused at the proof server",
-        "equivalence": "r ≠ 0 deleted, s ≠ 0 kept: an input with r = 0 and s ≠ 0 meets the same circuit as P16's (the remaining s ≠ 0 assert does not apply), and P16's proof-server runs refuse every r = 0 forgery at /check by a constraint; (0, 0) is still refused by the s ≠ 0 assert. The offline suites refuse r = 0 with another message (\"invalid signature\").",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "changed output at K256Core alone (r = 0 no longer refused; the verification returns false); no forgery a test can build",
         "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ r = 0 is refused at the core (the honest key, digest and s) (NOT refused: the core accepted it); the pure circuit returned false",
           "offline: r = 0 refused by \"invalid (grant) signature\" instead of the zero-scalar message",
           "prover: P16's runs, the 16 r = 0 forgeries"
         ],
-        "review": "not reviewed"
+        "review": "reviewed (cross-agent audit, round 1): not equivalent; reclassified",
+        "argument": "Not equivalent: with r = 0, u2 = r/s = 0, so a signature verifies exactly when x(u1·G) is 0 mod n. That point exists (x = n is below the field prime, and (n, 0x98f66641cb0ae1776b463ebdee3d77fe2658f021db48e2c8ac7ab4c92f83621e) is on the curve), so for its discrete logarithm k, any non-zero digest scalar z and s = z/k give a signature with r = 0 that verifies under every key. No test can build that input (it needs k), and every r = 0 forgery a test can build is refused without the assert (the proof-server runs below). At K256Core alone the deletion is observable: r = 0 is no longer refused and the verification returns false, which k256-core-probe-offline catches. The assert stays: it refuses r = 0 outright instead of resting on the hardness of a discrete logarithm."
       },
       {
         "id": "C5",
@@ -1122,27 +1129,34 @@
         "id": "C7",
         "mutation": "O1 the key rule deleted (the point at infinity admitted by activation and by every verification)",
         "file": "contracts/modules/K256Core.compact",
-        "killedBy": [],
-        "verdict": "EQUIVALENT",
-        "killKind": "refused at the proof server; no offline difference",
-        "equivalence": "No input distinguishes it: with K256Core's key rule deleted, the point at infinity still has no address. Extracting the coordinates of its flagged encoding fails in the circuit (and in the runtime), and its unflagged encoding (0, 0) is not a point of the curve (the circuit's point assignment, and the honest decoder, refuse it). The offline suites pass (every infinity key is refused by the runtime's checks); the prover suite's JavaScript layer cannot build its patched copies (the key rule's text is gone, a harness limitation, not a kill). At the proof server, against the mutant's own full key generation with the bypass lists naming only the asserts it still has (sections activation, seam and core): all 19 key-at-infinity forgeries (the activation, flagged and unflagged; every one of the 15 gated exports with an entry or grant planted for the identity's address and a signature that verifies against it; the device seam) refused, 18 by a constraint of the circuit under test at /check, the unflagged activation key by the proof server's input decoding, each after the honest call proved through the same patched copy. The key rule is the extra safety check its comment names.",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery at K256Core alone (the point at infinity as the key: digest 1, s = 1, r = x(G))",
         "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ the key rule refuses the point at infinity (flagged) (NOT refused: the core accepted it)",
+          "k256-core-probe-offline (probe-k256-core): ✗ the verification refuses the point at infinity (flagged) with digest 1, s = 1, r = x(G) (NOT refused: the core accepted it); the pure circuit returned true",
           "prover: 19/19 key-at-infinity forgeries refused (18 constraint, 1 decoding), 19/19 controls proved"
         ],
-        "review": "not reviewed"
+        "review": "reviewed (cross-agent audit, round 1): equivalent through the arm only; killed at the core",
+        "throughTheArm": "equivalent: No input distinguishes it: with K256Core's key rule deleted, the point at infinity still has no address. Extracting the coordinates of its flagged encoding fails in the circuit (and in the runtime), and its unflagged encoding (0, 0) is not a point of the curve (the circuit's point assignment, and the honest decoder, refuse it). The offline suites pass (every infinity key is refused by the runtime's checks); the prover suite's JavaScript layer cannot build its patched copies (the key rule's text is gone, a harness limitation, not a kill). At the proof server, against the mutant's own full key generation with the bypass lists naming only the asserts it still has (sections activation, seam and core): all 19 key-at-infinity forgeries (the activation, flagged and unflagged; every one of the 15 gated exports with an entry or grant planted for the identity's address and a signature that verifies against it; the device seam) refused, 18 by a constraint of the circuit under test at /check, the unflagged activation key by the proof server's input decoding, each after the honest call proved through the same patched copy. The key rule is the extra safety check its comment names."
       },
       {
         "id": "C8",
         "mutation": "O13 the verification without its own key-rule call (the extra safety check)",
         "file": "contracts/modules/K256Core.compact",
-        "killedBy": [],
-        "verdict": "EQUIVALENT",
-        "killKind": "message only (offline); refused at the proof server",
-        "equivalence": "The verification without its own key-rule call: at every gated export the key is the presented point whose address the seam derives first, and C7 (the rule deleted everywhere, so at these call sites exactly C8) refuses all 15 gated exports' key-at-infinity forgeries at the proof server. The offline layer differs only in which check names the refusal (\"expected assert no longer fires\").",
+        "killedBy": [
+          "k256-core-probe-offline"
+        ],
+        "verdict": "KILLED",
+        "killKind": "accepted forgery at K256Core alone (the point at infinity as the key: digest 1, s = 1, r = x(G))",
         "evidence": [
+          "k256-core-probe-offline (probe-k256-core): ✗ the verification refuses the point at infinity (flagged) with digest 1, s = 1, r = x(G) (NOT refused: the core accepted it); the pure circuit returned true",
           "prover: C7's runs, the 15 core-section gated exports and the seam case"
         ],
-        "review": "not reviewed"
+        "review": "reviewed (cross-agent audit, round 1): equivalent through the arm only; killed at the core",
+        "throughTheArm": "equivalent: The verification without its own key-rule call: at every gated export the key is the presented point whose address the seam derives first, and C7 (the rule deleted everywhere, so at these call sites exactly C8) refuses all 15 gated exports' key-at-infinity forgeries at the proof server. The offline layer differs only in which check names the refusal (\"expected assert no longer fires\")."
       },
       {
         "id": "C9",
@@ -1358,8 +1372,8 @@
       }
     ]
   },
-  "killed": 75,
-  "equivalent": 6,
+  "killed": 79,
+  "equivalent": 2,
   "total": 81,
   "verdict": "PASS"
 }

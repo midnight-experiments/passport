@@ -62,7 +62,11 @@
 // are not secret, and caches the blind with them in its local storage; the
 // blind never leaves the client. restoreBlind is the one rule for finding the
 // blind again: the cache, else the stored format, else every format the
-// wallet can sign, and never a format the wallet cannot sign.
+// wallet can sign, and never a format the wallet cannot sign. A blind derived
+// again is used only once it finds the device (or the grant): a deterministic
+// signature depends on the wallet's nonce rule as well as on the key and the
+// bytes, so another wallet holding the same key can derive another blind from
+// the same request.
 //
 // THE SIGNER CHECK. A wallet may answer with another key than the one asked
 // for (two installed extensions, a switched account), and the key a wallet
@@ -311,8 +315,8 @@ export interface BlindRestoreRequest {
    *  sign-twice check) and returns the blind. */
   derive: (format: string) => Promise<Uint8Array>;
   /** Whether a blind finds the device (or the grant): the caller tests the
-   *  account's entries (or the grant id). Asked only when no format is
-   *  stored. */
+   *  account's entries (or the grant id). Asked for every blind derived
+   *  again, with a stored format or without one; never for a cached blind. */
   finds: (blind: Uint8Array, format: string) => Promise<boolean>;
 }
 
@@ -347,9 +351,12 @@ function checkBlind(scheme: BlindScheme, blind: unknown, where: string): Uint8Ar
  * a format other than the one it was enrolled in, and without asking the
  * wallet for a format it cannot sign:
  *   1. a cached blind is used as it is;
- *   2. with a stored format, the wallet derives the blind in that format, or,
- *      when it cannot sign that format, nothing is derived and the message
- *      names the format needed;
+ *   2. with a stored format, the wallet derives the blind in that format, and
+ *      it is a match only when it finds the device (or grant): a wallet whose
+ *      deterministic signature differs from the enrolling wallet's derives
+ *      another blind, and the message says so; when the wallet cannot sign
+ *      that format, nothing is derived and the message names the format
+ *      needed;
  *   3. without a stored record, the wallet derives the blind in every format
  *      it can sign, and each blind that finds the device (or grant) is a
  *      match; without a match, the message names the formats tried and those
@@ -396,7 +403,14 @@ async function restoreChecked(
           `Use a wallet that signs the ${name(format)} format, or ${remedy}.`,
       };
     }
-    return { ok: true, source: 'stored-format', matches: [{ format, blind: checkBlind(scheme, await req.derive(format), 'the derived blind') }] };
+    const blind = checkBlind(scheme, await req.derive(format), 'the derived blind');
+    if ((await req.finds(new Uint8Array(blind), format)) === true) return { ok: true, source: 'stored-format', matches: [{ format, blind }] };
+    return {
+      ok: false, reason: 'not-found', tried: [format], untried: [],
+      message: `${role === 'device' ? 'No account was found' : 'No grant was found'} with the privacy key this wallet derives in the ${name(format)} format, ` +
+        `the format this ${what} was ${role === 'device' ? 'enrolled' : 'issued'} through. A wallet that signs the request differently from the wallet used then ` +
+        `derives another privacy key from the same wallet key. Use that wallet, or ${remedy}.`,
+    };
   }
 
   const tried = all.filter((f) => wallet.includes(f));

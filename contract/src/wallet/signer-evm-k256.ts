@@ -484,6 +484,25 @@ export class EvmK256Device {
     return pureCircuits.derive_device_entry_with_evm_k256({ bytes: contractAddress }, this.address, this.blind, epoch, counter);
   }
 
+  /** Use counters by account and epoch: the last one confirmed live, or
+   *  noted by the caller. Not persisted (a resolution without one scans). */
+  private readonly counters = new Map<string, bigint>();
+
+  /** The use counter resolveEvmK256Counter tries first for `contractAddress`
+   *  at `epoch`. */
+  knownCounter(contractAddress: Uint8Array, epoch: bigint): bigint | undefined {
+    return this.counters.get(counterKey(contractAddress, epoch));
+  }
+
+  /** Notes `counter` as this device's use counter on `contractAddress` at
+   *  `epoch`: the next resolution checks it first, against the ledger. The
+   *  way to reach an entry enrolled at a counter above auth_nonce, which the
+   *  resolution's scan does not reach. */
+  noteCounter(contractAddress: Uint8Array, epoch: bigint, counter: bigint): void {
+    if (typeof counter !== 'bigint' || counter < 0n || counter >= 1n << 64n) throw new Error('evm_k256: a use counter is a Uint<64>');
+    this.counters.set(counterKey(contractAddress, epoch), counter);
+  }
+
   /** The boot commitment for an account deployed with `salt`. */
   bootCommitment(salt: Uint8Array): Uint8Array {
     return pureCircuits.derive_boot_commitment_with_evm_k256(salt, this.address, this.blind);
@@ -548,9 +567,40 @@ export class EvmK256Device {
   }
 }
 
-/** How far a client scans use counters for a device's live entry: the
- *  counter resolver and restore use the same bound. */
-export const EVM_K256_COUNTER_SCAN = 4096n;
+// ── Use counters ─────────────────────────────────────────────────────────
+//
+// A device's live entry is at the use counter its next call presents. Every
+// circuit that enrols a device of this arm inserts its entry at counter 0 (the
+// activation and add_device_with_evm_k256 derive it so), and every successful
+// device-gated call removes the caller's entry at counter c and inserts it at
+// c + 1 in the transaction that advances auth_nonce by one. auth_nonce starts
+// at 0 and never decreases (recovery's finalisation advances it too, and
+// clears the device set). So an entry enrolled at counter 0 is live at a
+// counter no greater than auth_nonce, and a scan of 0..auth_nonce finds it,
+// however many calls the device has made. Upstream's add_device_with_jubjub,
+// _with_k256 and _with_p256 take an already-derived entry, whose counter the
+// contract cannot read: an entry derived at a counter k > 0 is live at k, and
+// the scan reaches it only while k <= auth_nonce; above that, the caller gives
+// k (EvmK256Device.noteCounter, or the resolver's `counter`). From a counter
+// the device held once, its counter now is at most auth_nonce higher (one per
+// call, and auth_nonce counts every call), so the scan forward from a known
+// counter reaches known + auth_nonce, which also follows such an entry.
+
+const counterKey = (contractAddress: Uint8Array, epoch: bigint) => `${hex(contractAddress)}/${epoch.toString()}`;
+
+/** The first live counter in the order: `known` (when given), forward from it
+ *  through known + authNonce, then from 0 up to it (or through authNonce
+ *  without a known counter); undefined when none is live. At most
+ *  2 x authNonce + 2 probes. */
+function liveCounter(isLive: (counter: bigint) => boolean, authNonce: bigint, known?: bigint): bigint | undefined {
+  if (known !== undefined) {
+    if (typeof known !== 'bigint' || known < 0n) throw new Error('evm_k256: a known use counter is a non-negative bigint');
+    for (let k = known; k <= known + authNonce; k++) if (isLive(k)) return k;
+  }
+  const end = known !== undefined && known <= authNonce ? known : authNonce + 1n;
+  for (let k = 0n; k < end; k++) if (isLive(k)) return k;
+  return undefined;
+}
 
 /** The result of a restore: the device (or grantee), or why it cannot be
  *  restored with this wallet and what remains, in blind.ts restoreBlind's
@@ -563,30 +613,39 @@ export type EvmK256Restore<T> =
 
 /** What a device restore starts from: the stored record (its network,
  *  account index, address, format and, while cached, its blind), or, without
- *  one, the network and account index to try and `finds`, the caller's test
+ *  one, the network and account index to try. `finds` is the caller's test
  *  of a candidate device against the accounts (their entries, for example
- *  with `entryAt` at the counters below EVM_K256_COUNTER_SCAN). */
+ *  evmK256DeviceFinds); it is needed for every blind derived again (a record
+ *  without its cached blind, or no record), and never asked for a cached
+ *  blind. */
 export type EvmK256DeviceRestoreRequest =
-  | { wallet: EvmWallet; record: EvmK256RosterRecord }
+  | { wallet: EvmWallet; record: EvmK256RosterRecord; finds?: (device: EvmK256Device) => boolean | Promise<boolean> }
   | { wallet: EvmWallet; network: string; accountIndex: bigint | number; finds: (device: EvmK256Device) => boolean | Promise<boolean> };
 
 /**
  * Restores one device of `wallet` through blind.ts restoreBlind: a cached
  * blind is used as it is; a record without it has the blind derived again
  * in the record's format, from a signature that must come from the
- * record's address (whatever address the wallet reports); without a record
- * the blind is derived in every format the wallet signs (the arm's one) and
- * kept when `finds` accepts the device. A blind is never derived in another
- * format than the stored one, and the wallet is asked for nothing it cannot
- * sign. Without a match, the result carries restoreBlind's message: no
- * account was found, and what remains (add this wallet as a new device from
- * another device of the account, or through the account's recovery).
+ * record's address (whatever address the wallet reports), and kept only when
+ * `finds` accepts the device (a wallet of the same key whose deterministic
+ * signature differs from the enrolling wallet's derives another blind);
+ * without a record the blind is derived in every format the wallet signs
+ * (the arm's one) and kept when `finds` accepts the device. A blind is never
+ * derived in another format than the stored one, and the wallet is asked for
+ * nothing it cannot sign. Without a match, the result carries restoreBlind's
+ * message: no account was found, and what remains (add this wallet as a new
+ * device from another device of the account, or through the account's
+ * recovery).
  */
 export async function restoreEvmK256Device(req: EvmK256DeviceRestoreRequest): Promise<EvmK256Restore<EvmK256Device>> {
   const { wallet } = req;
   const rec = 'record' in req && req.record !== undefined ? parseRosterRecord(req.record) : undefined;
-  if (rec === undefined && (!('finds' in req) || typeof req.finds !== 'function')) {
+  const hasFinds = 'finds' in req && typeof req.finds === 'function';
+  if (rec === undefined && !hasFinds) {
     throw new Error('evm_k256: a restore without a stored record needs the network, the account index and finds');
+  }
+  if (rec !== undefined && rec.blind === undefined && !hasFinds) {
+    throw new Error('evm_k256: a restore of a record without its cached blind needs finds (the blind derived again is checked against the accounts)');
   }
   const reported = await wallet.address();
   const network = rec ? rec.network : (req as { network: string }).network;
@@ -613,32 +672,31 @@ export async function restoreEvmK256Device(req: EvmK256DeviceRestoreRequest): Pr
 /**
  * Restore without records: the account indexes 0..maxIndex of `wallet` on
  * `network`, each through restoreEvmK256Device, its blind derived from the
- * wallet and tested against candidate accounts' device sets at counters
- * below maxCounter (default: the resolver's bound). Returns every match. The
- * wallet is asked for 2 x (maxIndex + 1) `personal_sign` approvals (two per
- * index: the sign-twice check).
+ * wallet and tested against candidate accounts' device sets (each account's
+ * epoch and auth_nonce, read from its ledger) at every counter from 0 to its
+ * auth_nonce (see "Use counters"). Returns every match, with the counter of
+ * its live entry. The wallet is asked for 2 x (maxIndex + 1) `personal_sign`
+ * approvals (two per index: the sign-twice check).
  */
 export async function restoreEvmDevices(
   wallet: EvmWallet,
   network: string,
-  accounts: { address: Uint8Array; epoch: bigint; isMember: (entry: Uint8Array) => boolean }[],
-  opts: { maxIndex?: number; maxCounter?: bigint } = {},
+  accounts: { address: Uint8Array; epoch: bigint; authNonce: bigint; isMember: (entry: Uint8Array) => boolean }[],
+  opts: { maxIndex?: number } = {},
 ): Promise<{ accountIndex: bigint; account: Uint8Array; counter: bigint; device: EvmK256Device }[]> {
   const found: { accountIndex: bigint; account: Uint8Array; counter: bigint; device: EvmK256Device }[] = [];
   const maxIndex = opts.maxIndex ?? 4;
-  const maxCounter = opts.maxCounter ?? EVM_K256_COUNTER_SCAN;
+  for (const a of accounts) {
+    if (typeof a.authNonce !== 'bigint' || a.authNonce < 0n) throw new Error('evm_k256: each account gives its auth_nonce (a non-negative bigint), the bound of the counter scan');
+  }
   for (let i = 0; i <= maxIndex; i++) {
     const hits: { account: Uint8Array; counter: bigint }[] = [];
     const r = await restoreEvmK256Device({
       wallet, network, accountIndex: i,
       finds: (device) => {
         for (const a of accounts) {
-          for (let k = 0n; k < maxCounter; k++) {
-            if (a.isMember(device.entryAt(a.address, a.epoch, k))) {
-              hits.push({ account: a.address, counter: k });
-              break;
-            }
-          }
+          const k = liveCounter((c) => a.isMember(device.entryAt(a.address, a.epoch, c)), a.authNonce);
+          if (k !== undefined) hits.push({ account: a.address, counter: k });
         }
         return hits.length > 0;
       },
@@ -663,21 +721,48 @@ export interface EvmK256AccountSurface {
   rotateEncKeyWithAuth(newKey: Uint8Array, a: EvmK256Authorisation): Promise<{ txId: string }>;
 }
 
-/** The device's current use counter: the first counter whose entry is live at
- *  the current epoch (MIP-0013 S11 rescan). */
-export async function resolveEvmK256Counter(account: EvmK256AccountSurface, device: EvmK256Device, limit = EVM_K256_COUNTER_SCAN): Promise<bigint> {
-  const l = await account.ledgerState();
-  for (let k = 0n; k < limit; k++) {
-    if (l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k))) return k;
+type EvmK256LedgerView = Awaited<ReturnType<EvmK256AccountSurface['ledgerState']>>;
+
+/** The counter of `device`'s live entry in the ledger state `l`, kept as the
+ *  device's known counter (see resolveEvmK256Counter). */
+function counterIn(l: EvmK256LedgerView, account: EvmK256AccountSurface, device: EvmK256Device, counter?: bigint): bigint {
+  const known = counter ?? device.knownCounter(account.addressBytes, l.device_epoch);
+  const found = liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce, known);
+  if (found === undefined) {
+    throw new Error(`evm_k256: no live entry for this device at the current epoch, at any use counter from 0 to auth_nonce (${l.auth_nonce})` +
+      `${known !== undefined ? `, or from the known counter ${known} through ${known + l.auth_nonce}` : ''}: not a device of this account, or an entry enrolled at a counter above auth_nonce (give it with noteCounter)`);
   }
-  throw new Error('evm_k256: no live entry for this device (rescan limit reached)');
+  device.noteCounter(account.addressBytes, l.device_epoch, found);
+  return found;
+}
+
+/** The use counter of `device`'s live entry on `account` at the current
+ *  epoch (MIP-0013 S11): the known counter first (`opts.counter`, else the
+ *  last one this device object confirmed for the account and epoch, or one
+ *  noted with noteCounter), then every counter forward from it through
+ *  known + auth_nonce, then from 0 up to it. That scan is complete for every entry
+ *  enrolled at counter 0 (see "Use counters"), so a device never stops being
+ *  found after many calls. The counter found becomes the known one, so the
+ *  next call finds its successor with one more probe. */
+export async function resolveEvmK256Counter(account: EvmK256AccountSurface, device: EvmK256Device, opts: { counter?: bigint } = {}): Promise<bigint> {
+  return counterIn(await account.ledgerState(), account, device, opts.counter);
+}
+
+/** A restore's test of a candidate device (restoreEvmK256Device `finds`):
+ *  whether it has a live entry on `account` at the current epoch, at any
+ *  counter from 0 to auth_nonce. */
+export function evmK256DeviceFinds(account: EvmK256AccountSurface): (device: EvmK256Device) => Promise<boolean> {
+  return async (device) => {
+    const l = await account.ledgerState();
+    return liveCounter((k) => l.devices.member(device.entryAt(account.addressBytes, l.device_epoch, k)), l.auth_nonce) !== undefined;
+  };
 }
 
 /** rotate_enc_key_with_evm_k256: the RotateEncKey message, signed by the
  *  device's wallet, then the call. */
 export async function rotateEncKeyWithEvmK256(account: EvmK256AccountSurface, device: EvmK256Device, newKey: Uint8Array) {
   const l = await account.ledgerState();
-  const counter = await resolveEvmK256Counter(account, device);
+  const counter = counterIn(l, account, device);
   const typedData = evmK256Messages.rotateEncKey({ account: account.addressBytes, device: device.address, authNonce: l.auth_nonce }, newKey);
   const auth = await device.authorise(typedData, counter);
   return { typedData, auth, ...(await account.rotateEncKeyWithAuth(newKey, auth)) };
@@ -697,10 +782,11 @@ export interface EvmK256CustodySurface extends EvmK256AccountSurface {
   heldCoin(color: Uint8Array): Promise<{ nonce: Uint8Array; color: Uint8Array; value: bigint; mt_index: bigint }>;
 }
 
-/** The device frame of the next call and the device's counter. */
+/** The device frame of the next call and the device's counter, from one
+ *  read of the ledger. */
 async function deviceFrame(account: EvmK256AccountSurface, device: EvmK256Device) {
   const l = await account.ledgerState();
-  const counter = await resolveEvmK256Counter(account, device);
+  const counter = counterIn(l, account, device);
   return { frame: { account: account.addressBytes, device: device.address, authNonce: l.auth_nonce }, counter };
 }
 
@@ -1162,11 +1248,13 @@ function parseGranteeRecord(rec: EvmK256GranteeRecord) {
 }
 
 /** What a grantee restore starts from, for the grant `label`, `slot`: the
- *  stored record, or, without one, the network, the issuing account and
- *  `finds`, the caller's test of a candidate grantee (for example that the
- *  issuing account holds a grant record under its grant id). */
+ *  stored record, or, without one, the network and the issuing account.
+ *  `finds` is the caller's test of a candidate grantee (for example that the
+ *  issuing account holds a grant record under its grant id); it is needed
+ *  for every blind derived again (a record without its cached blind, or no
+ *  record), and never asked for a cached blind. */
 export type EvmK256GranteeRestoreRequest = { wallet: EvmWallet; label: Uint8Array; slot: bigint } & (
-  | { record: EvmK256GranteeRecord }
+  | { record: EvmK256GranteeRecord; finds?: (grantee: EvmK256Grantee) => boolean | Promise<boolean> }
   | { network: string; issuingAccount: Uint8Array; finds: (grantee: EvmK256Grantee) => boolean | Promise<boolean> });
 
 /** Restores a grantee through blind.ts restoreBlind, as restoreEvmK256Device
@@ -1179,8 +1267,12 @@ export type EvmK256GranteeRestoreRequest = { wallet: EvmWallet; label: Uint8Arra
 export async function restoreEvmK256Grantee(req: EvmK256GranteeRestoreRequest): Promise<EvmK256Restore<EvmK256Grantee>> {
   const { wallet, label, slot } = req;
   const rec = 'record' in req && req.record !== undefined ? parseGranteeRecord(req.record) : undefined;
-  if (rec === undefined && (!('finds' in req) || typeof req.finds !== 'function')) {
+  const hasFinds = 'finds' in req && typeof req.finds === 'function';
+  if (rec === undefined && !hasFinds) {
     throw new Error('evm_k256: a restore without a stored record needs the network, the issuing account and finds');
+  }
+  if (rec !== undefined && rec.blind === undefined && !hasFinds) {
+    throw new Error('evm_k256: a restore of a record without its cached blind needs finds (the blind derived again is checked against the grant)');
   }
   const reported = await wallet.address();
   const network = rec ? rec.network : (req as { network: string }).network;
