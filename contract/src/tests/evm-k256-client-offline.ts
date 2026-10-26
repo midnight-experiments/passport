@@ -37,10 +37,24 @@
 //             (no signature asked); from the stored format when the cache is
 //             lost (the blind derived again, equal to the enrolment's, from
 //             a signature by the record's key, whatever address the wallet
-//             reports); without a record (found by the caller's test; not
-//             found: the message that says so and what remains, for each
-//             role); a wallet of another key against a record refused,
-//             naming the key it reports
+//             reports, and checked by the caller's test); a deterministic
+//             wallet of the same key with another nonce rule refused with
+//             the remedy, for each role; a record without its cache and
+//             without the test refused before the wallet is asked; without a
+//             record (found by the caller's test; not found: the message that
+//             says so and what remains, for each role); a wallet of another
+//             key against a record refused, naming the key it reports
+//   counters  the use-counter resolution against a ledger that rolls the
+//             entry and advances auth_nonce as the circuit does: a device at
+//             counter 4095 calls, its entry moves to 4096, and the next call
+//             (the same device object, and a fresh one) finds it; counters
+//             of 5000 and equal to auth_nonce; the known counter checked
+//             first and its successor found with one more probe; a stale
+//             known counter below, above and past auth_nonce falls back to
+//             the scan; an entry enrolled above auth_nonce is refused until
+//             its counter is given, then used; recover_cancel past 4096; an
+//             uncached restore past 4096 (restoreEvmK256Device with
+//             evmK256DeviceFinds, a cache-lost record, restoreEvmDevices)
 //   read seed a grantee's read seed is in memory only: no grantee record
 //             written in this suite holds it; a grantee restored from its
 //             cached blind reads after exactly one signature of its grantee
@@ -75,8 +89,8 @@ import {
   EVM_K256_FORMAT, EvmK256Device, EvmK256Grantee, SoftwareEvmWallet, checkEvmK256Signer, enrolEvmBlind, enrolEvmGranteeBlind,
   evmK256WalletFormats, highSTwin, parseEvmSignature, personalMessageDigest, restoreEvmK256Device, restoreEvmK256Grantee,
   revokeAllGrantsWithEvmK256, rotateEncKeyWithEvmK256, serialiseEvmSignature, withdrawUnshieldedAsEvmGrantee, SECP256K1_ORDER,
-  evmK256GrantReadSeed,
-  type EvmK256GranteeRecord, type EvmK256RosterRecord, type EvmWallet,
+  evmK256GrantReadSeed, evmK256DeviceFinds, recoverCancelWithEvmK256, resolveEvmK256Counter, restoreEvmDevices,
+  type EvmK256Authorisation, type EvmK256GranteeRecord, type EvmK256RosterRecord, type EvmWallet,
 } from '../wallet/signer-evm-k256.js';
 
 const SEED = 'evm-k256-client-offline/v1';
@@ -140,6 +154,17 @@ class RecordingWallet implements EvmWallet {
     return s.signTypedData(typedData);
   }
   count(method: Request['method']) { return this.requests.filter((r) => r.method === method).length; }
+}
+
+/** A deterministic wallet of `sk` with another nonce rule than RFC 6979:
+ *  RFC 6979 with a fixed additional input (RFC 6979 section 3.6), so it
+ *  signs the same bytes the same way every time, its signatures recover to
+ *  the key's address, and they differ from SoftwareEvmWallet's. */
+class OtherNonceWallet extends SoftwareEvmWallet {
+  override signDigest(digest: Uint8Array): Uint8Array {
+    const rec = secp256k1.sign(digest, be32(this.sk), { prehash: false, format: 'recovered', extraEntropy: new Uint8Array(32).fill(0x5a) });
+    return new Uint8Array([...rec.subarray(1), 27 + rec[0]]);
+  }
 }
 
 const NET = 'undeployed';
@@ -520,6 +545,9 @@ const restoreCases: Record<string, unknown>[] = [];
   const { blind: _b, ...lost } = rec;
   const request = blindMessageBytes({ scheme: 'evm_k256', network: NET, identity: A.addressBytes, accountIndex: 1 });
   const signs = (w: RecordingWallet) => w.requests.filter((r) => r.method !== 'address');
+  // the account's device set: the device live at counter 2
+  const A1 = rnd(), live = new Set([hex(d.entryAt(A1, 0n, 2n))]);
+  const finds = (x: EvmK256Device) => [0n, 1n, 2n, 3n].some((c) => live.has(hex(x.entryAt(A1, 0n, c))));
 
   // 1. the cache: no signature asked
   {
@@ -530,10 +558,10 @@ const restoreCases: Record<string, unknown>[] = [];
     restoreCases.push({ case: 'device, cached', source: 'cache', signatures: 0 });
     ok('restore');
   }
-  // 2. the cache lost: derived again in the stored format
+  // 2. the cache lost: derived again in the stored format, and found
   {
     const w = new RecordingWallet(A);
-    const r = await restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord });
+    const r = await restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord, finds });
     assert.ok(r.ok === true && r.source === 'stored-format' && eq(r.value.blind, d.blind) && r.value.pk.x === d.pk.x);
     assert.equal(w.count('personalSign'), 2); assert.equal(w.count('signTypedData'), 0);
     assert.ok(signs(w).every((x) => x.method === 'personalSign' && eq(x.message, request)), 'the device request of the record');
@@ -543,20 +571,37 @@ const restoreCases: Record<string, unknown>[] = [];
   // 3. the cache lost, the wallet reporting another address but signing with the record's key
   {
     const w = new RecordingWallet(B, A);
-    const r = await restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord });
+    const r = await restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord, finds });
     assert.ok(r.ok === true && r.source === 'stored-format' && eq(r.value.blind, d.blind), 'the record\'s key, whatever the wallet reports');
     ok('restore');
+  }
+  // 3b. the cache lost, a deterministic wallet of the same key with another nonce rule: its blind finds
+  // nothing, so the restore refuses it with the remedy instead of returning another device
+  const STORED_NOT_FOUND = 'No account was found with the privacy key this wallet derives in the EIP-712 V1 format, the format this device was enrolled through. ' +
+    'A wallet that signs the request differently from the wallet used then derives another privacy key from the same wallet key. ' +
+    'Use that wallet, or add this wallet as a new device from another device of the account, or through the account\'s recovery.';
+  {
+    const w = new RecordingWallet(new OtherNonceWallet(A.sk));
+    const r = await restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord, finds });
+    assert.ok(r.ok === false && r.reason === 'not-found' && r.message === STORED_NOT_FOUND, r.ok === false ? r.message : 'restored another device');
+    assert.ok(w.count('personalSign') === 2 && signs(w).every((x) => x.method === 'personalSign' && eq(x.message, request)), 'the record\'s request, twice (the sign-twice check passed)');
+    restoreCases.push({ case: 'device, cache lost, the same key through another nonce rule', refused: true, message: STORED_NOT_FOUND });
+    ok('restore');
+  }
+  // 3c. the cache lost and no test: refused before the wallet is asked
+  {
+    const w = new RecordingWallet(A);
+    await refusedAsync('restore', () => restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord }), /a restore of a record without its cached blind needs finds/, 'a cache-lost device record without finds');
+    assert.equal(w.requests.length, 0, 'nothing asked');
   }
   // 4. the cache lost, a wallet of another key: refused, naming the key it reports
   {
     const w = new RecordingWallet(B);
-    await refusedAsync('restore', () => restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord }), namedSigner(A, B), 'another key\'s wallet against a device record');
+    await refusedAsync('restore', () => restoreEvmK256Device({ wallet: w, record: lost as EvmK256RosterRecord, finds }), namedSigner(A, B), 'another key\'s wallet against a device record');
     assert.equal(w.count('personalSign'), 1, 'refused at the first signature');
     restoreCases.push({ case: 'device, cache lost, another key', refused: true });
   }
   // 5. no record, found
-  const A1 = rnd(), live = new Set([hex(d.entryAt(A1, 0n, 2n))]);
-  const finds = (x: EvmK256Device) => [0n, 1n, 2n, 3n].some((c) => live.has(hex(x.entryAt(A1, 0n, c))));
   {
     const w = new RecordingWallet(A);
     const r = await restoreEvmK256Device({ wallet: w, network: NET, accountIndex: 1, finds });
@@ -608,7 +653,7 @@ const restoreCases: Record<string, unknown>[] = [];
   }
   {
     const w = new RecordingWallet(A);
-    const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: glost as EvmK256GranteeRecord });
+    const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: glost as EvmK256GranteeRecord, finds: gfinds });
     assert.ok(r.ok === true && r.source === 'stored-format' && eq(r.value.blind, g.blind) && eq(r.value.readKey(issuer).secretKey, g.readKey(issuer).secretKey));
     assert.ok(signs(w).length === 2 && signs(w).every((x) => x.method === 'personalSign' && eq(x.message, grequest)), 'the grantee request of the record');
     assert.deepEqual(r.ok === true && grecOf(r.value), grec, 'the restored grantee writes the same record, cache included');
@@ -630,16 +675,186 @@ const restoreCases: Record<string, unknown>[] = [];
   }
   {
     const w = new RecordingWallet(B);
-    await refusedAsync('restore', () => restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: glost as EvmK256GranteeRecord }), namedSigner(A, B), 'another key\'s wallet against a grantee record');
+    await refusedAsync('restore', () => restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: glost as EvmK256GranteeRecord, finds: gfinds }), namedSigner(A, B), 'another key\'s wallet against a grantee record');
+  }
+  // a grantee record, the cache lost, the same key through another nonce rule: refused with the grantee remedy
+  {
+    const w = new RecordingWallet(new OtherNonceWallet(A.sk));
+    const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: glost as EvmK256GranteeRecord, finds: gfinds });
+    const want = 'No grant was found with the privacy key this wallet derives in the EIP-712 V1 format, the format this grant was issued through. ' +
+      'A wallet that signs the request differently from the wallet used then derives another privacy key from the same wallet key. ' +
+      'Use that wallet, or ask the issuing account\'s owner for a new grant to this wallet.';
+    assert.ok(r.ok === false && r.reason === 'not-found' && r.message === want, r.ok === false ? r.message : 'restored another grantee');
+    assert.equal(w.count('personalSign'), 2);
+    restoreCases.push({ case: 'grantee, cache lost, the same key through another nonce rule', refused: true, message: want });
+    ok('restore');
+  }
+  {
+    const w = new RecordingWallet(A);
+    await refusedAsync('restore', () => restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 1n, record: glost as EvmK256GranteeRecord }), /a restore of a record without its cached blind needs finds/, 'a cache-lost grantee record without finds');
+    assert.equal(w.requests.length, 0, 'nothing asked');
   }
   // the restored device writes the record it was restored from (the cache back)
   {
-    const r = await restoreEvmK256Device({ wallet: new RecordingWallet(A), record: lost as EvmK256RosterRecord });
+    const r = await restoreEvmK256Device({ wallet: new RecordingWallet(A), record: lost as EvmK256RosterRecord, finds });
     assert.deepEqual(r.ok === true && r.value.toRecord(), rec);
     ok('restore');
   }
   report.restore = restoreCases;
-  console.log(`  ✓ restore: ${tally.restore.pass} cases (device and grantee: cache, cache lost, no record found and not found with the restore message, another key's wallet); ${tally.restore.refused} refused`);
+  console.log(`  ✓ restore: ${tally.restore.pass} cases (device and grantee: cache, cache lost and found, cache lost through another deterministic nonce rule refused, no record found and not found with the restore message, another key's wallet); ${tally.restore.refused} refused`);
+}
+
+// ── Use counters: no ceiling, the known counter first ───────────────────────
+//
+// A ledger that holds the device set at epoch 0 and, for every call it
+// accepts, does what the device seam does: the entry at the presented use
+// counter must be live; it is removed, the entry at the next counter is
+// inserted and auth_nonce advances by one. Membership probes are counted.
+
+/** One account's ledger as the device seam keeps it, for `devices`. */
+function rollingAccount(authNonce: bigint, live: [EvmK256Device, bigint][], epoch = 0n, account = rnd()) {
+  const set = new Set(live.map(([d, c]) => hex(d.entryAt(account, epoch, c))));
+  const devices = live.map(([d]) => d);
+  const s = {
+    authNonce, probes: 0, calls: [] as { circuit: string; useCounter: bigint }[],
+    addressBytes: account,
+    async ledgerState() {
+      return { auth_nonce: s.authNonce, device_epoch: epoch, devices: { member: (e: Uint8Array) => { s.probes++; return set.has(hex(e)); } } };
+    },
+    seam(circuit: string, a: { pk: { x: bigint; y: bigint }; blind: Uint8Array; use_counter: bigint }) {
+      const d = devices.find((x) => x.pk.x === a.pk.x && x.pk.y === a.pk.y && eq(x.blind, a.blind));
+      const entry = d && hex(d.entryAt(account, epoch, a.use_counter));
+      if (!d || !set.has(entry!)) throw new Error('unknown device entry');
+      set.delete(entry!); set.add(hex(d.entryAt(account, epoch, a.use_counter + 1n)));
+      s.authNonce++;
+      s.calls.push({ circuit, useCounter: a.use_counter });
+      return { txId: `tx-${s.calls.length}`, public: { txId: `tx-${s.calls.length}` } };
+    },
+    async rotateEncKeyWithAuth(_k: Uint8Array, a: EvmK256Authorisation) { return s.seam('rotate_enc_key_with_evm_k256', a); },
+    callTx: {
+      recover_cancel_with_evm_k256: async (a: EvmK256Authorisation) => s.seam('recover_cancel_with_evm_k256', a),
+    } as Record<string, (...a: any[]) => Promise<any>>,
+    isLive: (d: EvmK256Device, c: bigint) => set.has(hex(d.entryAt(account, epoch, c))),
+  };
+  return s;
+}
+
+const counterCases: Record<string, unknown>[] = [];
+{
+  const A = new SoftwareEvmWallet(scalar());
+  const d = await EvmK256Device.enrol(A, NET, 0);
+  const fresh = () => new EvmK256Device(d.pk, d.blind, NET, 0n, A);
+  const rotate = async (acc: ReturnType<typeof rollingAccount>, dev: EvmK256Device) => {
+    const before = acc.probes;
+    const r = await rotateEncKeyWithEvmK256(acc, dev, rnd());
+    return { counter: r.auth.use_counter, probes: acc.probes - before };
+  };
+
+  // 1. a device at 4095 (one device since activation: its counter is auth_nonce), then across 4096
+  {
+    const acc = rollingAccount(4095n, [[d, 4095n]]);
+    const dev = fresh();
+    const first = await rotate(acc, dev);
+    assert.equal(first.counter, 4095n, 'the call at 4095 presents counter 4095');
+    assert.equal(first.probes, 4096, 'a device object without a known counter scans 0..auth_nonce');
+    assert.ok(acc.isLive(d, 4096n) && !acc.isLive(d, 4095n) && acc.authNonce === 4096n, 'the ledger rolled the entry to 4096');
+    const second = await rotate(acc, dev);
+    assert.equal(second.counter, 4096n, 'the next call finds the entry at 4096');
+    assert.equal(second.probes, 2, 'the known counter (dead now), then its successor: two probes');
+    const third = await rotate(acc, fresh());
+    assert.equal(third.counter, 4097n, 'a fresh device object finds 4097 by the scan, with no ceiling');
+    assert.equal(third.probes, 4098);
+    counterCases.push({ case: 'live at 4095, then 4096, then 4097', counters: [first.counter, second.counter, third.counter].map(String), probes: [first.probes, second.probes, third.probes] });
+    ok('counters', 3);
+  }
+  // 2. a counter of 5000, and a counter equal to auth_nonce after many calls of other devices
+  {
+    const acc = rollingAccount(5000n, [[d, 5000n]]);
+    assert.equal((await rotate(acc, fresh())).counter, 5000n, 'counter 5000 found');
+    const acc2 = rollingAccount(7000n, [[d, 5000n]]);
+    assert.equal(await resolveEvmK256Counter(acc2, fresh()), 5000n, 'counter 5000 below auth_nonce 7000');
+    counterCases.push({ case: 'live at 5000 (auth_nonce 5000, 7000)', counter: '5000' });
+    ok('counters', 2);
+  }
+  // 3. stale and wrong known counters fall back to the scan; an explicit counter is checked too
+  {
+    const acc = rollingAccount(10n, [[d, 3n]]);
+    for (const known of [0n, 2n, 7n, 10n, 11n, 9000n]) {
+      const dev = fresh();
+      dev.noteCounter(acc.addressBytes, 0n, known);
+      assert.equal(await resolveEvmK256Counter(acc, dev), 3n, `a known counter ${known} that is not live: the scan finds 3`);
+      assert.equal(dev.knownCounter(acc.addressBytes, 0n), 3n, 'the counter found becomes the known one');
+      assert.equal(await resolveEvmK256Counter(acc, fresh(), { counter: known }), 3n, `an explicit counter ${known} that is not live: the scan finds 3`);
+    }
+    const dev = fresh();
+    dev.noteCounter(acc.addressBytes, 0n, 3n);
+    const before = acc.probes;
+    assert.equal(await resolveEvmK256Counter(acc, dev), 3n);
+    assert.equal(acc.probes - before, 1, 'a live known counter: one probe');
+    // a known counter of another epoch or account is not used for this one
+    const other = fresh();
+    other.noteCounter(acc.addressBytes, 1n, 9n); other.noteCounter(rnd(), 0n, 9n);
+    assert.equal(other.knownCounter(acc.addressBytes, 0n), undefined, 'known counters are per account and epoch');
+    // a new epoch (after a recovery): the old epoch's known counter is not this epoch's
+    {
+      const dev = fresh();
+      const before0 = rollingAccount(4100n, [[d, 4000n]]);
+      assert.equal(await resolveEvmK256Counter(before0, dev), 4000n);
+      const after1 = rollingAccount(4101n, [[d, 0n]], 1n, before0.addressBytes);
+      assert.equal(dev.knownCounter(before0.addressBytes, 1n), undefined, 'no known counter at the new epoch');
+      const p0 = after1.probes;
+      assert.equal(await resolveEvmK256Counter(after1, dev), 0n, 'the device re-enrolled at counter 0 of epoch 1');
+      assert.equal(after1.probes - p0, 1, 'found at the first probe: the old epoch\'s counter is not tried');
+      assert.equal(dev.knownCounter(before0.addressBytes, 0n), 4000n, 'the old epoch\'s counter kept under its epoch');
+    }
+    refused('counters', () => fresh().noteCounter(acc.addressBytes, 0n, -1n), /a use counter is a Uint<64>/, 'a negative counter');
+    refused('counters', () => fresh().noteCounter(acc.addressBytes, 0n, 1n << 64n), /a use counter is a Uint<64>/, 'a counter of 2^64');
+    counterCases.push({ case: 'stale known counters 0, 2, 7, 10, 11, 9000 with the entry at 3 (auth_nonce 10)', found: '3' });
+    ok('counters', 3);
+  }
+  // 4. an entry enrolled at a counter above auth_nonce (an entry-taking add_device): not reached by
+  //    the scan, refused until its counter is given, then used and rolled
+  {
+    const acc = rollingAccount(20n, [[d, 9000n]]);
+    await refusedAsync('counters', () => rotateEncKeyWithEvmK256(acc, fresh(), rnd()), /no live entry for this device at the current epoch, at any use counter from 0 to auth_nonce \(20\)/, 'an entry above auth_nonce, its counter not given');
+    assert.equal(acc.calls.length, 0, 'nothing sent');
+    const dev = fresh();
+    dev.noteCounter(acc.addressBytes, 0n, 9000n);
+    assert.equal((await rotate(acc, dev)).counter, 9000n, 'with the counter given, the call presents 9000');
+    assert.equal((await rotate(acc, dev)).counter, 9001n, 'and the next call its successor, from the known counter');
+    assert.equal(await resolveEvmK256Counter(rollingAccount(20n, [[d, 9000n]]), fresh(), { counter: 9000n }), 9000n, 'an explicit counter above auth_nonce');
+    counterCases.push({ case: 'entry at 9000 above auth_nonce 20: refused, then given, used, rolled', counters: ['9000', '9001'] });
+    ok('counters', 3);
+  }
+  // 5. recover_cancel past 4096 (the veto must never lock out)
+  {
+    const acc = rollingAccount(4200n, [[d, 4100n]]);
+    const r = await recoverCancelWithEvmK256(acc, fresh());
+    assert.ok(r.auth.use_counter === 4100n && acc.calls.at(-1)?.circuit === 'recover_cancel_with_evm_k256' && acc.isLive(d, 4101n), 'recover_cancel at counter 4100');
+    counterCases.push({ case: 'recover_cancel at 4100', counter: '4100' });
+    ok('counters');
+  }
+  // 6. an uncached restore past 4096
+  {
+    const acc = rollingAccount(4600n, [[d, 4500n]]);
+    const r = await restoreEvmK256Device({ wallet: new RecordingWallet(A), network: NET, accountIndex: 0, finds: evmK256DeviceFinds(acc) });
+    assert.ok(r.ok === true && r.source === 'search' && eq(r.value.blind, d.blind), 'no record: found at counter 4500');
+    const { blind: _x, ...lostRec } = d.toRecord();
+    const r2 = await restoreEvmK256Device({ wallet: new RecordingWallet(A), record: lostRec as EvmK256RosterRecord, finds: evmK256DeviceFinds(acc) });
+    assert.ok(r2.ok === true && r2.source === 'stored-format' && eq(r2.value.blind, d.blind), 'the cache lost: found at counter 4500');
+    assert.equal((await rotate(acc, r2.ok === true ? r2.value : fresh())).counter, 4500n, 'the restored device calls at 4500');
+    const acc2 = rollingAccount(5000n, [[d, 5000n]]);
+    const found = await restoreEvmDevices(new RecordingWallet(A), NET, [
+      { address: acc2.addressBytes, epoch: 0n, authNonce: 5000n, isMember: (e) => eq(e, d.entryAt(acc2.addressBytes, 0n, 5000n)) },
+    ], { maxIndex: 0 });
+    assert.deepEqual(found.map((f) => [f.accountIndex, f.counter]), [[0n, 5000n]], 'restoreEvmDevices finds index 0 at counter 5000');
+    await assert.rejects(() => restoreEvmDevices(new RecordingWallet(A), NET, [{ address: acc2.addressBytes, epoch: 0n, isMember: () => false } as any]), /each account gives its auth_nonce/);
+    counted('counters');
+    counterCases.push({ case: 'uncached restore at 4500 and 5000', counters: ['4500', '5000'] });
+    ok('counters', 4);
+  }
+  report.counters = counterCases;
+  console.log(`  ✓ counters: ${tally.counters.pass} cases (4095 → 4096 → 4097 with the same and a fresh device object, 5000, stale known counters, an entry above auth_nonce given its counter, recover_cancel at 4100, uncached restores at 4500 and 5000); ${tally.counters.refused} refused`);
 }
 
 // ── The read seed: in memory only, derived again from one signature ─────────
@@ -707,7 +922,7 @@ const readCases: Record<string, unknown>[] = [];
   {
     const w = new RecordingWallet(A);
     const { blind: _b, ...lost } = grec;
-    const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 3n, record: lost as EvmK256GranteeRecord });
+    const r = await restoreEvmK256Grantee({ wallet: w, label: LABEL, slot: 3n, record: lost as EvmK256GranteeRecord, finds: (x) => eq(x.grantId(issuer), g.grantId(issuer)) });
     assert.ok(r.ok === true && r.value.hasReadSeed === true);
     const k = await (r as { value: EvmK256Grantee }).value.readKeyFromWallet(issuer);
     assert.ok(eq(k.secretKey, want.secretKey) && signs(w).length === 2, 'the blind derived again brings the seed: no third signature');
