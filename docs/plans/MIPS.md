@@ -207,43 +207,24 @@ interoperability, and creates no new SDK/adopter prerequisite.
 
 ### Scoped grants and dApp connection (successor extension)
 
-**Scope.** Drafted, co-authored with the Midnight Foundation. The
-extension MIP-0013 reserves behind `require_authorised()`: a grant is a
-contract-maintained record admitting one grantee key of a registered
-scheme to a bounded subset of the asset-facing circuits (three spend
-operations, one token color, a per-call and a cumulative cap, a bound
-on any coin touched, an optional recipient pin, and an explicit
-expiry), enforced in-circuit on every call through per-arm grant twins
-over the unchanged custody chips, revocable instantly from chain state
-by any active device, with an O(1) revoke-all. Color, recipient, coin
-bound, relying-party host, and the running spent total are salted
-commitments, so the MIP-0012 custody invariants hold and observers
-learn neither which dApps an account uses nor what it spends. The
-connection ceremony is a redirect to an authoriser carrying a
-`GrantRequest` and a detached possession proof signed as transmitted,
-the proof being a WebAuthn assertion made on the dApp origin so the
-consent screen names a browser-attested origin, passkey consent, one
-device-gated `issue_grant`, and a return leg the dApp verifies against
-chain state. Read access is the MIP-0012 viewing capability sealed to
-a dApp key; the text says plainly that the ledger enforces spend scope
-and not read scope. Requires a `spec_version = 2` redeploy, proposed to
-carry the erratum 8 remedy as well. Evidence on `main`: the reference
-contract carries grant twins on both grantee arms; the earlier evidence
-at `spec_version = 2` records eleven of twelve groups passing,
-twelve rejection rows abort at build time with the named message, and
-the unit of `kernel.blockTimeLessThan` is measured as whole seconds
-enforced at client build and node admission (`contract/GRANTS-E1.md`
-to `GRANTS-E3.md`). Outstanding: editors' rulings collected at the head
-of the draft, and the companion erratum to MIP-0013 AUTH-1, AUTH-2, and
-AUTH-9. Local copy: `docs/mps-mip/mips/mip-xxxx-scoped-grants.md`.
+**Scope.** A separate Draft, co-authored with the Midnight Foundation,
+for bounded grant authority and the dApp connection ceremony. Grants
+are distinct from device entries and are enforced inside the custody
+account: operation, colour, per-call/cumulative bounds, recipient,
+expiry and optional immediate-contract caller. Issuance and revocation
+remain device-authorised. Section 12 explicitly defines the combined
+MIP-0013 profile for grant calls without requiring a separately merged
+parent amendment. Device-handle privacy remains unchanged; grant calls
+are linkable by id and retain custody-operation disclosures.
 
-The unshielded evidence follow-up #163 is now merged. Merged
-[#176](https://github.com/midnightntwrk/passport/pull/176) adds optional
-immediate-contract pins through `kernel.caller()`, with accepted forwarding
-calls and a fabricated-caller proof refused at node admission. It uses
-schema v3; fresh combined-build/client-ABI/P-256 caller validation remains
-separate from the recorded feature tests. The
-device-wide revocation remedy is still separate unfinished work.
+The reference schema is `spec_version = 3`. Historical v2 evidence,
+caller restriction evidence and profiled P-256 evidence are identified
+separately; native secp256r1 is available and MIP-0030 specifies the
+ECDSA/WebAuthn requirements. The draft distinguishes normative rules
+from verified coverage and keeps independent review and incomplete
+conformance/ceremony work in Path to Active. The first review destination
+is the Passport repository. Local copy:
+`docs/mps-mip/mips/mip-xxxx-scoped-grants.md`.
 
 **Maps to components.** [C10](components/C10-scoped-grant-primitive.md) ·
 [C11](components/C11-grant-lifecycle.md) ·
