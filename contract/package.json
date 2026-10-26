@@ -5,9 +5,15 @@
   "private": true,
   "description": "Reference implementation of Midnight account custody with co-resident JubJub Schnorr, secp256k1 ECDSA and profiled P-256 WebAuthn authorisation arms.",
   "scripts": {
+    "compile:ecc": "compact compile +0.35.0 --feature-zkir-v3 --skip-zk contracts/account.compact contracts/managed/account",
     "compile": "compact compile +0.35.0 --feature-zkir-v3 contracts/account.compact contracts/managed/account && compact compile +0.35.0 --feature-zkir-v3 contracts/control.compact contracts/managed/control && compact compile +0.35.0 --feature-zkir-v3 contracts/faucet.compact contracts/managed/faucet && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-block-time.compact contracts/managed/probe-block-time && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-p256.compact contracts/managed/probe-p256 && compact compile +0.35.0 contracts/probe-grant-caller.compact contracts/managed/probe-grant-caller && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-wallet-arms-base.compact contracts/managed/probe-wallet-arms-base",
     "build": "tsc",
     "test:unit": "tsx src/tests/unit-offline.ts",
+    "test:ecc": "node --import tsx src/tests/ecc-validation.ts",
+    "test:ecc-wallet": "node --import tsx src/tests/ecc-wallet.ts",
+    "test:ecc-nonces": "node --import tsx src/tests/ecc-followups.ts nonces",
+    "test:ecc-encodings": "node --import tsx src/tests/ecc-followups.ts encodings",
+    "test:ecc-recovery": "node --import tsx src/tests/ecc-followups.ts recovery",
     "test:p256-offline": "tsx src/tests/p256-offline.ts",
     "compile:webauthn-variable": "node ../experiments/webauthn-variable-json/generate.mjs && compact compile +0.35.0 --feature-zkir-v3 contracts/probe-webauthn-variable.compact contracts/managed/probe-webauthn-variable",
     "test:webauthn-variable": "tsx src/tests/webauthn-variable/offline.ts",
@@ -52,7 +58,10 @@
     "probe:wave-ceiling": "tsx src/tests/probe-wave-ceiling.ts",
     "probe:onchain-vk": "tsx src/tests/probe-onchain-vk.ts ../experiments/proving-key-regeneration/onchain",
     "probe:vk-derived-pk": "tsx src/tests/probe-vk-derived-pk.ts",
-    "probe:dismiss-cost": "tsx src/tests/probe-dismiss-cost.ts"
+    "probe:dismiss-cost": "tsx src/tests/probe-dismiss-cost.ts",
+    "test:p256-grants": "tsx src/tests/p256-grants.ts",
+    "test:p256-grant-refusals": "tsx src/tests/p256-grant-refusals.ts",
+    "test:grants-capability-offline": "tsx src/tests/grants-capability-offline.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

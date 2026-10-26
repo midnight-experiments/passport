@@ -18,7 +18,7 @@ the `experiments/` directories remain the historical evidence base.
 
 The MIP-0012 §4 seam is credential-scheme-agnostic, and this contract
 carries it as **co-resident arms**: every gated operation is exported
-once per registered scheme, as `<operation>_with_<arm>`. Each arm's
+once per supported scheme, as `<operation>_with_<arm>`. Each arm's
 entry circuit computes its own challenge, passes its own internal seam
 chip (device-entry roll + in-circuit verification), and calls the same
 internal custody chip — the MIP-0012 custody semantics exist exactly
@@ -30,9 +30,10 @@ once, below every arm.
   `midnight:account:{device,boot}:v1` and `midnight:account:auth:v1:*`.
   Gated ABIs are `(…args, pk, use_counter, sig_r, sig_s, grind_nonce)`.
 - **Arm `k256`** — in-circuit **ECDSA over secp256k1**
-  (`secp256k1EcdsaVerify`, ZKIR v3), an **interim engineering arm**, not
-  a scheme proposal: MIP-0013 R2 rejects secp256k1 ECDSA for account
-  authorisation. It remains useful for connector-envelope experiments.
+  (`secp256k1EcdsaVerify`, ZKIR v3). Draft **MIP-0030** specifies the
+  ECDSA extension and its validation requirements; the base MIP-0013
+  profile remains JubJub. This arm also supports connector-envelope
+  experiments.
   Its challenges carry no signature announcement (an ECDSA
   message must not depend on its own signature) and no grinding nonce
   (the verify reduces the digest mod n natively); keys bind as
@@ -270,6 +271,7 @@ npm run test:unit                    # signer pipelines, codec, domain separatio
 npm run test:toolchain-offline       # SDK deployment construction and wave-key compatibility
 npm run test:grants-offline          # scoped grants: lifecycle and the unshielded
                                      # grant twin on both arms, in the simulator
+npm run test:grants-capability-offline # refuse schema < 3 before grant approval/submission
 npm run test:recovery-offline        # recovery MIP client halves: BUSS split and
                                      # reconstruct, share derivation, trial
                                      # assignment, wrap, the gate key, and the
@@ -293,6 +295,9 @@ npm run verify:p256-browser         # recorded live assertion + account binding 
 
 # On-node, running on the v9 localnet (shielded flows and coinless calls)
 npm run test:p256-browser           # interactive experiment: real browser passkey approval
+npm run test:p256-grants            # wa-json134 grantee: funded unshielded spends,
+                                     # restrictions, replay, revoke and reissue
+npm run test:p256-grant-refusals     # minimal node fixture: identity and ED/suffix refusal
 npm run test:evm_k256                # evm_k256: constraint-level negatives,
                                      # each refused by the proof server after a
                                      # positive control (needs only the proof server)
@@ -304,7 +309,8 @@ npm run test:leak-audit              # MIP-0012 test 5
 npm run test:grants-conformance      # scoped grants Testing 1, 2, 3, 6, 9, 10, 11
 npm run test:recovery                # recovery MIP lifecycle end to end: session
                                      # through the seam, signature gate, a real
-                                     # 60 s veto window, cancel, finalisation
+                                     # 60 s veto windows, cancel, two finalisations,
+                                     # old-grant invalidation and successor reissue
                                      # GRANTS_E2_GROUPS=<group> truncates the
                                      # scenario after a group (it is one
                                      # sequence, so a subset is a prefix):
@@ -509,6 +515,13 @@ TTL within ~10 s of build time is rejected as
 `Malformed(TransactionApplication(IntentTtlExpired))`.
 
 ## Scoped grants
+
+The current schema is v3, with JubJub, k256 and profiled P-256 grantees.
+The client refuses grant issuance on older schemas before requesting a
+device signature: v3 adds the caller commitment even to unrestricted
+scopes. See [GRANTS-COMPLETION.md](GRANTS-COMPLETION.md) for the current
+validation record and the remaining MIP acceptance work. The measurements
+below retain their original v2 attribution.
 
 The twelve grant circuits of `spec_version = 2`, measured with `zkir-v3
 mock-compile` and the generated `keys/` directory. Six twins (three operations
