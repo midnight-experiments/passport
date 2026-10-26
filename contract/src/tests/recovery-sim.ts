@@ -3,14 +3,20 @@
 // on-node items: session freshness and slot gating (§5), the two-phase
 // gate with pending exclusivity (§6), successor-key validation, the veto
 // window and cancel (REC-9), the epoch bump (AUTH-6), and the wrap
-// round-trip through the ledger (REC-7).
+// round-trip through the ledger (REC-7). Scoped-grant controls cover both
+// grantee arms: epoch and incarnation invalidation, slot isolation, expiry,
+// cumulative arithmetic and the shielded witness-color boundary.
 
 import { randomBytes } from 'node:crypto';
 
 import { runScenario, step } from './runner.js';
 import { AccountSim } from './sim.js';
 import type { JubjubPoint } from '../wallet/contract.js';
-import { JubjubDevice, jubjubChallenges, JUBJUB_R } from '../wallet/signer.js';
+import {
+  JubjubDevice, jubjubChallenges, JUBJUB_R,
+  JubjubGrantee, K256Grantee, jubjubGrantChallenges, k256GrantChallenges,
+  grantAuthArgs, openingOf, originHash, scopeArgs, scopeDigest, spendScope,
+} from '../wallet/signer.js';
 import {
   recoveryKey,
   matchesRecoveryPk,
@@ -442,4 +448,253 @@ await runScenario('recovery-sim', async () => {
     await publishSession(sim, encSecret, successor);
     assert(sim.ledger().recovery_phi_len === 2n, 'a single recovered device can run a session (1-of-n)');
   }
+
+  step('grant recovery: grants from before and during the window stay dead across epochs');
+  {
+    const initialSecret = newRecoverySecret();
+    const gs = await AccountSim.create({
+      vetoWindowSeconds: WINDOW,
+      initialRecoveryPk: recoveryKey(initialSecret.field).pk,
+      initialWrap: new Uint8Array(64),
+    });
+    const color = new Uint8Array(randomBytes(32));
+    const recipient = new Uint8Array(randomBytes(32));
+    const origin = originHash('https://recovery-grants.example');
+    const scope = spendScope({ withdrawUnshielded: true, color, cap: 100n, perCallCap: 10n });
+    const delegates = [JubjubGrantee.generate(), K256Grantee.generate()];
+    const grants = delegates.map((grantee, i) => ({
+      grantee,
+      id: grantee.grantId(gs.address, origin, BigInt(i)),
+      salt: new Uint8Array(randomBytes(32)),
+      slot: BigInt(i),
+    }));
+    await gs.call('deposit_unshielded', color, 100n);
+
+    const snapshot = () => {
+      const state = gs.ledger();
+      return JSON.stringify({
+        round: state.round, authNonce: state.auth_nonce, epoch: state.device_epoch,
+        count: state.device_count, devices: [...state.devices],
+        grants: [...state.grants], generation: state.grant_generation,
+        balances: [...state.unshielded_balances], inboxCount: state.inbox_count,
+        pending: state.pending_recovery, encKey: state.enc_key,
+      }, (_, value) => typeof value === 'bigint' ? value.toString() : value);
+    };
+    const issue = async (index: number, owner: JubjubDevice) => {
+      const grant = grants[index];
+      await gs.authorised('issue_grant',
+        (ctx, d) => jubjubChallenges.issueGrant(ctx, d.pk, grant.id, scopeDigest(grant.salt, scope)),
+        [grant.id, ...scopeArgs(scope), grant.salt], owner);
+      assert(gs.ledger().grants.lookup(grant.id).epoch === gs.ledger().device_epoch,
+        `grant ${index} receives the contract's current epoch`);
+    };
+    const signedSpend = (index: number) => {
+      const grant = grants[index], record = gs.ledger().grants.lookup(grant.id);
+      const ctx = { contractAddress: gs.address, grantId: grant.id, issuedAt: record.issued_at, grantNonce: record.nonce };
+      const auth = grant.grantee.arm === 'jubjub'
+        ? grant.grantee.sign(jubjubGrantChallenges.withdrawUnshielded(ctx, grant.grantee.pk, color, 5n, recipient))
+        : grant.grantee.sign(k256GrantChallenges.withdrawUnshielded(ctx, grant.grantee.pk, color, 5n, recipient));
+      const opening = openingOf(scope, grant.salt, origin, grant.slot);
+      return (currentOpening = opening) => gs.call(`withdraw_unshielded_with_grant_${auth.arm}`, color, 5n, { bytes: recipient }, ...grantAuthArgs(currentOpening, auth));
+    };
+    const refuse = async (index: number, label: string) => {
+      const before = snapshot();
+      await rejects(signedSpend(index), 'grant epoch stale', label);
+      assert(snapshot() === before, `${label}: all tracked state unchanged`);
+    };
+
+    step('grant slot isolation: revoking one slot leaves the same key’s other slot usable');
+    for (const grantee of delegates) {
+      const entries = [64n, 65n].map(slot => ({
+        slot, salt: new Uint8Array(randomBytes(32)),
+        id: grantee.grantId(gs.address, origin, slot),
+      }));
+      for (const entry of entries) {
+        await gs.authorised('issue_grant',
+          (ctx, d) => jubjubChallenges.issueGrant(ctx, d.pk, entry.id, scopeDigest(entry.salt, scope)),
+          [entry.id, ...scopeArgs(scope), entry.salt]);
+      }
+      const spendSlot = async (entry: typeof entries[number]) => {
+        const record = gs.ledger().grants.lookup(entry.id);
+        const ctx = { contractAddress: gs.address, grantId: entry.id, issuedAt: record.issued_at, grantNonce: record.nonce };
+        const auth = grantee.arm === 'jubjub'
+          ? grantee.sign(jubjubGrantChallenges.withdrawUnshielded(ctx, grantee.pk, color, 5n, recipient))
+          : grantee.sign(k256GrantChallenges.withdrawUnshielded(ctx, grantee.pk, color, 5n, recipient));
+        return gs.call(`withdraw_unshielded_with_grant_${auth.arm}`, color, 5n, { bytes: recipient },
+          ...grantAuthArgs(openingOf(scope, entry.salt, origin, entry.slot), auth));
+      };
+      await gs.authorised('revoke_grant',
+        (ctx, d) => jubjubChallenges.revokeGrant(ctx, d.pk, entries[0].id), [entries[0].id]);
+      const beforeRefusal = snapshot();
+      await rejects(() => spendSlot(entries[0]), 'grant revoked', `${grantee.arm}: revoked slot refuses`);
+      assert(snapshot() === beforeRefusal, `${grantee.arm}: revoked slot changes no state`);
+      const beforeSpend = gs.ledger();
+      const deviceEntries = [...beforeSpend.devices];
+      await spendSlot(entries[1]);
+      const afterSpend = gs.ledger();
+      assert(!afterSpend.grants.lookup(entries[0].id).active && afterSpend.grants.lookup(entries[0].id).nonce === 0n,
+        `${grantee.arm}: sibling spend does not revive or advance the revoked slot`);
+      assert(afterSpend.grants.lookup(entries[1].id).nonce === 1n,
+        `${grantee.arm}: same key's other slot still spends`);
+      assert(afterSpend.auth_nonce === beforeSpend.auth_nonce && afterSpend.device_count === beforeSpend.device_count &&
+        afterSpend.devices.size() === BigInt(deviceEntries.length) && deviceEntries.every(entry => afterSpend.devices.member(entry)),
+        `${grantee.arm}: slot-isolated spend preserves device authority`);
+    }
+
+    step('expiry alone does not permit overwriting an unrevoked record');
+    const expiredSalt = new Uint8Array(randomBytes(32));
+    const expiredId = delegates[0].grantId(gs.address, origin, 250n);
+    const expiredScope = { ...scope, expiresAt: BigInt(gs.now - 60) };
+    await gs.authorised('issue_grant',
+      (ctx, d) => jubjubChallenges.issueGrant(ctx, d.pk, expiredId, scopeDigest(expiredSalt, expiredScope)),
+      [expiredId, ...scopeArgs(expiredScope), expiredSalt]);
+    const beforeExpiredReissue = snapshot();
+    const renewalSalt = new Uint8Array(randomBytes(32));
+    await rejects(() => gs.authorised('issue_grant',
+      (ctx, d) => jubjubChallenges.issueGrant(ctx, d.pk, expiredId, scopeDigest(renewalSalt, scope)),
+      [expiredId, ...scopeArgs(scope), renewalSalt]), 'grant already active',
+      'expired but unrevoked record cannot be reissued');
+    assert(snapshot() === beforeExpiredReissue, 'expired-record reissue refusal changes no state');
+
+    step('cumulative spend arithmetic rejects a Uint<128> wrap with a valid spent opening');
+    const maxU128 = (1n << 128n) - 1n;
+    for (const grantee of delegates) {
+      const wrapColor = new Uint8Array(randomBytes(32));
+      const wrapScope = spendScope({ withdrawUnshielded: true, color: wrapColor, cap: maxU128 });
+      const wrapSalt = new Uint8Array(randomBytes(32));
+      const wrapSlot = 245n;
+      const wrapId = grantee.grantId(gs.address, origin, wrapSlot);
+      await gs.call('deposit_unshielded', wrapColor, maxU128);
+      await gs.authorised('issue_grant',
+        (ctx, d) => jubjubChallenges.issueGrant(ctx, d.pk, wrapId, scopeDigest(wrapSalt, wrapScope)),
+        [wrapId, ...scopeArgs(wrapScope), wrapSalt]);
+      const spend = async (amount: bigint, spentPrev: bigint) => {
+        const record = gs.ledger().grants.lookup(wrapId);
+        const ctx = { contractAddress: gs.address, grantId: wrapId, issuedAt: record.issued_at, grantNonce: record.nonce };
+        const auth = grantee.arm === 'jubjub'
+          ? grantee.sign(jubjubGrantChallenges.withdrawUnshielded(ctx, grantee.pk, wrapColor, amount, recipient))
+          : grantee.sign(k256GrantChallenges.withdrawUnshielded(ctx, grantee.pk, wrapColor, amount, recipient));
+        return gs.call(`withdraw_unshielded_with_grant_${auth.arm}`, wrapColor, amount, { bytes: recipient },
+          ...grantAuthArgs({ ...openingOf(wrapScope, wrapSalt, origin, wrapSlot), spentPrev }, auth));
+      };
+      // Establish the near-boundary commitment through a successful spend,
+      // so the next refusal cannot be attributed to a forged spent opening.
+      await spend(maxU128 - 1n, 0n);
+      assert(gs.ledger().grants.lookup(wrapId).nonce === 1n && gs.ledger().unshielded_balances.lookup(wrapColor) === 1n,
+        `${grantee.arm}: legitimate near-maximum spend establishes the committed total`);
+      const beforeWrap = snapshot();
+      await rejects(() => spend(2n, maxU128 - 1n), 'cumulative cap exceeded',
+        `${grantee.arm}: cumulative arithmetic rejects overflow before narrowing`);
+      assert(snapshot() === beforeWrap, `${grantee.arm}: cumulative wrap refusal changes no state`);
+    }
+
+    step('shielded grant scope checks the witness coin color, not just its lookup selector');
+    for (const grantee of delegates) {
+      const admittedColor = new Uint8Array(randomBytes(32));
+      const foreignCoin = {
+        nonce: new Uint8Array(randomBytes(32)), color: new Uint8Array(randomBytes(32)),
+        value: 10n, mt_index: 0n,
+      };
+      const foreignScope = spendScope({
+        withdrawShielded: true, withdrawShieldedToContract: true,
+        color: admittedColor, cap: 100n, readPkHash: new Uint8Array(randomBytes(32)),
+      });
+      const foreignSalt = new Uint8Array(randomBytes(32));
+      const foreignSlot = 244n;
+      const foreignId = grantee.grantId(gs.address, origin, foreignSlot);
+      await gs.authorised('issue_grant',
+        (ctx, d) => jubjubChallenges.issueGrant(ctx, d.pk, foreignId, scopeDigest(foreignSalt, foreignScope)),
+        [foreignId, ...scopeArgs(foreignScope), foreignSalt]);
+      // Deliberately supply an adversarial wallet-local witness. This tests
+      // the circuit's object guard, before any shielded custody operation.
+      const previousPrivateState = gs.privateState;
+      gs.privateState = {
+        ...previousPrivateState,
+        coins: { ...previousPrivateState.coins, [Buffer.from(admittedColor).toString('hex')]: {
+          nonceHex: Buffer.from(foreignCoin.nonce).toString('hex'),
+          colorHex: Buffer.from(foreignCoin.color).toString('hex'),
+          value: foreignCoin.value.toString(), mtIndex: foreignCoin.mt_index.toString(),
+        } },
+      };
+      try {
+        for (const toContract of [false, true]) {
+          const record = gs.ledger().grants.lookup(foreignId);
+          const ctx = { contractAddress: gs.address, grantId: foreignId, issuedAt: record.issued_at, grantNonce: record.nonce };
+          const changeEntry = new Uint8Array(randomBytes(192));
+          const encPk = gs.ledger().enc_key;
+          const auth = grantee.arm === 'jubjub'
+            ? grantee.sign((toContract ? jubjubGrantChallenges.withdrawShieldedToContract : jubjubGrantChallenges.withdrawShielded)(
+              ctx, grantee.pk, recipient, admittedColor, 5n, changeEntry, encPk, foreignCoin))
+            : grantee.sign((toContract ? k256GrantChallenges.withdrawShieldedToContract : k256GrantChallenges.withdrawShielded)(
+              ctx, grantee.pk, recipient, admittedColor, 5n, changeEntry, encPk, foreignCoin));
+          const circuit = `withdraw_shielded${toContract ? '_to_contract' : ''}_with_grant_${auth.arm}`;
+          const beforeForeign = snapshot();
+          await rejects(() => gs.call(circuit, { bytes: recipient }, admittedColor, 5n, changeEntry, encPk,
+            ...grantAuthArgs(openingOf(foreignScope, foreignSalt, origin, foreignSlot), auth)),
+          'scope object mismatch', `${circuit}: foreign witness color refuses`);
+          assert(snapshot() === beforeForeign, `${circuit}: foreign witness refusal changes no state`);
+        }
+      } finally {
+        gs.privateState = previousPrivateState;
+      }
+    }
+
+    await issue(0, gs.device);
+    const successor = JubjubDevice.generate();
+    const nextSecret = newRecoverySecret();
+    await gs.recoverSubmit(initialSecret.field, successor, recoveryKey(nextSecret.field).pk, BigInt(gs.now));
+    await issue(1, gs.device);
+    assert(gs.ledger().pending_recovery, 'second grant was issued while recovery was pending');
+    const originalGrantEpoch = gs.ledger().device_epoch;
+    const preFinalise = gs.ledger();
+    const originalDeviceEntries = [...preFinalise.devices];
+    gs.advanceTime(Number(WINDOW) + 60);
+    await gs.call('recover_finalise');
+    gs.adoptRecoveredDevice(successor);
+    assert(gs.ledger().auth_nonce === preFinalise.auth_nonce + 1n, 'recovery advances the device nonce once');
+    assert(gs.ledger().device_epoch === originalGrantEpoch + 1n, 'recovery advances the grant-invalidating epoch');
+    assert(originalDeviceEntries.every(entry => !gs.ledger().devices.member(entry)), 'recovery retires every previous device entry');
+    for (let i = 0; i < grants.length; i++) await refuse(i, `grant ${i} cannot spend after recovery`);
+
+    // A second recovery must not make an un-reissued old record eligible.
+    const finalDevice = JubjubDevice.generate();
+    await gs.recoverSubmit(nextSecret.field, finalDevice, recoveryKey(newRecoverySecret().field).pk, BigInt(gs.now));
+    gs.advanceTime(Number(WINDOW) + 60);
+    await gs.call('recover_finalise');
+    gs.adoptRecoveredDevice(finalDevice);
+    assert(gs.ledger().devices.size() === 1n && gs.ledger().device_count === 1n &&
+      gs.ledger().devices.member(finalDevice.entryAt(gs.address, gs.ledger().device_epoch, 0n)),
+      'second recovery retains exactly its authorised successor');
+    for (let i = 0; i < grants.length; i++) {
+      await refuse(i, `grant ${i} cannot revive at a later epoch`);
+      assert(gs.ledger().grants.lookup(grants[i].id).epoch === originalGrantEpoch,
+        `grant ${i} retains its contract-assigned issuance epoch`);
+    }
+
+    for (let i = 0; i < grants.length; i++) {
+      const grant = grants[i];
+      const oldCall = signedSpend(i);
+      const oldIssuedAt = gs.ledger().grants.lookup(grant.id).issued_at;
+      await gs.authorised('revoke_grant', (ctx, d) => jubjubChallenges.revokeGrant(ctx, d.pk, grant.id), [grant.id], finalDevice);
+      grant.salt = new Uint8Array(randomBytes(32));
+      await issue(i, finalDevice);
+      assert(gs.ledger().grants.lookup(grant.id).issued_at > oldIssuedAt, 'successor re-issuance is a new incarnation');
+      const beforeOld = snapshot();
+      await rejects(() => oldCall(openingOf(scope, grant.salt, origin, grant.slot)), /invalid grant signature|range error/,
+        'pre-recovery signature cannot spend a new incarnation even with its fresh opening');
+      assert(snapshot() === beforeOld, 'old-incarnation refusal changes no tracked state');
+      const before = gs.ledger();
+      const deviceEntries = [...before.devices];
+      await signedSpend(i)();
+      const after = gs.ledger();
+      assert(after.grants.lookup(grant.id).nonce === 1n, 'fresh successor-issued grant spends once');
+      assert(after.auth_nonce === before.auth_nonce && after.device_count === before.device_count,
+        'grant spend preserves the device nonce and count');
+      assert(deviceEntries.length === Number(after.devices.size()) && deviceEntries.every(entry => after.devices.member(entry)),
+        'grant spend preserves every device entry');
+      assert(after.round === before.round + 1n && after.unshielded_balances.lookup(color) === before.unshielded_balances.lookup(color) - 5n,
+        'fresh grant advances only its spend state and account round');
+    }
+  }
+
 });

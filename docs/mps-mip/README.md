@@ -66,24 +66,18 @@ to canonical pointers. The older custody mirror is non-canonical.
 ## Working draft and evidence notes
 
 - `mips/mip-xxxx-scoped-grants.md` — **Scoped Grants and dApp Connection
-  for Custody Accounts (C10, C11, C12, C23)**: the successor extension
-  MIP-0013 reserves behind `require_authorised()`. A grant is a
-  contract-maintained record admitting one grantee key of a registered
-  scheme to a bounded subset of the asset-facing circuits (operations,
-  one color, per-call and cumulative caps, recipient pin, expiry),
-  enforced in-circuit and revocable from chain state; the connection
-  ceremony is a redirect to an authoriser carrying a canonical
-  `GrantRequest`, passkey consent, one device-gated `issue_grant`, and a
-  return leg the dApp verifies against chain state. Read access is the
-  MIP-0012 viewing capability sealed to a dApp key and recorded
-  declaratively. Requires a `spec_version = 2` redeploy. Reviewed
-  through four lenses; the open items for editors and the Foundation
-  (co-author, companion erratum wording, salt and commitment rulings)
-  are collected in an editors' note at the head of the file. Co-authored
-  with the Midnight Foundation. Evidence is on `main`: the reference
-  contract at `spec_version = 2` (`contract/GRANTS-E1.md` to
-  `GRANTS-E3.md`) carries the roster on both grantee arms and the seam
-  is exercised on node.
+  for Custody Accounts (C10, C11, C12, C23)**: a self-contained Draft
+  for bounded grant authority and its connection ceremony. Section 12
+  defines combined conformance with MIP-0013, preserving device rules
+  and explicitly adapting AUTH-1/2 for grant calls. It does not require
+  a separately merged parent amendment. The reference schema is
+  `spec_version = 3`, including optional immediate-caller restrictions;
+  MIP-0030 supplies the ECDSA/WebAuthn requirements. Historical v2,
+  caller-bound v3, and profiled P-256 evidence are distinguished in the
+  draft. Independent review and uncompleted conformance/ceremony work
+  remain Path to Active items. The first review destination is Passport;
+  publication to the canonical MIP repository is a subsequent step.
+
 - Caller-bound grants are implemented in merged #176 using `kernel.caller()`
   on Compact 0.35, with a fabricated-caller proof refused at node admission.
   The extension uses schema v3 and retains a separate combined-build/client-ABI/P-256 caller validation obligation;
@@ -92,7 +86,9 @@ to canonical pointers. The older custody mirror is non-canonical.
 ## Process
 
 Submissions follow the upstream MIP-0001 lifecycle: Draft status on
-entry, editor-assigned numbers, and a separate submission issue. A MIP
+entry and editor-assigned numbers. A separate acceptance-request issue
+belongs to the later Draft-to-Proposed transition, not initial Draft
+submission. A MIP
 addressing an MPS is listed in that MPS's header `MIP` field rather
 than in the MIP's `Requires` line, which is reserved for MIP-on-MIP
 dependencies. Upstream draft PRs use the literal filename
