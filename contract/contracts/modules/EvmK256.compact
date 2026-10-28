@@ -67,7 +67,7 @@ module EvmK256 {
   // is the kind's device tag. Which fields each payload form uses (the rest
   // are not hashed and not shown; see "Enrolment kinds"):
   //   address         address, key2 = the target's blind
-  //   ed25519_base58  key = the 32-byte RFC 8032 key, key2 = the target's blind
+  //   ed25519  key = the 32-byte RFC 8032 key, key2 = the target's blind
   //   jubjub          key = x_le, key2 = y_le
   //   k256            key = x_le, key2 = y_le, envelope
   //   passkey         key = x_le, key2 = y_le, rp_id_hash, origin (21 bytes)
@@ -83,7 +83,7 @@ module EvmK256 {
 
   // A grantee: the same key fields under the kind's grant-id tag, plus the
   // origin the grant id binds and the slot:
-  //   address, ed25519_base58  label (32-byte zero-padded site label)
+  //   address, ed25519  label (32-byte zero-padded site label)
   //   passkey                  origin (21 bytes; the RP is a scope field)
   //   k256, jubjub             origin_hash (shown as siteLabelHash)
   export struct EvmK256GranteeDescriptor {
@@ -116,7 +116,7 @@ module EvmK256 {
   }
 
   // A descriptor's key, second key and origin, and the base58 inputs of the
-  // key an ed25519_base58 kind shows.
+  // key an ed25519 kind shows.
   export struct EvmK256DescriptorHint {
     key:    Vector<32, Uint<8>>;
     key2:   Vector<32, Uint<8>>;
@@ -125,7 +125,7 @@ module EvmK256 {
   }
 
   // A grantee descriptor's key, second key, origin and site label, and the
-  // base58 inputs of the key an ed25519_base58 kind shows.
+  // base58 inputs of the key an ed25519 kind shows.
   export struct EvmK256GranteeHint {
     key:    Vector<32, Uint<8>>;
     key2:   Vector<32, Uint<8>>;
@@ -502,11 +502,17 @@ module EvmK256 {
     return keccak256<[Bytes<21>, Bytes<49>]>([pad(21, "This site labels it: "), Bytes[...t]]);
   }
 
-  // keccak256 of an ed25519_base58 kind's `string publicKey`: the key's
-  // base58 text, 44 bytes left-aligned and space-padded, whose digits
-  // base58_text_32 checks against the key's bytes `key`.
-  circuit evm_k256_base58_key_hash(key: Vector<32, Uint<8>>, h: EvmK256Base58Hint): Bytes<32> {
-    return keccak256<Bytes<44>>(Bytes[...base58_text_32(key, h.digits, h.carry, h.low, h.top)]);
+  // keccak256 of an Ed25519 kind's publicKey text: base58 (44 padded
+  // bytes), the same text with the ed25519: prefix, or 64 lowercase hex
+  // characters. Every form checks the base58 hint against the key.
+  export circuit evm_k256_key_text_hash(key: Vector<32, Uint<8>>, h: EvmK256Base58Hint, form: EvmK256KeyText): Bytes<32> {
+    const ED25519_KEY_PREFIX = pad(8, "ed25519:");
+    // Also check hints for hex and for non-Ed25519 descriptor fillers.
+    const text = Bytes[...base58_text_32(key, h.digits, h.carry, h.low, h.top)];
+    const base58_hash = keccak256<Bytes<44>>(text);
+    const prefixed_base58_hash = keccak256<[Bytes<8>, Bytes<44>]>([ED25519_KEY_PREFIX, text]);
+    const hex_hash = keccak256<Bytes<64>>(Bytes[...hex_text_32(Bytes[...key])]);
+    return form == EvmK256KeyText.prefixed_base58 ? prefixed_base58_hash : form == EvmK256KeyText.hex ? hex_hash : base58_hash;
   }
 
   // ── Enrolment kinds ───────────────────────────────────────────────────────
@@ -534,18 +540,22 @@ module EvmK256 {
   // recipes of its entry and its grant id:
   //   address: wallet, privacySalt; the grantee adds siteLabel and slot;
   //     entry and grant id by class w52 (an address and the blind)
-  //   ed25519_base58: publicKey (the key's base58 text), privacySalt; the
+  //   ed25519: publicKey (the kind's selected key text), privacySalt; the
   //     grantee adds siteLabel and slot; by the ed25519 class
   //   jubjub: x, y; the grantee adds siteLabelHash and slot; by w64
   //   k256: x, y, envelope; the grantee adds siteLabelHash and slot; by w65
   //   passkey: x, y, origin, passkeyRpHash; the grantee has x, y, origin and
   //     slot; the entry by w117, the grant id by w64
-  export enum EvmK256Payload { address, ed25519_base58, jubjub, k256, passkey }
+  export enum EvmK256Payload { address, ed25519, jubjub, k256, passkey }
+
+  // Presentation does not alter the identity or descriptor derivation.
+  export enum EvmK256KeyText { base58, prefixed_base58, hex }
 
   export struct EvmK256Kind {
     device:             Bytes<32>;
     grant_id:           Bytes<32>;
     payload:            EvmK256Payload;
+    key_text:           EvmK256KeyText;
     device_type:        Bytes<32>;
     device_scheme:      Bytes<32>;
     grantee_type:       Bytes<32>;
@@ -559,7 +569,7 @@ module EvmK256 {
   // evm_k256: an Ethereum address and its privacy salt (EvmDevice, EvmGrantee).
   pure circuit evm_k256_kind_evm_k256(): EvmK256Kind {
     return EvmK256Kind {
-      device: device_tag_evm_k256(), grant_id: grant_id_tag_evm_k256(), payload: EvmK256Payload.address,
+      device: device_tag_evm_k256(), grant_id: grant_id_tag_evm_k256(), payload: EvmK256Payload.address, key_text: EvmK256KeyText.base58,
       // keccak256("EvmDevice(string scheme,address wallet,bytes32 privacySalt)")
       device_type:
         Bytes[0x36, 0xfe, 0xd4, 0xcb, 0x1f, 0x99, 0x65, 0x85, 0xfb, 0x40, 0x3e, 0x01, 0xa6, 0x15, 0xc8, 0x54,
@@ -598,7 +608,7 @@ module EvmK256 {
   // sol_ed25519: a Solana key, shown as its base58 text, and its privacy salt (SolanaDevice, SolanaGrantee).
   pure circuit evm_k256_kind_sol_ed25519(): EvmK256Kind {
     return EvmK256Kind {
-      device: device_tag_sol_ed25519(), grant_id: grant_id_tag_sol_ed25519(), payload: EvmK256Payload.ed25519_base58,
+      device: device_tag_sol_ed25519(), grant_id: grant_id_tag_sol_ed25519(), payload: EvmK256Payload.ed25519, key_text: EvmK256KeyText.base58,
       // keccak256("SolanaDevice(string scheme,string publicKey,bytes32 privacySalt)")
       device_type:
         Bytes[0xa0, 0xfa, 0xaf, 0x93, 0x61, 0x95, 0xaf, 0x5c, 0x3a, 0x98, 0xac, 0xe1, 0x04, 0x09, 0x77, 0x0e,
@@ -637,7 +647,7 @@ module EvmK256 {
   // jubjub: a JubJub key (JubjubDevice, JubjubGrantee).
   pure circuit evm_k256_kind_jubjub(): EvmK256Kind {
     return EvmK256Kind {
-      device: device_tag_jubjub(), grant_id: grant_id_tag_jubjub(), payload: EvmK256Payload.jubjub,
+      device: device_tag_jubjub(), grant_id: grant_id_tag_jubjub(), payload: EvmK256Payload.jubjub, key_text: EvmK256KeyText.base58,
       // keccak256("JubjubDevice(string scheme,bytes32 x,bytes32 y)")
       device_type:
         Bytes[0x71, 0xec, 0xac, 0xa9, 0x7f, 0xa4, 0x28, 0x46, 0x5b, 0x09, 0xab, 0x62, 0xcd, 0x92, 0x2a, 0x24,
@@ -676,7 +686,7 @@ module EvmK256 {
   // k256: a secp256k1 key and its envelope (K256Device, K256Grantee).
   pure circuit evm_k256_kind_k256(): EvmK256Kind {
     return EvmK256Kind {
-      device: device_tag_k256(), grant_id: grant_id_tag_k256(), payload: EvmK256Payload.k256,
+      device: device_tag_k256(), grant_id: grant_id_tag_k256(), payload: EvmK256Payload.k256, key_text: EvmK256KeyText.base58,
       // keccak256("K256Device(string scheme,bytes32 x,bytes32 y,string envelope)")
       device_type:
         Bytes[0xea, 0xa4, 0x75, 0x6a, 0x21, 0x34, 0xa5, 0x49, 0x43, 0xc8, 0x85, 0xa6, 0x25, 0x38, 0x8d, 0xe5,
@@ -715,7 +725,7 @@ module EvmK256 {
   // p256: a passkey: its P-256 key and WebAuthn policy (PasskeyDevice, PasskeyGrantee).
   pure circuit evm_k256_kind_p256(): EvmK256Kind {
     return EvmK256Kind {
-      device: device_tag_p256(), grant_id: grant_id_tag_p256(), payload: EvmK256Payload.passkey,
+      device: device_tag_p256(), grant_id: grant_id_tag_p256(), payload: EvmK256Payload.passkey, key_text: EvmK256KeyText.base58,
       // keccak256("PasskeyDevice(string scheme,bytes32 x,bytes32 y,string origin,bytes32 passkeyRpHash)")
       device_type:
         Bytes[0x54, 0x93, 0x36, 0xaf, 0xa8, 0x18, 0x07, 0xaa, 0x56, 0x0e, 0x9a, 0x9a, 0xbf, 0xc4, 0x37, 0xbe,
@@ -798,7 +808,7 @@ module EvmK256 {
   // descriptor's tag) and computes every payload form, keeping the one of
   // the kind's form.
 
-  // An ed25519_base58 target is a Curve25519Point: the descriptor module's
+  // An ed25519 target is a Curve25519Point: the descriptor module's
   // ed25519 class refuses the identity (A != O), checks the byte inputs
   // `ed_bytes` (the key's 32-byte RFC 8032 encoding) and `ed_x` (x
   // little-endian) against the point once per call, and returns the key and
@@ -808,7 +818,7 @@ module EvmK256 {
   // non-identity point, with its own inputs); its results are discarded. The
   // point is an inline argument, not a struct member (compactc 0.35.0 cannot
   // emit an exported struct holding a Curve25519Point); `d.key` is unused for
-  // an ed25519_base58 target.
+  // an ed25519 target.
   // compact row optimization | Ed25519 descriptor key from checked bytes | -75% rows
   export pure circuit evm_k256_ed25519_device_target(
     self_addr: ContractAddress, d: EvmK256Descriptor, ed_pk: Curve25519Point, ed_bytes: Vector<32, Uint<8>>, ed_x: Vector<32, Uint<8>>,
@@ -816,7 +826,7 @@ module EvmK256 {
   ): [Bytes<32>, Bytes<32>] {
     const f = evm_k256_device_kind(d.tag).payload;
     return derive_descriptor_entry_ed25519(
-      f == EvmK256Payload.ed25519_base58 ? d.tag : evm_k256_kind_of(EvmK256Payload.ed25519_base58).device,
+      f == EvmK256Payload.ed25519 ? d.tag : evm_k256_kind_of(EvmK256Payload.ed25519).device,
       self_addr, ed_pk, ed_bytes, ed_x, d.key2, epoch, counter);
   }
 
@@ -829,12 +839,12 @@ module EvmK256 {
   ): [Bytes<32>, Bytes<32>] {
     const f = evm_k256_grantee_kind(g.tag).payload;
     return derive_descriptor_grant_id_ed25519(
-      f == EvmK256Payload.ed25519_base58 ? g.tag : evm_k256_kind_of(EvmK256Payload.ed25519_base58).grant_id,
+      f == EvmK256Payload.ed25519 ? g.tag : evm_k256_kind_of(EvmK256Payload.ed25519).grant_id,
       self_addr, ed_pk, ed_bytes, ed_x, g.key2, oh, g.slot);
   }
 
   // hashStruct of the nested <Kind>Device member. `ed_bytes` is the bytes of
-  // the key an ed25519_base58 kind shows: in the circuits, the encoding the
+  // the key an ed25519 kind shows: in the circuits, the encoding the
   // ed25519 class checked against the point (evm_k256_ed25519_device_target's
   // `ed_bytes`).
   export pure circuit evm_k256_device_descriptor_hash(
@@ -852,20 +862,20 @@ module EvmK256 {
     const h_address = keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>]>([
       k.device_type, k.device_scheme, pad(12, ""), d.address, d.key2]);
     assert(f != EvmK256Payload.k256 || d.envelope <= 1, "evm_k256: not a k256 envelope");
-    // The ed25519_base58 form (scheme, publicKey, privacySalt) and the jubjub
+    // The ed25519 form (scheme, publicKey, privacySalt) and the jubjub
     // form (scheme, x, y) share one shape; an Ed25519 key is shown in base58,
     // JubJub coordinates little-endian. The base58 text is checked for every
     // target (for a target of any other form, the filler key's), so every
     // input of the call is checked.
-    const ed_text = evm_k256_base58_key_hash(ed_bytes, h.b58);
+    const ed_text = evm_k256_key_text_hash(ed_bytes, h.b58, k.key_text);
     const h_pair = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([
-      k.device_type, k.device_scheme, f == EvmK256Payload.ed25519_base58 ? ed_text : d.key, d.key2]);
+      k.device_type, k.device_scheme, f == EvmK256Payload.ed25519 ? ed_text : d.key, d.key2]);
     const h_k1 = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([
       k.device_type, k.device_scheme, xb, yb, evm_k256_envelope_label(d.envelope)]);
     const h_r1 = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>]>([
       k.device_type, k.device_scheme, xb, yb, keccak256<Bytes<21>>(d.origin), d.rp_id_hash]);
     return f == EvmK256Payload.address ? h_address
-         : (f == EvmK256Payload.ed25519_base58 || f == EvmK256Payload.jubjub) ? h_pair
+         : (f == EvmK256Payload.ed25519 || f == EvmK256Payload.jubjub) ? h_pair
          : f == EvmK256Payload.k256 ? h_k1 : h_r1;
   }
 
@@ -873,7 +883,7 @@ module EvmK256 {
   // payload form. Every form's recipe is derived (a circuit has no branches);
   // the forms that do not match are fed a registered tag of their own
   // (evm_k256_kind_of), so the module's tag asserts hold, and their results
-  // are discarded. `ed_entry` is an ed25519_base58 target's entry
+  // are discarded. `ed_entry` is an ed25519 target's entry
   // (evm_k256_ed25519_device_target).
   export pure circuit evm_k256_descriptor_entry(
     self_addr: ContractAddress, d: EvmK256Descriptor, ed_entry: Bytes<32>, epoch: Uint<32>, counter: Uint<64>
@@ -891,25 +901,25 @@ module EvmK256 {
     const e117 = derive_descriptor_entry_w117(
       f == EvmK256Payload.passkey ? d.tag : evm_k256_kind_of(EvmK256Payload.passkey).device,
       self_addr, d.key, d.key2, d.rp_id_hash, d.origin, epoch, counter);
-    return f == EvmK256Payload.address ? e52 : f == EvmK256Payload.ed25519_base58 ? ed_entry
+    return f == EvmK256Payload.address ? e52 : f == EvmK256Payload.ed25519 ? ed_entry
          : f == EvmK256Payload.jubjub ? e64 : f == EvmK256Payload.k256 ? e65 : e117;
   }
 
   // The origin_hash a grantee's grant id binds: from the site label (address
-  // and ed25519_base58 forms), from the exact origin (passkey), or the
+  // and ed25519 forms), from the exact origin (passkey), or the
   // labelled origin_hash itself (jubjub, k256).
   export pure circuit evm_k256_grantee_origin_hash(g: EvmK256GranteeDescriptor): Bytes<32> {
     const f = evm_k256_grantee_kind(g.tag).payload;
     const from_label = derive_grant_origin_hash_label(g.label);
     const from_origin = derive_grant_origin_hash_origin(g.origin);
-    return (f == EvmK256Payload.address || f == EvmK256Payload.ed25519_base58) ? from_label
+    return (f == EvmK256Payload.address || f == EvmK256Payload.ed25519) ? from_label
          : f == EvmK256Payload.passkey ? from_origin : g.origin_hash;
   }
 
   // The grantee's grant id, by the grant-id recipe of the kind's payload
   // form (a passkey's binds its key only, as JubJub's does, under its own
   // tag). `oh` is the grantee's origin hash (evm_k256_grantee_origin_hash)
-  // and `ed_id` an ed25519_base58 grantee's grant id
+  // and `ed_id` an ed25519 grantee's grant id
   // (evm_k256_ed25519_grantee_target).
   export pure circuit evm_k256_grantee_grant_id(
     self_addr: ContractAddress, g: EvmK256GranteeDescriptor, oh: Bytes<32>, ed_id: Bytes<32>
@@ -924,12 +934,12 @@ module EvmK256 {
     const i65 = derive_descriptor_grant_id_w65(
       f == EvmK256Payload.k256 ? g.tag : evm_k256_kind_of(EvmK256Payload.k256).grant_id,
       self_addr, g.key, g.key2, g.envelope, oh, g.slot);
-    return f == EvmK256Payload.address ? i52 : f == EvmK256Payload.ed25519_base58 ? ed_id
+    return f == EvmK256Payload.address ? i52 : f == EvmK256Payload.ed25519 ? ed_id
          : f == EvmK256Payload.k256 ? i65 : i64;
   }
 
   // hashStruct of the nested <Kind>Grantee member. `ed_bytes` is the bytes of
-  // the key an ed25519_base58 kind shows: in the circuits, the encoding the
+  // the key an ed25519 kind shows: in the circuits, the encoding the
   // ed25519 class checked against the point (evm_k256_ed25519_grantee_target's
   // `ed_bytes`).
   export pure circuit evm_k256_grantee_descriptor_hash(
@@ -938,26 +948,26 @@ module EvmK256 {
     const k = evm_k256_grantee_kind(g.tag);
     const f = k.payload;
     const [text, label_ok] = label_text(g.label, h.label);
-    assert(!(f == EvmK256Payload.address || f == EvmK256Payload.ed25519_base58) || label_ok, "evm_k256: not a site label");
+    assert(!(f == EvmK256Payload.address || f == EvmK256Payload.ed25519) || label_ok, "evm_k256: not a site label");
     const origin_visible = visible_21(g.origin, h.origin);
     assert(f != EvmK256Payload.passkey || origin_visible, "evm_k256: the passkey origin is not visible ASCII");
     assert(f != EvmK256Payload.k256 || g.envelope <= 1, "evm_k256: not a k256 envelope");
     const label_hash = keccak256<Bytes<32>>(text);
     // checked for every grantee (for a grantee of any other form, the filler key's)
-    const ed_text = evm_k256_base58_key_hash(ed_bytes, h.b58);
+    const ed_text = evm_k256_key_text_hash(ed_bytes, h.b58, k.key_text);
     const xb = rev32(g.key, h.key);
     const yb = rev32(g.key2, h.key2);
     const h_address = keccak256<[Bytes<32>, Bytes<32>, Bytes<12>, Bytes<20>, Bytes<32>, Bytes<32>, Bytes<31>, Bytes<1>]>([
       k.grantee_type, k.grantee_scheme, pad(12, ""), g.address, g.key2,
       label_hash, pad(31, ""), u8b(g.slot)]);
-    // The ed25519_base58 form (scheme, publicKey, privacySalt, siteLabel,
+    // The ed25519 form (scheme, publicKey, privacySalt, siteLabel,
     // slot), the jubjub form (scheme, x, y, siteLabelHash, slot) and the
     // passkey form (scheme, x, y, origin, slot) share one shape.
     const h_six = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<31>, Bytes<1>]>([
       k.grantee_type, k.grantee_scheme,
-      f == EvmK256Payload.passkey ? xb : f == EvmK256Payload.ed25519_base58 ? ed_text : g.key,
+      f == EvmK256Payload.passkey ? xb : f == EvmK256Payload.ed25519 ? ed_text : g.key,
       f == EvmK256Payload.passkey ? yb : g.key2,
-      f == EvmK256Payload.ed25519_base58 ? label_hash : f == EvmK256Payload.jubjub ? g.origin_hash : keccak256<Bytes<21>>(g.origin),
+      f == EvmK256Payload.ed25519 ? label_hash : f == EvmK256Payload.jubjub ? g.origin_hash : keccak256<Bytes<21>>(g.origin),
       pad(31, ""), u8b(g.slot)]);
     const h_k1 = keccak256<[Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<32>, Bytes<31>, Bytes<1>]>([
       k.grantee_type, k.grantee_scheme, xb, yb, evm_k256_envelope_label(g.envelope),

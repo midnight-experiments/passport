@@ -75,7 +75,7 @@ export function evmK256GrantSeamHint(
 // ── Ed25519 keys ────────────────────────────────────────────────────────────
 
 /** The three arguments the four descriptor circuits take beside a
- *  descriptor: an ed25519_base58 target's key as its Curve25519Point, the
+ *  descriptor: an ed25519 target's key as its Curve25519Point, the
  *  key's 32 encoded bytes and the point's x-coordinate as 32 little-endian
  *  bytes (ed25519KeyInputs; the circuit checks both against the point). */
 export type EvmK256Ed25519Args = [point: { x: bigint; y: bigint }, pkBytes: bigint[], pkX: bigint[]];
@@ -88,15 +88,15 @@ export const EVM_K256_ED25519_FILLER_ARGS: EvmK256Ed25519Args = (() => {
   return ed25519ArgsOf(ed25519KeyInputs({ x, y }));
 })();
 /** Whether a descriptor input (a device's or a grantee's) names a kind of
- *  the ed25519_base58 form by its tag. */
+ *  the ed25519 form by its tag. */
 const isEd25519Base58 = (input: { tag: Uint8Array }): boolean =>
-  (evmK256KindOf('device', input.tag) ?? evmK256KindOf('grant-id', input.tag))?.payload === 'ed25519_base58';
-/** The Ed25519 arguments for a descriptor input: an ed25519_base58 target's
+  (evmK256KindOf('device', input.tag) ?? evmK256KindOf('grant-id', input.tag))?.payload === 'ed25519';
+/** The Ed25519 arguments for a descriptor input: an ed25519 target's
  *  key (its 32-byte encoding in `key`), the filler key otherwise. */
 export function ed25519Args(input: EvmK256DescriptorInput | EvmK256GranteeInput): EvmK256Ed25519Args {
   return isEd25519Base58(input) ? ed25519ArgsOf(ed25519KeyInputs(new Uint8Array(input.key))) : EVM_K256_ED25519_FILLER_ARGS;
 }
-/** The key bytes the descriptor circuits show for an ed25519_base58 kind (the
+/** The key bytes the descriptor circuits show for an ed25519 kind (the
  *  checked `ed_bytes` they are passed): the target's key, or the filler
  *  key's for a target of any other form (shown nowhere: that form is not
  *  selected). */
@@ -127,7 +127,7 @@ export function evmK256CoinHint(amount: bigint, coinValue: bigint, coinMtIndex: 
 // ── Descriptors ─────────────────────────────────────────────────────────────
 
 /** A device descriptor (`EvmK256DescriptorHint`): its bytes and the base58
- *  inputs of the key an ed25519_base58 kind shows (ed25519KeyOf). */
+ *  inputs of the key an ed25519 kind shows (ed25519KeyOf). */
 export const evmK256DescriptorHint = (d: EvmK256DescriptorInput) =>
   ({ key: bytesHint(d.key), key2: bytesHint(d.key2), origin: bytesHint(d.origin), b58: evmK256Base58Hint(bytesOfHint(ed25519KeyOf(d))) });
 

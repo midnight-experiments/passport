@@ -62,19 +62,25 @@ const SCOPE: [string, string][] = [
 
 /** How a kind's key is shown and derived (the contract's EvmK256Payload,
  *  in its order). */
-export type EvmK256Payload = 'address' | 'ed25519_base58' | 'jubjub' | 'k256' | 'passkey';
-export const EVM_K256_PAYLOADS: readonly EvmK256Payload[] = ['address', 'ed25519_base58', 'jubjub', 'k256', 'passkey'];
+export type EvmK256Payload = 'address' | 'ed25519' | 'jubjub' | 'k256' | 'passkey';
+export const EVM_K256_PAYLOADS: readonly EvmK256Payload[] = ['address', 'ed25519', 'jubjub', 'k256', 'passkey'];
+
+export type EvmK256KeyText = 'base58' | 'prefixed_base58' | 'hex';
+export const EVM_K256_KEY_TEXTS: readonly EvmK256KeyText[] = ['base58', 'prefixed_base58', 'hex'];
+export const EVM_K256_ED25519_KEY_PREFIX = 'ed25519:';
 
 /** One enrolment kind: its payload form and its nested typed-data types. */
 export interface EvmK256Kind {
   readonly payload: EvmK256Payload;
+  /** The Ed25519 publicKey text; omitted means base58. */
+  readonly keyText?: EvmK256KeyText;
   readonly deviceType: string;
   readonly granteeType: string;
 }
 
 export const EVM_K256_KINDS = {
   evm_k256: { payload: 'address', deviceType: 'EvmDevice', granteeType: 'EvmGrantee' },
-  sol_ed25519: { payload: 'ed25519_base58', deviceType: 'SolanaDevice', granteeType: 'SolanaGrantee' },
+  sol_ed25519: { payload: 'ed25519', deviceType: 'SolanaDevice', granteeType: 'SolanaGrantee' },
   jubjub: { payload: 'jubjub', deviceType: 'JubjubDevice', granteeType: 'JubjubGrantee' },
   k256: { payload: 'k256', deviceType: 'K256Device', granteeType: 'K256Grantee' },
   p256: { payload: 'passkey', deviceType: 'PasskeyDevice', granteeType: 'PasskeyGrantee' },
@@ -90,8 +96,8 @@ export const EVM_K256_KIND_SCHEMES: readonly EvmK256KindScheme[] = Object.keys(E
 const PAYLOADS: Readonly<Record<EvmK256Payload, {
   deviceMembers: [string, string][];
   granteeMembers: [string, string][];
-  device: (d: EvmK256DescriptorInput) => Record<string, unknown>;
-  grantee: (g: EvmK256GranteeInput, label: () => string, slot: string) => Record<string, unknown>;
+  device: (d: EvmK256DescriptorInput, keyText?: EvmK256KeyText) => Record<string, unknown>;
+  grantee: (g: EvmK256GranteeInput, label: () => string, slot: string, keyText?: EvmK256KeyText) => Record<string, unknown>;
 }>> = {
   address: {
     deviceMembers: [['wallet', 'address'], ['privacySalt', 'bytes32']],
@@ -99,11 +105,11 @@ const PAYLOADS: Readonly<Record<EvmK256Payload, {
     device: (d) => ({ wallet: evmChecksumAddress(d.address), privacySalt: toHex(d.key2) }),
     grantee: (g, label, slot) => ({ wallet: evmChecksumAddress(g.address), privacySalt: toHex(g.key2), siteLabel: label(), slot }),
   },
-  ed25519_base58: {
+  ed25519: {
     deviceMembers: [['publicKey', 'string'], ['privacySalt', 'bytes32']],
     granteeMembers: [['publicKey', 'string'], ['privacySalt', 'bytes32'], ['siteLabel', 'string'], ['slot', 'uint8']],
-    device: (d) => ({ publicKey: ed25519Base58Text(d.key), privacySalt: toHex(d.key2) }),
-    grantee: (g, label, slot) => ({ publicKey: ed25519Base58Text(g.key), privacySalt: toHex(g.key2), siteLabel: label(), slot }),
+    device: (d, keyText) => ({ publicKey: ed25519DisplayText(d.key, keyText), privacySalt: toHex(d.key2) }),
+    grantee: (g, label, slot, keyText) => ({ publicKey: ed25519DisplayText(g.key, keyText), privacySalt: toHex(g.key2), siteLabel: label(), slot }),
   },
   jubjub: {
     deviceMembers: [['x', 'bytes32'], ['y', 'bytes32']],
@@ -393,8 +399,16 @@ export function amountLabelText(amount: bigint, site: SiteAmount): string {
   return EVM_K256_AMOUNT_LABEL_PREFIX + ascii(siteAmountLabelBytes(amount, site.decimals, site.symbol));
 }
 
-/** An ed25519_base58 kind's key as shown: its base58 text, space-padded to 44 bytes. */
+/** An ed25519 kind's key as shown: its base58 text, space-padded to 44 bytes. */
 export const ed25519Base58Text = (key: Uint8Array): string => ascii(base58Text32Bytes(key));
+
+/** Per-kind publicKey text; the default base58 stays space-padded to 44 bytes. */
+export function ed25519DisplayText(key: Uint8Array, form: EvmK256KeyText = 'base58'): string {
+  if (key.length !== 32) throw new Error('eip712: an Ed25519 key is 32 bytes');
+  if (form === 'hex') return toHex(key).slice(2);
+  const text = ed25519Base58Text(key);
+  return form === 'prefixed_base58' ? EVM_K256_ED25519_KEY_PREFIX + text : text;
+}
 
 /** `IssueGrant.passkeyRp`: the base's "not applicable" for an all-zero RP hash
  *  (only a grant whose RP pin is never checked: no passkey grantee, or one
@@ -417,7 +431,7 @@ function isZeroPadded(tag: Uint8Array, text: string): boolean {
 export function deviceMember(d: EvmK256DescriptorInput): { type: string; value: Record<string, unknown>; payload: EvmK256Payload } {
   const k = evmK256KindOf('device', d.tag);
   if (!k) throw new Error('descriptor: not a registered device tag');
-  return { type: k.deviceType, value: { scheme: k.text, ...PAYLOADS[k.payload].device(d) }, payload: k.payload };
+  return { type: k.deviceType, value: { scheme: k.text, ...PAYLOADS[k.payload].device(d, k.keyText) }, payload: k.payload };
 }
 
 /** The RFC 8032 encoding of the Ed25519 identity (y = 1, x = 0). */
@@ -434,12 +448,12 @@ export function granteeMember(g: EvmK256GranteeInput): { type: string; value: Re
   // the k256 envelope.
   const k = evmK256KindOf('grant-id', g.tag);
   if (!k) throw new Error('evm_k256: not a registered grant-id tag');
-  if (k.payload === 'ed25519_base58' && g.key.length === 32 && g.key.every((b, i) => b === ED25519_IDENTITY_ENCODING[i])) {
+  if (k.payload === 'ed25519' && g.key.length === 32 && g.key.every((b, i) => b === ED25519_IDENTITY_ENCODING[i])) {
     throw new Error('descriptor: the Ed25519 key is the identity');
   }
   const label = (): string => { try { return siteLabelText(g.label); } catch { throw new Error('evm_k256: not a site label'); } };
   const slot = u8(g.slot, 'slot');
-  return { type: k.granteeType, value: { scheme: k.text, ...PAYLOADS[k.payload].grantee(g, label, slot) }, payload: k.payload };
+  return { type: k.granteeType, value: { scheme: k.text, ...PAYLOADS[k.payload].grantee(g, label, slot, k.keyText) }, payload: k.payload };
 }
 
 // ── Builders: one per operation and role ─────────────────────────────────────
