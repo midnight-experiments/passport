@@ -217,7 +217,7 @@ export function rawAmountLabel(amount: bigint, site: { decimals: number; symbol:
   const t = `${d} ${site.symbol}`.padEnd(49, ' ').slice(0, 49);
   return Array.from(new TextEncoder().encode(t), (x) => BigInt(x));
 }
-/** The base58 inputs of the key bytes a descriptor shows for an ed25519_base58
+/** The base58 inputs of the key bytes a descriptor shows for an ed25519
  *  kind (ed25519KeyOf), or of 32 zero bytes when the key is no valid key (a
  *  negative vector, refused before the base58 text matters). */
 const b58Of = (d: any) => { try { return evmK256Base58Hint(Uint8Array.from(ed25519KeyOf(d), Number)); } catch { return evmK256Base58Hint(new Uint8Array(32)); } };
