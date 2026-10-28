@@ -85,7 +85,8 @@ const negatives = all.filter((f) => f.role === 'negative');
 const bip39Seed = (mnemonic: string, passphrase: string) => new Uint8Array(pbkdf2Sync(Buffer.from(mnemonic.normalize('NFKD')), Buffer.from(`mnemonic${passphrase}`.normalize('NFKD')), 2048, 64, 'sha512'));
 function slip10(seed: Uint8Array, pathText: string): Uint8Array {
   const steps = pathText.replace(/^m\//, '').split('/').map((p) => { if (!p.endsWith("'")) throw new Error('SLIP-0010 Ed25519 derives hardened steps only'); return Number(p.slice(0, -1)); });
-  let I = createHmac('sha512', 'ed25519 seed').update(seed).digest();
+  // SLIP-0010 fixes the HMAC key "ed25519 seed" for Ed25519 master-key derivation; it is public, not a secret.
+  let I = createHmac('sha512', 'ed25519 seed').update(seed).digest(); // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key
   let k = I.subarray(0, 32), c = I.subarray(32);
   for (const i of steps) {
     const data = Buffer.concat([Buffer.of(0), k, Buffer.from([(i >>> 24) | 0x80, (i >>> 16) & 0xff, (i >>> 8) & 0xff, i & 0xff])]);
