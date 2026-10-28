@@ -114,8 +114,12 @@ const pc = pureCircuits as any;
 const tally: Record<string, { pass: number; refused: number }> = {};
 const ok = (k: string, n = 1) => { (tally[k] ??= { pass: 0, refused: 0 }).pass += n; };
 const counted = (k: string) => { (tally[k] ??= { pass: 0, refused: 0 }).refused++; };
-const refused = (k: string, f: () => unknown, re: RegExp, why: string) => { assert.throws(f, re, `${k}: must refuse ${why}`); counted(k); };
-const refusedAsync = async (k: string, f: () => Promise<unknown>, re: RegExp, why: string) => { await assert.rejects(f, re, `${k}: must refuse ${why}`); counted(k); };
+/** A refusal's exact error name and message. */
+type SignerRefusal = { name: string; message: string };
+/** An expected refusal: a pattern tested against String(error), or the exact error name and message. */
+type Refusal = RegExp | SignerRefusal;
+const refused = (k: string, f: () => unknown, re: Refusal, why: string) => { assert.throws(f, re, `${k}: must refuse ${why}`); counted(k); };
+const refusedAsync = async (k: string, f: () => Promise<unknown>, re: Refusal, why: string) => { await assert.rejects(f, re, `${k}: must refuse ${why}`); counted(k); };
 
 // ── A wallet that records what it is asked ───────────────────────────────────
 
@@ -174,10 +178,14 @@ const NET = 'undeployed';
 const LABEL = grantLabel('bank.example');
 const SITE = { decimals: 6, symbol: 'TOKEN' };
 const addressText = (w: SoftwareEvmWallet) => evmChecksumAddress(w.addressBytes);
-const unknownSigner = (expected: SoftwareEvmWallet) =>
-  new RegExp(`SignerMismatchError: signer: refused before proving: the signature is not from the expected Ethereum address ${addressText(expected)}, and the signer is unknown$`);
-const namedSigner = (expected: SoftwareEvmWallet, signer: SoftwareEvmWallet) =>
-  new RegExp(`SignerMismatchError: signer: refused before proving: the signature is not from the expected Ethereum address ${addressText(expected)}; it verifies under Ethereum address ${addressText(signer)}, another wallet's key$`);
+const unknownSigner = (expected: SoftwareEvmWallet): SignerRefusal => ({
+  name: 'SignerMismatchError',
+  message: `signer: refused before proving: the signature is not from the expected Ethereum address ${addressText(expected)}, and the signer is unknown`,
+});
+const namedSigner = (expected: SoftwareEvmWallet, signer: SoftwareEvmWallet): SignerRefusal => ({
+  name: 'SignerMismatchError',
+  message: `signer: refused before proving: the signature is not from the expected Ethereum address ${addressText(expected)}; it verifies under Ethereum address ${addressText(signer)}, another wallet's key`,
+});
 
 /** A device frame's typed data for `d` (rotate_enc_key, an unrelated key). */
 const rotateTd = (d: EvmK256Device, account = rnd(), authNonce = 0n) => evmK256Messages.rotateEncKey({ account, device: d.address, authNonce }, rnd());
@@ -315,7 +323,9 @@ const signerCases: { case: string; named: string | null }[] = [];
     assert.ok(e instanceof SignerMismatchError, 'a SignerMismatchError');
     assert.ok(eq(e.expected, A.addressBytes), 'it names the expected address');
     if (named) assert.ok(e.signer && eq(e.signer, named.addressBytes), 'it names the signer'); else assert.equal(e.signer, undefined, 'no signer named');
-    assert.match(String(e), expectFor(named));
+    const expected = expectFor(named);
+    assert.equal(e.name, expected.name);
+    assert.equal(e.message, expected.message);
     return true;
   };
   for (const [name, others, named] of lists) {

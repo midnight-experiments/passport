@@ -289,7 +289,7 @@ export async function relaxedContractsModule(): Promise<any> {
              .replace(/from 'effect'/g, `from ${JSON.stringify(import.meta.resolve('effect'))}`)
              .replace(/^\/\/# sourceMappingURL=.*$/m, '');
   for (const name of ['createUnprovenLedgerCallTx', 'createEncryptionPublicKeyResolver']) {
-    if (!new RegExp(`^const ${name} = `, 'm').test(body)) throw new Error(`evm-k256-negative: midnight-js internal ${name} not found`);
+    if (!body.split(/[\r\n\u2028\u2029]/).some((line) => line.startsWith(`const ${name} = `))) throw new Error(`evm-k256-negative: midnight-js internal ${name} not found`);
   }
   body += '\nexport { createUnprovenLedgerCallTx as passportNegativeCreateUnprovenLedgerCallTx, createEncryptionPublicKeyResolver as passportNegativeCreateEncryptionPublicKeyResolver };\n';
   const dir = await mkdtemp(path.join(tmpdir(), 'evm-k256-mjs-'));

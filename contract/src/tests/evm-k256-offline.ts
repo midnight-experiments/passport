@@ -102,7 +102,7 @@ const scalar = () => { for (;;) { const k = beInt(rnd(32)); if (k > 0n && k < SE
 
 const tally: Record<string, { pass: number; refused: number }> = {};
 const ok = (k: string, n = 1) => { (tally[k] ??= { pass: 0, refused: 0 }).pass += n; };
-const refused = (k: string, f: () => unknown, re: RegExp, why: string) => {
+const refused = (k: string, f: () => unknown, re: RegExp | ((e: unknown) => boolean), why: string) => {
   assert.throws(f, re, `${k}: must refuse ${why}`);
   (tally[k] ??= { pass: 0, refused: 0 }).refused++;
 };
@@ -442,7 +442,7 @@ console.log(`  ✓ domain: the fixed V1 domain's type hash ${FROZEN.domain.typeH
   for (const [recipe, circuit, msg] of [['device', 'evm_k256_device_kind', 'evm_k256: not a registered device tag'],
     ['grant-id', 'evm_k256_grantee_kind', 'evm_k256: not a registered grant-id tag']] as const) {
     for (const [what, tag] of others(recipe)) {
-      refused('kinds', () => pc[circuit](tag), new RegExp(`: failed assert: ${msg}$`), `${what} as a ${recipe} tag`);
+      refused('kinds', () => pc[circuit](tag), (e: unknown) => String(e).endsWith(`: failed assert: ${msg}`), `${what} as a ${recipe} tag`);
       assert.equal(evmK256KindOf(recipe, tag), undefined, `the client's lookup refuses ${what} as a ${recipe} tag`);
     }
   }
