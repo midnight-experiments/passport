@@ -129,8 +129,8 @@ export function fieldInputs(info: ContractInfo, z: Zkir, circuit: string, fieldP
   const a = c.arguments.find((x) => x.name === arg);
   if (!a) throw new Error(`zkir-taint: ${circuit} has no argument ${arg}`);
   const lay = layout(a.type, arg);
-  const re = new RegExp(`^%${arg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.\\d+$`);
-  const group = z.inputs.filter((i) => re.test(i.name));
+  const prefix = `%${arg}.`;
+  const group = z.inputs.filter((i) => i.name.startsWith(prefix) && /^\d+$/.test(i.name.slice(prefix.length)));
   if (group.length !== lay.length) throw new Error(`zkir-taint: ${circuit}.${arg} has ${group.length} ZKIR inputs, its type gives ${lay.length}`);
   lay.forEach((l, i) => { if (group[i].type !== l.zkirType) throw new Error(`zkir-taint: ${circuit} ${l.path} is ${group[i].type} in the ZKIR, ${l.zkirType} by its type`); });
   const hits = group.filter((_, i) => lay[i].path === fieldPath || lay[i].path.startsWith(`${fieldPath}.`) || lay[i].path.startsWith(`${fieldPath}[`));

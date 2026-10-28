@@ -247,9 +247,9 @@ console.log(`  ✓ visible_text_21: ${counts.visible_text_21.accepted} origins s
 // ── Enumerated values ───────────────────────────────────────────────────────
 
 console.log('\n── enums');
-const enums: [string, (v: bigint) => unknown, readonly string[], (v: bigint) => string, RegExp][] = [
-  ['recipient_kind_text', (v) => probe.recipient_kind_text(v), RECIPIENT_KIND_LABELS, recipientKindLabel, /unknown recipient kind/],
-  ['k256_envelope_text', (v) => probe.k256_envelope_text(v), K256_ENVELOPE_LABELS, k256EnvelopeLabel, /unknown signing envelope/],
+const enums: [string, (v: bigint) => unknown, readonly string[], (v: bigint) => string, string][] = [
+  ['recipient_kind_text', (v) => probe.recipient_kind_text(v), RECIPIENT_KIND_LABELS, recipientKindLabel, 'unknown recipient kind'],
+  ['k256_envelope_text', (v) => probe.k256_envelope_text(v), K256_ENVELOPE_LABELS, k256EnvelopeLabel, 'unknown signing envelope'],
 ];
 for (const [name, f, table, client, refusal] of enums) {
   const texts = new Set<string>();
@@ -264,8 +264,8 @@ for (const [name, f, table, client, refusal] of enums) {
       texts.add(out);
       count(name, 'accepted');
     } else {
-      assert.throws(() => f(v), new RegExp(`failed assert: display: ${refusal.source}`), `${name}(${v}) must be refused`);
-      assert.throws(() => client(v), refusal, `the client must refuse ${name}(${v})`);
+      assert.throws(() => f(v), (e: unknown) => String(e).includes(`failed assert: display: ${refusal}`), `${name}(${v}) must be refused`);
+      assert.throws(() => client(v), (e: unknown) => String(e).includes(refusal), `the client must refuse ${name}(${v})`);
       count(name, 'refused');
     }
   }

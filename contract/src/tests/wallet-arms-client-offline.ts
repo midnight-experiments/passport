@@ -916,8 +916,9 @@ const formatsReport: Record<string, { formats: string[]; names: string[] }> = {}
     formatsReport[scheme] = { formats: [...formats], names };
     const others = BLIND_SCHEMES.filter((s) => s !== scheme).flatMap((s) => blindFormats(s)).filter((f) => !formats.includes(f));
     for (const bad of ['', 'RAW', `${formats[0]} `, 'constructor', '__proto__', 'toString', 'hasOwnProperty', ...others]) {
-      refused('formats', () => checkBlindFormat(scheme, bad), new RegExp(`blind: ${scheme} has no format`), `the format ${JSON.stringify(bad)}`);
-      refused('formats', () => blindFormatName(scheme, bad), new RegExp(`blind: ${scheme} has no format`), `the name of the format ${JSON.stringify(bad)}`);
+      const noFormat = (e: unknown) => e instanceof Error && e.message.includes(`blind: ${scheme} has no format`);
+      refused('formats', () => checkBlindFormat(scheme, bad), noFormat, `the format ${JSON.stringify(bad)}`);
+      refused('formats', () => blindFormatName(scheme, bad), noFormat, `the name of the format ${JSON.stringify(bad)}`);
     }
     for (const bad of [1, undefined, null, ['raw']]) refused('formats', () => checkBlindFormat(scheme, bad), /has no format/, `a ${bad === null ? 'null' : typeof bad} format`);
   }
@@ -1151,14 +1152,16 @@ const restoreCases: RestoreCase[] = [];
 interface SignerCase { case: string; scheme: string; result: string; signer?: string }
 const signerCases: SignerCase[] = [];
 {
-  const expectMismatch = (name: string, scheme: BlindScheme, f: () => void, signer: Uint8Array | undefined, text: RegExp) => {
+  // `text` is the exact refusal message, or a literal pattern for a message part.
+  const expectMismatch = (name: string, scheme: BlindScheme, f: () => void, signer: Uint8Array | undefined, text: string | RegExp) => {
     let err: unknown;
     try { f(); } catch (e) { err = e; }
     assert.ok(err instanceof SignerMismatchError, `${name}: a SignerMismatchError`);
     const e = err as SignerMismatchError;
     assert.equal(e.scheme, scheme);
     assert.ok(signer === undefined ? e.signer === undefined : (e.signer !== undefined && eq(e.signer, signer)), `${name}: the named signer`);
-    assert.match(e.message, text, name);
+    if (typeof text === 'string') assert.equal(e.message, text, name);
+    else assert.match(e.message, text, name);
     signerCases.push({ case: name, scheme, result: signer ? 'another key named' : 'unknown signer', ...(signer ? { signer: hex(signer) } : {}) });
     (tally.signer ??= { pass: 0, refused: 0 }).refused++;
   };
@@ -1173,9 +1176,9 @@ const signerCases: SignerCase[] = [];
     ok('signer');
     // The Backpack-for-Phantom case: the wallet reports Phantom's key, Backpack signed.
     expectMismatch('sol: another connected wallet signed', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign), [pk1, pk3, pk2]), pk2,
-      new RegExp(`^signer: refused before proving: the signature is not from the expected Solana public key ${base58Encode(pk1)}; it verifies under Solana public key ${base58Encode(pk2)}, another wallet's key$`));
+      `signer: refused before proving: the signature is not from the expected Solana public key ${base58Encode(pk1)}; it verifies under Solana public key ${base58Encode(pk2)}, another wallet's key`);
     expectMismatch('sol: the signer is not among the candidates', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign), [pk1, pk3]), undefined,
-      new RegExp(`^signer: refused before proving: the signature is not from the expected Solana public key ${base58Encode(pk1)}, and the signer is unknown$`));
+      `signer: refused before proving: the signature is not from the expected Solana public key ${base58Encode(pk1)}, and the signer is unknown`);
     expectMismatch('sol: no candidates', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign)), undefined, /the signer is unknown$/);
     // Candidates that are not keys are skipped; the reported key itself is never named.
     expectMismatch('sol: junk candidates', 'sol_ed25519', () => checkSigner('sol_ed25519', pk1, verifiesFor(foreign), [new Uint8Array(31), unhex(ED25519_TORSION_SUBGROUP[0]), pk1]), undefined, /the signer is unknown$/);
@@ -1201,7 +1204,7 @@ const signerCases: SignerCase[] = [];
     checkSigner('evm_k256', a1, verifiesFor(own), [a2]);
     ok('signer');
     expectMismatch('evm: another connected wallet signed', 'evm_k256', () => checkSigner('evm_k256', a1, verifiesFor(foreign), [a3, a2]), a2,
-      new RegExp(`^signer: refused before proving: the signature is not from the expected Ethereum address ${evmChecksumAddress(a1)}; it verifies under Ethereum address ${evmChecksumAddress(a2)}, another wallet's key$`));
+      `signer: refused before proving: the signature is not from the expected Ethereum address ${evmChecksumAddress(a1)}; it verifies under Ethereum address ${evmChecksumAddress(a2)}, another wallet's key`);
     expectMismatch('evm: the signer is not among the candidates', 'evm_k256', () => checkSigner('evm_k256', a1, verifiesFor(foreign), [a3]), undefined, /and the signer is unknown$/);
     expectMismatch('evm: junk candidates', 'evm_k256', () => checkSigner('evm_k256', a1, verifiesFor(foreign), [new Uint8Array(20), rnd(19), a1]), undefined, /and the signer is unknown$/);
     refused('signer', () => checkSigner('evm_k256', new Uint8Array(20), verifiesFor(own)), /zero address/, 'the zero address expected');
