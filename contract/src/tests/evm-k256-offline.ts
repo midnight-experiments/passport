@@ -75,7 +75,7 @@ import {
   typeHash, typesFor, encodeType,
   EVM_K256_PRIMARY_TYPES, EVM_K256_DESCRIPTOR_TYPES, typedDataDigest, typeString, siteLabelText, toHex,
   expiryText, passkeyRpWord, windowWord, amountLabelText, ed25519Base58Text, EVM_K256_PASSKEY_RP_POINTER, EVM_K256_WINDOW_POINTER,
-  EVM_K256_AMOUNT_LABEL_PREFIX, EVM_K256_KINDS, EVM_K256_KIND_SCHEMES, EVM_K256_PAYLOADS, evmK256KindOf,
+  EVM_K256_AMOUNT_LABEL_PREFIX, EVM_K256_KINDS, EVM_K256_KIND_SCHEMES, EVM_K256_PAYLOADS, EVM_K256_KEY_TEXTS, type EvmK256Kind, evmK256KindOf,
 } from '../wallet/evm-k256-codec.js';
 import { typedDataOf, contractStructHash, NEGATIVES, descriptorInput, granteeInput, VECTOR_FILE, type VectorInput } from './evm-k256-vectors.js';
 import {
@@ -393,7 +393,8 @@ console.log(`  ✓ domain: the fixed V1 domain's type hash ${FROZEN.domain.typeH
     assert.equal(Number(c.payload), EVM_K256_PAYLOADS.indexOf(k.payload), `${scheme}: the entry's payload form`);
     assert.equal(toHex(c.device_scheme), toHex(keccak_256(utf8(dt))), `${scheme}: device_scheme is keccak256 of the device tag's text`);
     assert.equal(toHex(c.grantee_scheme), toHex(keccak_256(utf8(gt))), `${scheme}: grantee_scheme is keccak256 of the grant-id tag's text`);
-    ok('kinds', 5);
+    assert.equal(Number(c.key_text), EVM_K256_KEY_TEXTS.indexOf((k as EvmK256Kind).keyText ?? 'base58'), `${scheme}: the entry's key-text form`);
+    ok('kinds', 6);
     // the parent types: the frozen hash, keccak256 of the frozen string, and the codec's
     for (const [field, primary, nested] of [['add_device_type', 'AddDevice', k.deviceType], ['remove_device_type', 'RemoveDevice', k.deviceType],
       ['issue_grant_type', 'IssueGrant', k.granteeType], ['revoke_grant_type', 'RevokeGrant', k.granteeType]] as const) {
