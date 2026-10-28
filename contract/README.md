@@ -917,3 +917,7 @@ To be folded back into the MIP texts:
   `midnight-transient-crypto`, `midnight-curves`) for the field-aligned
   encoding and curve arithmetic; it is self-contained and builds with a
   plain `cargo build`.
+
+### EVM enrolment key-text confirmation
+
+`npm run test:evm_k256-offline` includes `src/tests/evm-k256-key-text-offline.ts`. It checks independent text encoders, unchanged frozen digests, per-kind approvals, wrong-form hashes and invalid base58 hints for every form. Compile the test-only pure export `contracts/probe-evm-k256-key-text.compact` with `--skip-zk` (also included in `npm run compile`); it needs neither a node nor a proof server.

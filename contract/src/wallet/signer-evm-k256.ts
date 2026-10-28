@@ -945,7 +945,7 @@ const PAYLOAD_INPUTS: Readonly<Record<EvmK256Payload, {
     grantee: (d, site) => { const w = d as W52Descriptor; return { address: new Uint8Array(w.address), key2: new Uint8Array(w.blind), label: site('label', 32) }; },
     descriptorOf: (scheme, g) => ({ scheme, address: g.address, blind: g.key2 }) as Descriptor,
   },
-  ed25519_base58: {
+  ed25519: {
     device: (d) => { const e = d as Ed25519Descriptor; return { key: new Uint8Array(e.key), key2: new Uint8Array(e.blind) }; },
     grantee: (d, site) => { const e = d as Ed25519Descriptor; return { key: new Uint8Array(e.key), key2: new Uint8Array(e.blind), label: site('label', 32) }; },
     descriptorOf: (scheme, g) => ({ scheme, key: g.key, blind: g.key2 }) as Descriptor,
@@ -1070,7 +1070,7 @@ export const evmDeviceDescriptor = (d: EvmK256Device): Descriptor => ({ scheme: 
 // ── Scoped grants ──────────────────────────────────────────────────────
 
 /** How a readable owner shows a grantee's site, by its kind's payload form
- *  (evm-k256-codec.ts EVM_K256_KINDS): an address or ed25519_base58 grantee
+ *  (evm-k256-codec.ts EVM_K256_KINDS): an address or ed25519 grantee
  *  by its 32-byte site label (shown as text), a passkey by its exact 21-byte
  *  origin (shown as text), a k256 or JubJub grantee by its origin hash
  *  (shown under the fixed member `siteLabelHash`; the client shows the
