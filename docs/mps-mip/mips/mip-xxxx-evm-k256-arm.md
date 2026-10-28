@@ -197,6 +197,18 @@ approves signing requests unseen (an auto-approve period) would sign
 approvals unseen; clients cannot detect it, and users MUST keep such
 settings off for a wallet used as a device or grantee.
 
+**Ed25519 enrolment text (E3).** Each Ed25519 enrolment kind selects
+`base58` (44 space-padded bytes), `prefixed_base58` (the named `ed25519:`
+prefix plus those 44 bytes) or `hex` (64 lowercase characters, no `0x`).
+This presentation choice is separate from the `ed25519` payload's checked
+identity and descriptor derivation. Contract `key_text` is explicit;
+client `keyText` defaults to `base58`. Existing `sol_ed25519` approvals keep
+their bytes, and no additional kind is registered. All three forms are
+included in the descriptor hash path; base58 hints remain checked for
+every selection. The payload name changes from `ed25519_base58` to
+`ed25519`; the four EVM enrolment circuits need new keys. See the contract's
+migration notes and measurements for the API and cost details.
+
 **Extensibility.** A further arm or enrolment kind is added in source
 by registry entries (the readable registry's tags and class, the
 client's arm registry, one entry of the arm's kinds list), but it
