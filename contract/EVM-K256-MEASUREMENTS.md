@@ -1,8 +1,21 @@
 # `evm_k256` measurements
 
-Measured 2026-10-24 on the circuits of this tree. **Sizes**: k and rows by `zkir-v3 mock-compile` of each circuit's `.zkir`, and the proof server's `/k` agrees for all 16; the key sizes are those of `compact compile +0.35.0 --feature-zkir-v3`. **Proving times**: the constraint-level suite's run on the same keys (below). Compact 0.35.0 (`--feature-zkir-v3`), midnight-zkir 3.1.0-rc.1, runtime 0.20.0, ledger 9; proof server midnightntwrk/proof-server:9.0.0-rc.8 on the reference localnet (node 2.1.0-rc.4).
+Historical baseline measured 2026-10-24, before the key-text selector. The four changed circuits have new mock-compile results below; their old key sizes and proving times do not describe the updated circuits. **Sizes**: k and rows by `zkir-v3 mock-compile` of each circuit's `.zkir`, and the proof server's `/k` agrees for all 16; the key sizes are those of `compact compile +0.35.0 --feature-zkir-v3`. **Proving times**: the constraint-level suite's run on the same keys (below). Compact 0.35.0 (`--feature-zkir-v3`), midnight-zkir 3.1.0-rc.1, runtime 0.20.0, ledger 9; proof server midnightntwrk/proof-server:9.0.0-rc.8 on the reference localnet (node 2.1.0-rc.4).
 
-## Per circuit
+## Key-text selector confirmation (2026-10-28)
+
+Fresh Compact 0.35.0 `--feature-zkir-v3 --skip-zk` compilation at source commit `1389706`, followed by `zkir-v3 mock-compile` on each of the four changed account circuits. These are mock-compile rows and k only: no keys were built, no proof server `/k` was called, and no proving time was measured. All other 64 account `.zkir` files are byte-identical to the baseline. All four changed circuits remain at k ≤ 18; `add_device` and `revoke_grant` move from k 17 to k 18.
+
+| Circuit | Before rows | Before k | After rows (mock) | After k (mock) |
+|---|---:|---:|---:|---:|
+| `add_device_with_evm_k256` | 126,449 | 17 | 140,297 | 18 |
+| `issue_grant_with_evm_k256` | 181,201 | 18 | 196,719 | 18 |
+| `remove_device_with_evm_k256` | 133,771 | 18 | 149,289 | 18 |
+| `revoke_grant_with_evm_k256` | 130,788 | 17 | 144,576 | 18 |
+
+The pure key-text probe exercises all three forms without a registered kind for the additional forms. Existing approval digests are unchanged. New proving/verifier keys are needed for these four circuits when deploying this source; the baseline keyed sizes and proving timings below are historical observations only.
+
+## Historical baseline per circuit
 
 | Circuit | k | Rows | Prover key (MiB) | Verifier key (bytes) | Proving time, median (s) | Observations | Min / max (s) |
 |---|---:|---:|---:|---:|---:|---:|---|
